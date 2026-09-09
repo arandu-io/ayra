@@ -1,0 +1,17 @@
+# What this library declares about itself.
+
+name = "arandu-io/ayra"
+profiles = ["conventional", "performance"]
+
+# There is no framework key, and the absence is the declaration: this library
+# draws a window and knows nothing about routing, authorization or data. An
+# application wires it to a server it already has.
+
+[permissions]
+# It opens a window and draws into it. The network belongs to whatever the
+# application already uses to reach its server; a file dialog is a platform
+# adapter in its own module, and neither reaches this one.
+network = false
+filesystem = false
+exec = false
+migrations = false

@@ -1,0 +1,4 @@
+dist/
+tokengen
+*.vsix
+.DS_Store
