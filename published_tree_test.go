@@ -63,11 +63,56 @@ func TestThePublishedTreeCompiles(t *testing.T) {
 		}
 	}
 
-	build := exec.Command("go", "build", "./...")
+	// Built to a named file rather than with `go build ./...`, which compiles a
+	// program and throws the result away. The file is the assertion: what lands
+	// in a project is a command somebody runs, and a tree that compiles as a
+	// library is a tree with nothing to run.
+	binary, err := filepath.Abs(filepath.Join(staging, "native-target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", binary, ".")
 	build.Dir = staging
 	build.Env = append(os.Environ(), "GOWORK=off")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("the published tree does not compile, and no other gate would have said so:\n%s", output)
+	}
+
+	if info, err := os.Stat(binary); err != nil || info.Size() == 0 {
+		t.Fatalf("the published tree built no program: a project would have nothing to run")
+	}
+}
+
+// TestThePublishedTreeIsAProgram fixes that what lands can be run.
+//
+// A library needs a main written somewhere else, and that somewhere else has to
+// import it by a path beginning with the project's module name -- which is not
+// knowable here. Publishing a library would mean every project writing the same
+// file, by hand, before anything ran once.
+func TestThePublishedTreeIsAProgram(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(source, "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mains int
+	for _, file := range files {
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(body)
+
+		if !strings.HasPrefix(text, "package main\n") && !strings.Contains(text, "\npackage main\n") {
+			t.Errorf("%s is not part of the program: one package, or the project has to wire it up itself", file)
+		}
+		if strings.Contains(text, "\nfunc main() {") {
+			mains++
+		}
+	}
+
+	if mains != 1 {
+		t.Errorf("the published tree declares %d entry points, want exactly 1", mains)
 	}
 }
 

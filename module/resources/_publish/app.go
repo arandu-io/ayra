@@ -1,15 +1,4 @@
-// Package native is this application's native target: the window it opens, the
-// server it draws for, and which screen is showing.
-//
-// It is yours from the moment it was published. Nothing upstream reads it and
-// nothing regenerates it, so a screen added here stays added and a decision
-// changed here stays changed.
-//
-// Every file here is one package, deliberately. A screen in a package of its
-// own would have to be imported by its full path, and that path begins with
-// the module name of this project -- which whoever published these files could
-// not know. One package needs no such import.
-package native
+package main
 
 import (
 	"context"
@@ -44,16 +33,11 @@ type Config struct {
 	Fonts []text.FontFace
 }
 
-// Run opens the window and draws until it closes. It is the whole of a native
-// main:
+// run opens the window and draws until it closes.
 //
-//	func main() {
-//		shell.Exit(native.Run(native.Config{
-//			Server: "https://example.com",
-//			Title:  "My Application",
-//		}))
-//	}
-func Run(cfg Config) error {
+// It is separate from main so that main stays what it is: the flags, and the
+// one line that ends the process with the right code.
+func run(cfg Config) error {
 	server, err := client.New(cfg.Server)
 	if err != nil {
 		return err
