@@ -8,8 +8,8 @@
 package ayra
 
 import (
-	"gioui.org/layout"
-	"gioui.org/text"
+	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/text"
 
 	"github.com/arandu-io/ayra/theme"
 )
