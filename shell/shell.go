@@ -112,12 +112,22 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 			return e.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
-			screen(ayra.Context{
+			c := ayra.Context{
 				Context:    gtx,
 				Theme:      palette,
 				Shaper:     shaper,
 				Invalidate: window.Invalidate,
-			})
+			}
+
+			// The window is filled before the screen draws, and it is filled
+			// here rather than left to the screen. A screen that forgot would
+			// get whatever the platform left in the buffer -- which is white
+			// on most of them, so the dark scheme would draw its light text on
+			// a light ground and be a screen nobody can read. Every screen
+			// would have to remember, and one of them would not.
+			c.Fill(palette.Colours.Background)
+
+			screen(c)
 			e.Frame(gtx.Ops)
 		}
 	}

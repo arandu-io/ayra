@@ -10,6 +10,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
+	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	giowidget "github.com/arandu-io/ayra/engine/widget"
 
@@ -170,7 +171,7 @@ func (p InputProps) content(c ayra.Context, state *Input, ink color.NRGBA) ayra.
 
 	if state.editor.Len() == 0 && p.Placeholder != "" {
 		hint := op.Record(c.Ops)
-		label(c, p.Placeholder, size, c.Theme.Colours.MutedForeground)
+		placeholder(c, p.Placeholder, size, c.Theme.Colours.MutedForeground)
 		drawn := hint.Stop()
 		drawn.Add(c.Ops)
 	}
@@ -184,6 +185,15 @@ func (p InputProps) content(c ayra.Context, state *Input, ink color.NRGBA) ayra.
 	selectionStop := selection.Stop()
 
 	return state.editor.Layout(c.Context, c.Shaper, font.Font{}, size, inkStop, selectionStop)
+}
+
+// placeholder draws the hint shown while the field is empty.
+//
+// It starts where the text will start, because it is standing in for that
+// text: a hint centred in a field the caret types into from the left announces
+// itself as something other than what the person is about to replace.
+func placeholder(c ayra.Context, content string, size unit.Sp, ink color.NRGBA) ayra.Dimensions {
+	return drawText(c, content, size, ink, 1, text.Start, font.Font{})
 }
 
 // surface paints the field's background and border behind its content.
