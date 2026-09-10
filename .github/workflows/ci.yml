@@ -23,6 +23,24 @@ jobs:
           # fail on. "stable" is what people actually run.
           go-version: stable
 
+      # The engine reaches the window system, the input stack and the GPU
+      # through the system's own libraries, so the headers have to be here
+      # before anything compiles. On a machine with none of them the failure is
+      # pkg-config saying a package was not found, which reads as a broken
+      # checkout rather than as a runner missing its development packages.
+      #
+      # This is not a dependency of the module. Nothing here is downloaded by
+      # the go command, nothing here appears in go.mod, and a person building
+      # for macOS or Windows needs none of it -- it is the Linux backend's half
+      # of an operating system interface.
+      - name: the libraries the Linux backend compiles against
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev \
+            libvulkan-dev wayland-protocols
+
       # A formatting difference is a failure, not a comment on a pull request.
       - name: gofmt
         # `gofmt -l .` skips nothing, and not everything in the tree is meant to
