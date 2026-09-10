@@ -81,6 +81,11 @@ still has to be read on every port.
 **Expect:** a port that touches a package absent here needs that package
 brought in first, with the same rewrite of import paths.
 
+**And expect `go generate ./...` to fail from the repository root.** The shader
+package carries a directive pointing at a shader compiler that is not part of
+the closure — the compiled shaders are committed, so nothing here needs to run
+it. Generate the package you mean instead; the CI does.
+
 ### 3. Three struct literals in `internal/f32` name their fields
 
 **Changed:** `internal/f32/f32.go` writes `Point{X: x0, Y: y0}` where upstream
