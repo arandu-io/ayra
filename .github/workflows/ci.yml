@@ -81,9 +81,16 @@ jobs:
       # committed: go get has no build step, so what is in the repository is
       # what every project reads. A hand edit compiles, looks right, and is
       # undone by the next regeneration.
+      #
+      # Scoped to the package rather than run over the tree: the engine carries
+      # generate directives of its own, pointing at a shader compiler that was
+      # not part of the closure copied here. The compiled shaders are in the
+      # tree, so there is nothing for it to produce -- and `go generate ./...`
+      # in the root fails on the missing command rather than on anything about
+      # the palette.
       - name: the palette is the one the stylesheet declares
         run: |
-          go generate ./...
+          go generate ./theme/...
           if [ -n "$(git status --porcelain theme)" ]; then
             echo "the committed palette does not match the stylesheet:"
             git --no-pager diff --stat theme
