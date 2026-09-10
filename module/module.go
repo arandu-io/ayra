@@ -31,7 +31,7 @@ var sources embed.FS
 // the other two to disagree with.
 const (
 	sourceRoot  = "resources/_publish"
-	publishRoot = "native"
+	publishRoot = "cmd/native"
 )
 
 // Module is the native target, as an application registers it.
@@ -74,6 +74,11 @@ func (m *Module) Routes(r *http.Router) {}
 // for the native target would be a second way to draw the same page, and the
 // answer this collection already gave to that question was two packages rather
 // than a mode on one.
+//
+// What lands is a program and not a library, so `go run ./cmd/native` is the
+// whole of running it. A library would need a main written somewhere else that
+// imported it by a path beginning with this project's module name -- which is
+// not knowable from here.
 func (m *Module) Publishes() []foundation.Publication {
 	return []foundation.Publication{{
 		Tag:   foundation.PublishView,

@@ -58,7 +58,7 @@ func TestEveryPublishedPathIsUnderTheProjectDirectory(t *testing.T) {
 	}
 
 	for _, p := range paths {
-		if !strings.HasPrefix(p, "native/") {
+		if !strings.HasPrefix(p, "cmd/native/") {
 			t.Errorf("%q lands outside the directory this module owns", p)
 		}
 		if path.IsAbs(p) || strings.Contains(p, "..") {

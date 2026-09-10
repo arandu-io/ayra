@@ -1,4 +1,4 @@
-package native
+package main
 
 import (
 	"github.com/arandu-io/ayra"
