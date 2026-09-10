@@ -9,6 +9,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
+	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	giowidget "github.com/arandu-io/ayra/engine/widget"
 
@@ -77,7 +78,12 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		inner := c.With(gtx)
 		return p.surface(inner, fill, border, func(inner ayra.Context) ayra.Dimensions {
 			return p.inset().Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
-				return label(c.With(gtx), p.Label, p.textSize(c.Theme), ink)
+				content := c.With(gtx)
+				dims := buttonLabel(content, p.Label, p.textSize(c.Theme), ink)
+				if p.Variant == Link {
+					underline(content, dims, p.Label, p.textSize(c.Theme), ink)
+				}
+				return dims
 			})
 		})
 	})
@@ -162,13 +168,66 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 	return dims
 }
 
-// label draws text in one colour.
-func label(c ayra.Context, text string, size unit.Sp, ink color.NRGBA) ayra.Dimensions {
-	material := op.Record(c.Ops)
-	paint.ColorOp{Color: ink}.Add(c.Ops)
-	stop := material.Stop()
+// buttonLabel draws a button's text: one line, centred in whatever width the
+// button was given.
+//
+// Centred rather than left-aligned, because a button takes the width it is
+// offered and a form offers it the whole column. Left-aligned text in a
+// full-width button sits against the corner and reads as a heading with a box
+// around it -- which is what this looked like before anybody drew one.
+//
+// The name says which control it belongs to, and that is the fix for a real
+// mistake: it was called "label", the text field reused it, and centring it
+// here centred every placeholder in the product.
+func buttonLabel(c ayra.Context, content string, size unit.Sp, ink color.NRGBA) ayra.Dimensions {
+	return drawText(c, content, size, ink, 1, text.Middle, font.Font{Weight: font.Medium})
+}
 
-	return giowidget.Label{MaxLines: 1}.Layout(c.Context, c.Shaper, font.Font{}, size, text, stop)
+// underline draws the rule beneath a link's text.
+//
+// A link is the one variant with no fill and no border, and without this it is
+// drawn exactly like a ghost: the palette gives both of them the foreground
+// colour, so two variants produced one picture and the difference existed only
+// in the name. The rule is what a reader recognises as a link, and it is the
+// only thing that can carry that here -- there is no cursor change to rely on
+// and no hover at all on a touch screen.
+//
+// It is measured rather than drawn across the control, because a link takes
+// the width it is offered like any other button, and a rule under the whole
+// column is a divider.
+func underline(c ayra.Context, dims ayra.Dimensions, content string, size unit.Sp, ink color.NRGBA) {
+	measuring := c
+	measuring.Constraints.Min.X = 0
+	measuring.Constraints.Max.X = dims.Size.X
+
+	measured := op.Record(c.Ops)
+	text := buttonLabel(measuring, content, size, ink)
+	measured.Stop()
+
+	width := text.Size.X
+	if width <= 0 || width > dims.Size.X {
+		width = dims.Size.X
+	}
+
+	left := (dims.Size.X - width) / 2
+	thickness := c.Dp(unit.Dp(1))
+	if thickness < 1 {
+		// At one pixel per point a hairline still has to be one pixel. Rounded
+		// to zero it is not a thin rule, it is no rule.
+		thickness = 1
+	}
+
+	// Below the baseline rather than at the bottom of the line: a rule at the
+	// bottom sits a descender's depth away from the word on a line with no
+	// descenders, and touches the box on a line that has them.
+	baseline := dims.Size.Y - dims.Baseline
+	top := baseline + c.Dp(unit.Dp(2))
+	if top+thickness > dims.Size.Y {
+		top = dims.Size.Y - thickness
+	}
+
+	rule := image.Rect(left, top, left+width, top+thickness)
+	paint.FillShape(c.Ops, ink, clip.Rect(rule).Op())
 }
 
 // fade halves the alpha, which is how a control says "not now" without the

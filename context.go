@@ -8,7 +8,11 @@
 package ayra
 
 import (
+	"image/color"
+
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op/clip"
+	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 
 	"github.com/arandu-io/ayra/theme"
@@ -44,6 +48,20 @@ type Context struct {
 	// does nothing, which is the right answer when there is no window to
 	// redraw.
 	Invalidate func()
+}
+
+// Fill paints the whole area this context was given.
+//
+// It is what puts a ground under a screen, and it is separate from drawing the
+// screen because the two answer to different things: the ground belongs to the
+// window and the palette, and the screen belongs to the application. A screen
+// left to fill its own would work until one of them forgot, and the one that
+// forgot would show light text on whatever the platform happened to leave in
+// the buffer.
+func (c Context) Fill(colour color.NRGBA) {
+	defer clip.Rect{Max: c.Constraints.Max}.Push(c.Ops).Pop()
+	paint.ColorOp{Color: colour}.Add(c.Ops)
+	paint.PaintOp{}.Add(c.Ops)
 }
 
 // Redraw asks for another frame, and is what work finishing outside one calls.

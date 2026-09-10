@@ -2,3 +2,7 @@ dist/
 tokengen
 *.vsix
 .DS_Store
+
+# What a golden comparison writes when a picture changed, so the two can be
+# opened side by side. It is evidence for one run, never committed.
+*.failed.png

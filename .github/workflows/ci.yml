@@ -68,6 +68,21 @@ jobs:
       - name: test
         run: go test -race ./...
 
+      # The pictures, which are the only gate that says the controls draw.
+      # Everything else here passes on a screen that renders nothing: a build
+      # does not run the shaper, and a layout test reads dimensions without
+      # reaching a rasteriser.
+      #
+      # It needs a drawing surface, and a runner has no GPU -- Mesa's software
+      # renderer is what answers, which is why the packages above include it.
+      # Where there is nothing at all to draw on the test says so and skips,
+      # because a gate that fails for the machine rather than the change is a
+      # gate people learn to ignore.
+      - name: the screens look like they did
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: go test -count=1 -run TestScreensLookLikeTheyDid -v ./frame/
+
       # The publishing half is a module of its own, so ./... in the root does
       # not reach it. Its tests are the ones that compare the two halves of the
       # content negotiation, which is the pair that fails silently when it
