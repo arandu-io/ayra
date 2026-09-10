@@ -85,6 +85,17 @@ jobs:
           GALLIUM_DRIVER: llvmpipe
         run: xvfb-run -a go test -count=1 -run TestScreensLookLikeTheyDid -v ./frame/
 
+      # What the comparison drew, when it did not match. Without this the only
+      # evidence is a pixel count, and a pixel count cannot tell an edge that
+      # softened from a control that moved.
+      - name: the pictures that did not match
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pictures
+          path: frame/testdata/*.failed.png
+          if-no-files-found: ignore
+
       # The publishing half is a module of its own, so ./... in the root does
       # not reach it. Its tests are the ones that compare the two halves of the
       # content negotiation, which is the pair that fails silently when it
