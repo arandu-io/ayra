@@ -4,11 +4,11 @@ import (
 	"image"
 	"testing"
 
-	"gioui.org/font/gofont"
-	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/text"
-	"gioui.org/unit"
+	"github.com/arandu-io/ayra/engine/font/gofont"
+	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
+	"github.com/arandu-io/ayra/engine/text"
+	"github.com/arandu-io/ayra/engine/unit"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/theme"
