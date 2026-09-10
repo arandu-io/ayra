@@ -24,6 +24,21 @@ repository:
 Everything that is ours lives outside this directory and is written to our own
 standard. The boundary is physical, so nobody has to remember it.
 
+## What the fork costs, measured once
+
+The engine's dependencies are this repository's now, and so are their
+vulnerabilities. That is not a consequence to discover later: the first
+vulnerability scan after the copy landed reported four reachable issues in the
+image library the text stack decodes bitmap glyphs through, at the version the
+upstream release pinned. They were fixed by raising it.
+
+Nothing was wrong with that pin — it was current when that release was made.
+The point is that upstream would have raised it in its next release and every
+consumer would have received the fix by upgrading, and here that step is ours
+to take. The scan runs over the whole tree in CI for exactly this reason, and a
+port that also moves a version in `go.mod` is a normal port rather than an
+exception.
+
 ## How to port a fix
 
 1. Fetch the upstream version you are porting from.
