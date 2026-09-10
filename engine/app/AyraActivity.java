@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense OR MIT
 
-package org.gioui;
+package io.arandu.ayra;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -11,15 +11,15 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-public final class GioActivity extends Activity {
-	private GioView view;
+public final class AyraActivity extends Activity {
+	private AyraView view;
 	public FrameLayout layer;
 
 	@Override public void onCreate(Bundle state) {
             super.onCreate(state);
 
             layer = new FrameLayout(this);
-            view = new GioView(this);
+            view = new AyraView(this);
 
             view.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -65,7 +65,7 @@ public final class GioActivity extends Activity {
 
 	@Override public void onLowMemory() {
 		super.onLowMemory();
-		GioView.onLowMemory();
+		AyraView.onLowMemory();
 	}
 
 	@Override public void onBackPressed() {

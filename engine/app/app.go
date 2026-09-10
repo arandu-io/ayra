@@ -34,7 +34,7 @@ var extraArgs string
 //
 // ID is set by the [github.com/arandu-io/ayra/engine/cmd/gogio] tool or manually with the -X linker flag. For example,
 //
-//	go build -ldflags="-X 'github.com/arandu-io/ayra/engine/app.ID=org.gioui.example.Kitchen'" .
+//	go build -ldflags="-X 'github.com/arandu-io/ayra/engine/app.ID=com.example.app'" .
 //
 // Note that ID is treated as a constant, and that changing it at runtime
 // is not supported. The default value of ID is filepath.Base(os.Args[0]).

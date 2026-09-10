@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // ViewMediaType is what this asks for, and what a server that understands the
@@ -97,6 +98,14 @@ func New(base string, opts ...Option) (*Client, error) {
 	for _, opt := range opts {
 		opt(c)
 	}
+	// One place decides this, and it is after the options rather than before
+	// them: a transport somebody supplied has the same hang as one built here,
+	// arriving through a caller who was thinking about certificates rather than
+	// about tunnels. Setting it in both places would mean a mutation to either
+	// one is repaired by the other, which is where a fault hides.
+	if c.http.Timeout == 0 {
+		c.http.Timeout = requestTimeout
+	}
 	if c.http.Jar == nil {
 		jar, err := newJar()
 		if err != nil {
@@ -106,6 +115,15 @@ func New(base string, opts ...Option) (*Client, error) {
 	}
 	return c, nil
 }
+
+// requestTimeout is how long one request may take before it is given up on.
+//
+// A client with no timeout waits forever, and on a device forever is what a
+// train tunnel looks like: the screen stays on "Signing in..." with its
+// controls disabled, and the only way out is to kill the application. Thirty
+// seconds is longer than any page this fetches should take and short enough
+// that a person still believes the button did something.
+const requestTimeout = 30 * time.Second
 
 // Option configures a client.
 type Option func(*Client)
