@@ -39,7 +39,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
             libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev \
-            libvulkan-dev wayland-protocols
+            libvulkan-dev wayland-protocols \
+            libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb
 
       # A formatting difference is a failure, not a comment on a pull request.
       - name: gofmt
@@ -81,7 +82,19 @@ jobs:
       - name: the screens look like they did
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: go test -count=1 -run TestScreensLookLikeTheyDid -v ./frame/
+          GALLIUM_DRIVER: llvmpipe
+        run: xvfb-run -a go test -count=1 -run TestScreensLookLikeTheyDid -v ./frame/
+
+      # What the comparison drew, when it did not match. Without this the only
+      # evidence is a pixel count, and a pixel count cannot tell an edge that
+      # softened from a control that moved.
+      - name: the pictures that did not match
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pictures
+          path: frame/testdata/*.failed.png
+          if-no-files-found: ignore
 
       # The publishing half is a module of its own, so ./... in the root does
       # not reach it. Its tests are the ones that compare the two halves of the

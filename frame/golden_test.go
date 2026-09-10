@@ -3,6 +3,7 @@ package frame_test
 import (
 	"flag"
 	"image"
+	gocolor "image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -223,6 +224,24 @@ func compare(t *testing.T, name string, got *image.RGBA) {
 	}
 }
 
+// tolerance is how far one channel may differ before a pixel counts as
+// changed, out of 255.
+//
+// It is not a comfort margin, it is the width of a measured gap. The same
+// screens drawn by this machine's GPU and by the software renderer a build
+// server uses differ in five percent of their pixels, and the measurement of
+// that difference is decisive: ninety-nine percent of it is three or less, the
+// largest is nine, and across all eight pictures not one pixel differs by more
+// than sixteen. A real change is not in that range at all -- text that moved,
+// a ground that was not painted and a rule under a word are all whole colours
+// replacing whole colours.
+//
+// Comparing exactly would mean approved pictures that pass only on the machine
+// that drew them, which teaches everyone to run with -update, which is the same
+// as having no gate. Comparing loosely by a percentage of the picture would
+// hide the small true changes: the rule under a link is twenty-seven pixels.
+const tolerance = 16
+
 // difference counts the pixels that do not match.
 //
 // A count rather than a boolean, because the number is the first thing worth
@@ -237,14 +256,30 @@ func difference(got *image.RGBA, want image.Image) int {
 	bounds := got.Bounds()
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			gr, gg, gb, ga := got.At(x, y).RGBA()
-			wr, wg, wb, wa := want.At(x, y).RGBA()
-			if gr != wr || gg != wg || gb != wb || ga != wa {
+			if changed(got.At(x, y), want.At(x, y)) {
 				count++
 			}
 		}
 	}
 	return count
+}
+
+// changed reports whether two pixels differ by more than the tolerance in any
+// channel.
+func changed(got, want gocolor.Color) bool {
+	gr, gg, gb, ga := got.RGBA()
+	wr, wg, wb, wa := want.RGBA()
+
+	for _, pair := range [4][2]uint32{{gr, wr}, {gg, wg}, {gb, wb}, {ga, wa}} {
+		// RGBA answers sixteen bits per channel; the tolerance is in eight, so
+		// both sides come down before the subtraction rather than the constant
+		// going up, which would compare a rounded number against an exact one.
+		first, second := int(pair[0]>>8), int(pair[1]>>8)
+		if first-second > tolerance || second-first > tolerance {
+			return true
+		}
+	}
+	return false
 }
 
 // write saves a picture, creating the directory if this is the first one.
