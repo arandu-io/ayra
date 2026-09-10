@@ -113,9 +113,10 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 			screen(ayra.Context{
-				Context: gtx,
-				Theme:   palette,
-				Shaper:  shaper,
+				Context:    gtx,
+				Theme:      palette,
+				Shaper:     shaper,
+				Invalidate: window.Invalidate,
 			})
 			e.Frame(gtx.Ops)
 		}

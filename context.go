@@ -35,6 +35,33 @@ type Context struct {
 	// to want reused, and a control that made its own would rebuild the font
 	// atlas on every frame.
 	Shaper *text.Shaper
+
+	// Invalidate is what the window was given to ask for another frame with.
+	//
+	// It is set by whoever opened the window and read by [Context.Redraw],
+	// which is what a screen calls. A context built outside a window -- in a
+	// test, in a tool that renders one frame -- leaves it nil, and Redraw then
+	// does nothing, which is the right answer when there is no window to
+	// redraw.
+	Invalidate func()
+}
+
+// Redraw asks for another frame, and is what work finishing outside one calls.
+//
+// A screen is drawn in response to input. Anything that finishes while nobody
+// is touching the device -- an answer from the server, a timer, a file that
+// finished loading -- changes what should be on screen and nothing draws it:
+// the result sits in memory, correct and invisible, until the next stray
+// click. This is what makes it appear.
+//
+// It is safe to call from another goroutine, and that is where the work
+// belongs. The frame loop must not wait on a network: a screen that blocks in
+// its draw stops answering the window, and the platform reports an application
+// that has stopped responding.
+func (c Context) Redraw() {
+	if c.Invalidate != nil {
+		c.Invalidate()
+	}
 }
 
 // Dimensions is how much room something took.
