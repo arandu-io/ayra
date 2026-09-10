@@ -17,24 +17,24 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          # Not go-version-file: go.mod declares the MINIMUM language version
-          # ("go 1.26"), and setup-go installs exactly that -- 1.26.0, whose
-          # standard library carries vulnerabilities fixed later. govulncheck
-          # below is right to fail on it.
-          #
-          # "stable" is the version people actually run, which is what CI should
-          # be testing against.
+          # Not go-version-file: go.mod declares the MINIMUM language version,
+          # and setup-go installs exactly that -- whose standard library carries
+          # vulnerabilities fixed later, which govulncheck below is right to
+          # fail on. "stable" is what people actually run.
           go-version: stable
 
       # A formatting difference is a failure, not a comment on a pull request.
       - name: gofmt
-        # `gofmt -l .` skips nothing, and what this module publishes is not all
-        # valid Go on purpose:
+        # `gofmt -l .` skips nothing, and not everything in the tree is meant to
+        # be read by it:
         #
-        #   testdata/    the golden files, which are the published output --
-        #                including generated view sources, which gofmt refuses
+        #   testdata/    fixtures that are invalid on purpose
         #   *.kyse.go    view sources; the compiler excludes them by build tag,
         #                and gofmt does not read build tags
+        #
+        # The published tree under module/resources is NOT excluded. Those files
+        # land in somebody's project, and arriving unformatted is arriving
+        # wrong.
         run: |
           unformatted=$(find . -name '*.go' -not -path '*/testdata/*' \
                           -not -name '*.kyse.go' -exec gofmt -l {} +)
@@ -50,203 +50,47 @@ jobs:
       - name: test
         run: go test -race ./...
 
-      # The layout of the suite, checked by command rather than by review. The
-      # first of its four checks is the one worth a CI step: a file named
-      # ButtonTest.go compiles as ordinary code and runs no tests, so the way
-      # this fails is a green build with the suite switched off.
-      - name: test layout
-        run: bash tests/test-layout-guard.sh
-
-      # The golden files ARE the product: they are the bytes that land in
-      # somebody's project. A change to them has to show up as a diff in review
-      # rather than as a surprise in a checkout, so a run that rewrites them and
-      # leaves the tree dirty is a failure.
-      # Two first-party dependencies, and they have distinct ownership.
-      #
-      # Generated components call the native hesape/view contract. Framework
-      # remains direct only for its application adapter and asset registry.
-      # The Go test parses `go mod edit -json`, so a third direct dependency or
-      # an accidental return to the old single-owner boundary fails without a
-      # shell grep guessing at go.mod formatting.
-      - name: native view dependency budget
-        run: go test -race -count=1 ./tests/Unit -run '^TestTheNativeViewDependencyBudget$'
-
-      # The generated views are committed, and a stale one ships.
-      #
-      # go get has no build step to run, so what is in the repository is what
-      # every project imports. This rebuilds them and fails if the tree moved.
-      - name: the compiled components are the ones in the tree
+      # The publishing half is a module of its own, so ./... in the root does
+      # not reach it. Its tests are the ones that compare the two halves of the
+      # content negotiation, which is the pair that fails silently when it
+      # drifts.
+      - name: vet and test the publishing module
         run: |
-          go install github.com/arandu-io/aru@latest
-          "$(go env GOPATH)/bin/aru" view:build
-          if [ -n "$(git status --porcelain components)" ]; then
-            echo "the committed components do not match their sources:"
-            git --no-pager diff --stat components
-            exit 1
-          fi
+          go -C module vet ./...
+          go -C module test -race ./...
 
-      # The same argument for the icons, which are vendored rather than
-      # compiled: the pin is a commit of phosphor-icons/core written into
-      # internal/icongen, so regenerating has to produce byte-for-byte what is
-      # committed. A run that moves the tree means somebody hand-edited an icon
-      # -- which compiles, and which the next regeneration would silently undo.
-      - name: the vendored icons are the ones upstream published
+      # The palette is generated from the stylesheet, and the generated file is
+      # committed: go get has no build step, so what is in the repository is
+      # what every project reads. A hand edit compiles, looks right, and is
+      # undone by the next regeneration.
+      - name: the palette is the one the stylesheet declares
         run: |
           go generate ./...
-          # The registry of every icon is generated too, and it is the one
-          # output that does not land in icons/: it reaches nothing unexported,
-          # so the layout guard keeps it under tests/. Naming it here is what
-          # keeps it inside this check rather than outside it.
-          generated="icons tests/Unit/icons_all_test.go"
-          if [ -n "$(git status --porcelain $generated)" ]; then
-            echo "the committed icons do not match the pinned Phosphor commit:"
-            git --no-pager diff --stat $generated
+          if [ -n "$(git status --porcelain theme)" ]; then
+            echo "the committed palette does not match the stylesheet:"
+            git --no-pager diff --stat theme
             exit 1
           fi
 
+      # Zero Node, in a repository that draws its own pixels and has no reason
+      # to acquire one.
       - name: no Node
         run: |
           found=$(find . -name package.json -o -name node_modules -o -name 'vite.config.*' | grep -v '^./.git' || true)
           if [ -n "$found" ]; then
-            echo "Node entered the view layer:"
+            echo "Node entered the tree:"
             echo "$found"
             exit 1
           fi
 
-      # The API surface, compared against the last release.
+      # Required by the documentation standard: a known vulnerability blocks the
+      # merge rather than showing up in a report nobody reads.
       #
-      # This module is imported and never copied, which is what makes the gate
-      # necessary here: a project draws a button by requiring a version of this
-      # module, so a field that stops existing is a build that stops in somebody
-      # else's repository. It has happened -- two removals in v0.6.0 took out
-      # thirty-one call sites in one project and the whole installer of another,
-      # and neither found out until they upgraded.
-      #
-      # It does not forbid breaking. While the version starts with v0. it is
-      # allowed to, and freezing a shape this early is worse. What it forbids is
-      # breaking QUIETLY: an incompatible change with no entry in UPGRADE.md
-      # fails here, in a diff a reviewer is looking at, rather than in somebody's
-      # build weeks later.
-      #
-      # No view build runs in this step, on either side, and that is deliberate.
-      # The compiled components are committed, and go get has no build step, so
-      # the .go files in the tree ARE the surface every consumer imports. The
-      # step above already proved the committed generation matches its sources,
-      # which leaves nothing for a rebuild here to discover; and rebuilding the
-      # old tag would be wrong rather than redundant, because today's aru would
-      # produce a surface that release never shipped.
-      - name: api diff against the last release
-        run: |
-          set -euo pipefail
-          latest=$(git tag --list 'v*' --sort=-v:refname | head -1)
-          if [ -z "$latest" ]; then
-            echo "no release to compare against yet"
-            exit 0
-          fi
-          echo "comparing the working tree against $latest"
-
-          old=$(mktemp -d)
-          git worktree add -q --detach "$old" "$latest"
-
-          broke=""
-          for pkg in $(go list ./... | sed 's|github.com/arandu-io/ayra|.|'); do
-            # apidiff refuses an internal package, and nothing outside this
-            # module can import one anyway.
-            case "$pkg" in ./internal | ./internal/*) continue ;; esac
-            # A package that did not exist in the release is an addition, and an
-            # addition breaks nobody.
-            [ -d "$old/${pkg#./}" ] || continue
-            # A release that does not load is not a comparison that failed. It
-            # is what v0.4.0 was: fonts against a framework tag that did not
-            # have RegisterAsset yet, which is why v0.4.1 exists. Say so and
-            # move on rather than reporting every symbol in it as removed.
-            if ! (cd "$old" && go run golang.org/x/exp/cmd/apidiff@latest -w "$old/api.out" "$pkg") >/dev/null 2>&1; then
-              echo "$pkg does not load at $latest; nothing to compare"
-              continue
-            fi
-            # The awk drops one shape of line and only that one: "changed from T
-            # to T", the same text on both sides. It is not a change to this
-            # module's API -- it is what apidiff reports when a type this module
-            # hands through comes from a different version of the module
-            # underneath. fonts.Registered returns []view.Asset, and every
-            # framework bump gives that type a new identity without touching its
-            # shape. A line where the two halves differ is a real break and stays.
-            diff=$(go run golang.org/x/exp/cmd/apidiff@latest -incompatible "$old/api.out" "$pkg" 2>/dev/null \
-                     | grep '^- ' \
-                     | awk '{
-                         i = index($0, " changed from ")
-                         if (i) {
-                           rest = substr($0, i + 14)
-                           half = (length(rest) - 4) / 2
-                           if (half > 0 && half == int(half) &&
-                               substr(rest, half + 1, 4) == " to " &&
-                               substr(rest, 1, half) == substr(rest, half + 5)) next
-                         }
-                         print
-                       }' || true)
-            if [ -n "$diff" ]; then
-              echo "$pkg:"
-              echo "$diff" | sed 's/^/    /'
-              # The lines, and not a flag. `broke` was "yes", which answers
-              # whether anything broke and nothing about what -- and the check
-              # below has to name the symbols to tell an entry about this change
-              # from an entry about the last one. The emptiness test underneath is
-              # unaffected: no lines is still no break.
-              broke="$broke$diff"$'\n'
-            fi
-          done
-          git worktree remove --force "$old"
-
-          if [ -z "$broke" ]; then
-            echo "no incompatible change since $latest"
-            exit 0
-          fi
-          # Broken is allowed. Broken and unwritten is not.
-          if git diff --quiet "$latest" -- UPGRADE.md; then
-            echo
-            echo "there are incompatible changes and UPGRADE.md was not touched since $latest."
-            echo "Write what somebody has to write instead, and why. That file is the whole mechanism."
-            exit 1
-          fi
-          # And the entry has to be about THESE breaks.
-          #
-          # "Touched since the tag" was the whole test, and it stops testing
-          # anything the moment the file has been touched once: a release writes
-          # its entry, and every incompatible change after it rides in unwritten
-          # until the next tag. That is not a hypothetical -- in a sibling
-          # repository two packages were removed hours after an entry was written,
-          # and the check would have passed them.
-          #
-          # apidiff writes two shapes, and both have to be read:
-          #   - ./database/model.Collection: changed from ... to ...
-          #   - package github.com/arandu-io/hesape/auth/passwords: removed
-          # The needle is passed after `--`, because a symbol that still began
-          # with a dash was being read by grep as an option -- which printed a
-          # usage line and quietly matched nothing.
-          added=$(git diff "$latest" -- UPGRADE.md | grep '^+' || true)
-          named=0
-          while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            symbol=${line#- }
-            symbol=${symbol#package }
-            symbol=${symbol#./}
-            symbol=${symbol%%:*}
-            [ -n "$symbol" ] || continue
-            if printf '%s' "$added" | grep -qF -- "$symbol"; then named=1; break; fi
-          done <<< "$broke"
-
-          if [ "$named" -eq 0 ]; then
-            echo
-            echo "UPGRADE.md moved since $latest, and names none of the symbols above."
-            echo "An entry written for an earlier change is not an entry for this one."
-            exit 1
-          fi
-          echo
-          echo "incompatible changes, and UPGRADE.md names them. Read the entry in review."
-
-      # Required by doc 24: a known vulnerability blocks the merge rather than
-      # showing up in a report nobody reads.
+      # The engine is source here, so its vulnerabilities are this repository's
+      # to answer for. That is the cost of the fork, and it is the point of
+      # running this on the whole tree rather than on the packages we wrote.
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
+          (cd module && govulncheck ./...)

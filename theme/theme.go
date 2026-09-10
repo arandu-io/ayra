@@ -13,6 +13,8 @@
 // the generated file is refused by a test.
 package theme
 
+//go:generate go run ../internal/tokengen basecoat/base.css tokens_gen.go
+
 import "image/color"
 
 // Scheme is which palette a Theme answers with.
