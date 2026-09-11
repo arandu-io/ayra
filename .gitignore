@@ -1,8 +1,19 @@
-dist/
-tokengen
-*.vsix
-.DS_Store
+/ayra
+*.test
 
-# What a golden comparison writes when a picture changed, so the two can be
-# opened side by side. It is evidence for one run, never committed.
+# The approved pictures are kept; what a failed comparison writes beside them is
+# not. A picture named for the run that produced it is a diagnostic, and a
+# diagnostic committed once is a diagnostic committed for ever.
 *.failed.png
+
+# Where the published tree and the README examples are staged to be compiled.
+# Both are made and removed by the test that uses them; a crash leaves one
+# behind and nothing that lands here belongs in the history.
+.published-compile-check/
+.published-flow-check/
+.readme-compile-check/
+
+# Harness configuration. It lives at the root of the working tree, not here: one
+# file per repository has already diverged, and the commit-msg hook in
+# .githooks/ is the layer that actually refuses AI attribution.
+.claude/
