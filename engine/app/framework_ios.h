@@ -2,5 +2,5 @@
 
 #include <UIKit/UIKit.h>
 
-@interface GioViewController : UIViewController
+@interface AyraViewController : UIViewController
 @end

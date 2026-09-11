@@ -417,7 +417,7 @@ public final class AyraView extends SurfaceView implements Choreographer.FrameCa
 			editor.setInitialSurroundingSubText(snip.snippet, imeToUTF16(nhandle, snip.offset));
 		}
 		imeSetComposingRegion(nhandle, -1, -1);
-		return new GioInputConnection();
+		return new AyraInputConnection();
 	}
 
 	void setInputHint(int hint) {
@@ -584,7 +584,7 @@ public final class AyraView extends SurfaceView implements Choreographer.FrameCa
 	// imeToUTF16 converts the rune index into Java characters.
 	static private native int imeToUTF16(long handle, int runes);
 
-	private class GioInputConnection implements InputConnection {
+	private class AyraInputConnection implements InputConnection {
 		private int batchDepth;
 
 		@Override public boolean beginBatchEdit() {

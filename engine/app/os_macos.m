@@ -8,61 +8,61 @@
 
 __attribute__ ((visibility ("hidden"))) CALayer *gio_layerFactory(BOOL presentWithTrans);
 
-@interface GioAppDelegate : NSObject<NSApplicationDelegate>
+@interface AyraAppDelegate : NSObject<NSApplicationDelegate>
 @end
 
-@interface GioWindowDelegate : NSObject<NSWindowDelegate>
+@interface AyraWindowDelegate : NSObject<NSWindowDelegate>
 @end
 
-@interface GioView : NSView <CALayerDelegate,NSTextInputClient>
+@interface AyraView : NSView <CALayerDelegate,NSTextInputClient>
 @property uintptr_t handle;
 @property BOOL presentWithTrans;
 @end
 
-@implementation GioWindowDelegate
+@implementation AyraWindowDelegate
 - (void)windowWillMiniaturize:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-  GioView *view = (GioView *)window.contentView;
+  AyraView *view = (AyraView *)window.contentView;
 	gio_onDraw(view.handle);
 }
 - (void)windowDidDeminiaturize:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-  GioView *view = (GioView *)window.contentView;
+  AyraView *view = (AyraView *)window.contentView;
 	gio_onDraw(view.handle);
 }
 - (void)windowWillEnterFullScreen:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-  GioView *view = (GioView *)window.contentView;
+  AyraView *view = (AyraView *)window.contentView;
 	gio_onDraw(view.handle);
 }
 - (void)windowWillExitFullScreen:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-  GioView *view = (GioView *)window.contentView;
+  AyraView *view = (AyraView *)window.contentView;
 	gio_onDraw(view.handle);
 }
 - (void)windowDidChangeScreen:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
 	CGDirectDisplayID dispID = [[[window screen] deviceDescription][@"NSScreenNumber"] unsignedIntValue];
-  GioView *view = (GioView *)window.contentView;
+  AyraView *view = (AyraView *)window.contentView;
 	gio_onChangeScreen(view.handle, dispID);
 }
 - (void)windowDidBecomeKey:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-	GioView *view = (GioView *)window.contentView;
+	AyraView *view = (AyraView *)window.contentView;
 	if ([window firstResponder] == view) {
 		gio_onFocus(view.handle, 1);
 	}
 }
 - (void)windowDidResignKey:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
-	GioView *view = (GioView *)window.contentView;
+	AyraView *view = (AyraView *)window.contentView;
 	if ([window firstResponder] == view) {
 		gio_onFocus(view.handle, 0);
 	}
 }
 @end
 
-static void handleMouse(GioView *view, NSEvent *event, int typ, CGFloat dx, CGFloat dy) {
+static void handleMouse(AyraView *view, NSEvent *event, int typ, CGFloat dx, CGFloat dy) {
 	NSPoint p = [view convertPoint:[event locationInWindow] fromView:nil];
 	if (!event.hasPreciseScrollingDeltas) {
 		// dx and dy are in rows and columns.
@@ -74,7 +74,7 @@ static void handleMouse(GioView *view, NSEvent *event, int typ, CGFloat dx, CGFl
 	gio_onMouse(view.handle, (__bridge CFTypeRef)event, typ, event.buttonNumber, p.x, height - p.y, dx, dy, [event timestamp], [event modifierFlags]);
 }
 
-@implementation GioView
+@implementation AyraView
 - (void)setFrameSize:(NSSize)newSize {
 	[super setFrameSize:newSize];
 	[self setNeedsDisplay:YES];
@@ -226,7 +226,7 @@ static void handleMouse(GioView *view, NSEvent *event, int typ, CGFloat dx, CGFl
 // Delegates are weakly referenced from their peers. Nothing
 // else holds a strong reference to our window delegate, so
 // keep a single global reference instead.
-static GioWindowDelegate *globalWindowDel;
+static AyraWindowDelegate *globalWindowDel;
 
 static CVReturn displayLinkCallback(CVDisplayLinkRef dl, const CVTimeStamp *inNow, const CVTimeStamp *inOutputTime, CVOptionFlags flagsIn, CVOptionFlags *flagsOut, void *handle) {
 	gio_onFrameCallback(dl);
@@ -392,7 +392,7 @@ CFTypeRef gio_createWindow(CFTypeRef viewRef, CGFloat width, CGFloat height) {
 CFTypeRef gio_createView(int presentWithTrans) {
 	@autoreleasepool {
 		NSRect frame = NSMakeRect(0, 0, 0, 0);
-		GioView* view = [[GioView alloc] initWithFrame:frame];
+		AyraView* view = [[AyraView alloc] initWithFrame:frame];
 		view.presentWithTrans = presentWithTrans ? YES : NO;
 		view.wantsLayer = YES;
 		view.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
@@ -411,12 +411,12 @@ CFTypeRef gio_createView(int presentWithTrans) {
 
 void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
 	@autoreleasepool {
-		GioView *v = (__bridge GioView *)viewRef;
+		AyraView *v = (__bridge AyraView *)viewRef;
 		v.handle = handle;
 	}
 }
 
-@implementation GioAppDelegate
+@implementation AyraAppDelegate
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 	[NSApp activateIgnoringOtherApps:YES];
@@ -431,7 +431,7 @@ void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
 void gio_main() {
 	@autoreleasepool {
 		[NSApplication sharedApplication];
-		GioAppDelegate *del = [[GioAppDelegate alloc] init];
+		AyraAppDelegate *del = [[AyraAppDelegate alloc] init];
 		[NSApp setDelegate:del];
 
 		NSMenuItem *mainMenu = [NSMenuItem new];
@@ -450,7 +450,7 @@ void gio_main() {
 		[menuBar addItem:mainMenu];
 		[NSApp setMainMenu:menuBar];
 
-		globalWindowDel = [[GioWindowDelegate alloc] init];
+		globalWindowDel = [[AyraWindowDelegate alloc] init];
 
 		[NSApp run];
 	}

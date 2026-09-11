@@ -28,7 +28,7 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/shader"
-	"github.com/arandu-io/ayra/engine/shader/gio"
+	"github.com/arandu-io/ayra/engine/shader/compiled"
 
 	// Register backends.
 	_ "github.com/arandu-io/ayra/engine/gpu/internal/d3d11"
@@ -539,7 +539,7 @@ func newBlitter(ctx driver.Device) *blitter {
 	b.colUniforms = new(blitColUniforms)
 	b.texUniforms = new(blitTexUniforms)
 	b.linearGradientUniforms = new(blitLinearGradientUniforms)
-	pipelines, err := createColorPrograms(ctx, gio.Shader_blit_vert, gio.Shader_blit_frag,
+	pipelines, err := createColorPrograms(ctx, compiled.Shader_blit_vert, compiled.Shader_blit_frag,
 		[...][]byte{
 			byteslice.View(b.colUniforms),
 			byteslice.View(b.linearGradientUniforms),
