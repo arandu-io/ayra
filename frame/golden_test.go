@@ -90,6 +90,74 @@ func screens() []screen {
 		{name: "controls", width: 360, height: 560, draw: controls},
 		{name: "surfaces", width: 360, height: 620, draw: surfaces},
 		{name: "choices", width: 360, height: 420, draw: choices},
+		{name: "indicators", width: 360, height: 500, draw: indicators},
+	}
+}
+
+// indicators draws the pieces that report rather than accept: a label, a
+// progress bar, an avatar, a placeholder, a key and a status.
+func indicators() ayra.Widget {
+	var tabs widget.Tabs
+	tabs.Select(1)
+	var note widget.Input
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Indicators", widget.Heading, true),
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.TabsProps{Labels: []string{"Overview", "Members", "Billing"}}.Layout(c, &tabs)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.LabelProps{Text: "Display name", Required: true}.Layout(c)
+			},
+			spacer(6),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.TextareaProps{Placeholder: "A sentence or two", Rows: 3}.Layout(c, &note)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ProgressProps{Fraction: 0.62}.Layout(c)
+			},
+			spacer(14),
+			row(
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.AvatarProps{Initials: "PL"}.Layout(c)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.StatusProps{Label: "Active", Tone: widget.Accent}.Layout(c)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.KbdProps{Keys: "Ctrl K"}.Layout(c)
+				},
+			),
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SkeletonProps{Width: 200}.Layout(c)
+			},
+			spacer(6),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SkeletonProps{Width: 140}.Layout(c)
+			},
+		)
+	}
+}
+
+// row lays children out side by side with a gap between each.
+func row(children ...ayra.Widget) ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions {
+		items := make([]layout.FlexChild, 0, len(children)*2)
+		for index, child := range children {
+			child := child
+			if index > 0 {
+				items = append(items, layout.Rigid(layout.Spacer{Width: 12}.Layout))
+			}
+			items = append(items, layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return child(c.With(gtx))
+			}))
+		}
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, items...)
 	}
 }
 
