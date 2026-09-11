@@ -80,9 +80,16 @@ start-up and reported with what was missing.
 go get github.com/arandu-io/ayra
 ```
 
-Desktop and the browser target build with the Go toolchain and nothing else.
-Packaging for a phone needs that platform's own toolchain, and that is stated
-here rather than found out later.
+macOS, Windows and the browser target build with the Go toolchain and nothing
+else. **Linux needs its development packages first** -- X11, Wayland, EGL,
+Vulkan and xkbcommon -- because the window and the input come from those
+libraries through cgo. Without them the build fails at the first C header and
+reads like a broken checkout; the list this project's own CI installs is in
+`.github/workflows/ci.yml`.
+
+Packaging for a phone needs that platform's own toolchain: an Android SDK with
+its build tools, and Xcode with a provisioning profile for iOS. Both are stated
+here rather than found out after the Go half has finished compiling.
 
 ## The name
 
