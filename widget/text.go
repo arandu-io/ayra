@@ -150,6 +150,23 @@ func (p TextProps) face() font.Font {
 	return f
 }
 
+// semibold is the weight a label is set in when it has to hold against a
+// filled background.
+//
+// Named rather than written at each site: a badge and a button sit beside each
+// other constantly, and two spellings of "heavier" is how they end up a weight
+// apart.
+func semibold() font.Font { return font.Font{Weight: font.SemiBold} }
+
+// plain is the ordinary weight, named so a call site reads as a decision rather
+// than as a zero value somebody forgot to fill in.
+func plain() font.Font { return font.Font{} }
+
+// drawLine draws one line of text in a weight, wrapping as the room allows.
+func drawLine(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, face font.Font) ayra.Dimensions {
+	return drawText(c, content, size, ink, 0, text.Start, face)
+}
+
 // drawText is the one place text is put on screen.
 //
 // The colour arrives as a recorded operation because that is what the shaper

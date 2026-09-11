@@ -88,6 +88,111 @@ func screens() []screen {
 	return []screen{
 		{name: "sign-in", width: 360, height: 420, draw: signIn},
 		{name: "controls", width: 360, height: 560, draw: controls},
+		{name: "surfaces", width: 360, height: 620, draw: surfaces},
+		{name: "choices", width: 360, height: 420, draw: choices},
+	}
+}
+
+// surfaces draws the pieces a screen is composed out of rather than the ones a
+// person operates: a card, the four severities of an alert, the badges and a
+// rule.
+func surfaces() ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Surfaces", widget.Heading, true),
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.CardProps{}.Layout(c, func(c ayra.Context) ayra.Dimensions {
+					return column(c, 280,
+						line("A card", widget.Body, true),
+						spacer(6),
+						line("It is a surface and a boundary, and carries whatever is written into it.", widget.Caption, false),
+					)
+				})
+			},
+			spacer(12),
+			alert(widget.AlertProps{Title: "Two people are editing this", Severity: widget.Note}),
+			spacer(8),
+			alert(widget.AlertProps{Title: "Could not reach the server", Body: "It answered nothing for thirty seconds.", Severity: widget.Failure}),
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SeparatorProps{}.Layout(c)
+			},
+			spacer(12),
+			badges(),
+		)
+	}
+}
+
+// choices draws the three controls that are either on or off, in both states
+// and disabled.
+func choices() ayra.Widget {
+	states := make([]widget.Toggle, 8)
+	states[1].Set(true)
+	states[3].Set(true)
+	states[5].Set(true)
+	states[7].Set(true)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Choices", widget.Heading, true),
+			spacer(12),
+			check(widget.CheckboxProps{Label: "Remember this device"}, &states[0]),
+			spacer(8),
+			check(widget.CheckboxProps{Label: "Send me the receipt"}, &states[1]),
+			spacer(8),
+			check(widget.CheckboxProps{Label: "Unavailable", Disabled: true}, &states[6]),
+			spacer(14),
+			radio(widget.RadioProps{Label: "Monthly"}, &states[2]),
+			spacer(8),
+			radio(widget.RadioProps{Label: "Yearly"}, &states[3]),
+			spacer(14),
+			toggle(widget.SwitchProps{Label: "Notifications"}, &states[4]),
+			spacer(8),
+			toggle(widget.SwitchProps{Label: "Two-step sign in"}, &states[5]),
+			spacer(8),
+			toggle(widget.SwitchProps{Label: "Unavailable", Disabled: true}, &states[7]),
+		)
+	}
+}
+
+func alert(props widget.AlertProps) ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c) }
+}
+
+func check(props widget.CheckboxProps, state *widget.Toggle) ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c, state) }
+}
+
+func radio(props widget.RadioProps, state *widget.Toggle) ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c, state) }
+}
+
+func toggle(props widget.SwitchProps, state *widget.Toggle) ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c, state) }
+}
+
+// badges draws one of each variant in a row, which is what catches a pair that
+// look the same.
+func badges() ayra.Widget {
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return widget.BadgeProps{Label: "Live"}.Layout(c.With(gtx))
+			}),
+			layout.Rigid(layout.Spacer{Width: 6}.Layout),
+			layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return widget.BadgeProps{Label: "Draft", Variant: widget.Secondary}.Layout(c.With(gtx))
+			}),
+			layout.Rigid(layout.Spacer{Width: 6}.Layout),
+			layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return widget.BadgeProps{Label: "Beta", Variant: widget.Outline}.Layout(c.With(gtx))
+			}),
+			layout.Rigid(layout.Spacer{Width: 6}.Layout),
+			layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return widget.BadgeProps{Label: "Overdue", Variant: widget.Destructive}.Layout(c.With(gtx))
+			}),
+		)
 	}
 }
 
