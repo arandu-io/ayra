@@ -1,6 +1,10 @@
 /ayra
 *.test
 
+# The catalogue is a program, and building it in place leaves the binary beside
+# its source under the same name as its directory.
+/catalogue/catalogue
+
 # The approved pictures are kept; what a failed comparison writes beside them is
 # not. A picture named for the run that produced it is a diagnostic, and a
 # diagnostic committed once is a diagnostic committed for ever.

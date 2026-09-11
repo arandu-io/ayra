@@ -32,6 +32,14 @@ type Menu struct {
 // Showing reports whether the list is open.
 func (m *Menu) Showing() bool { return m.open.Showing() }
 
+// Open shows the list, for a screen that opens it by some other means than the
+// press on its own control -- a keyboard shortcut, or a gesture somewhere else.
+//
+// It exists as the other half of Close. A control that could be closed and not
+// opened is one a caller has to reach around, and reaching around a control is
+// how a second way to do the same thing begins.
+func (m *Menu) Open() { m.open.Open() }
+
 // Close hides it, for a screen that acted on a choice.
 func (m *Menu) Close() { m.open.Close() }
 

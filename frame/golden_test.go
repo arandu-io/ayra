@@ -100,6 +100,44 @@ func screens() []screen {
 		{name: "month", width: 360, height: 470, draw: month},
 		{name: "browsing", width: 360, height: 560, draw: browsing},
 		{name: "media", width: 360, height: 620, draw: media},
+		{name: "open", width: 360, height: 420, draw: openPanels},
+	}
+}
+
+// openPanels draws the panels that are normally shut.
+//
+// Every other picture here catches a control at rest, and a panel at rest is a
+// panel nobody can see inside. That is how a row inside one came to paint the
+// page's own colour against a panel that is not the page's colour -- a block of
+// the wrong shade on every entry of every menu and every option of every list,
+// in the dark scheme, for as long as the pictures only ever showed the control
+// that opens them.
+func openPanels() ayra.Widget {
+	var actions widget.Menu
+	var trigger widget.Button
+	var chosen widget.Select
+
+	actions.Open()
+	chosen.Choose(1)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Open", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.MenuProps{Entries: []string{"Rename", "Duplicate", "", "Delete"}}.
+					Layout(c, &actions, func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Label: "Actions", Variant: widget.Outline}.Layout(c, &trigger)
+					})
+			},
+			spacer(150),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SelectProps{
+					Options:     []string{"Free", "Team", "Enterprise"},
+					Placeholder: "Choose one",
+				}.Layout(c, &chosen)
+			},
+		)
 	}
 }
 

@@ -663,3 +663,29 @@ func TestHidingTheAlphaBarDoesNotChangeTheColour(t *testing.T) {
 		t.Errorf("the field says %q, which does not name a colour that is not solid", got)
 	}
 }
+
+// TestADisabledPickerIsDrawnAsUnavailable fixes what the field said it did and
+// did not.
+//
+// Refusing the drag was the whole of it: the plane, the spectrum, the opacity
+// bar and the swatches were painted at full strength, so a picker nobody could
+// move looked exactly like one they could. Beside a live one in a catalogue of
+// every control, the two were the same picture.
+func TestADisabledPickerIsDrawnAsUnavailable(t *testing.T) {
+	c, _ := field(t, theme.Light, 320)
+
+	if _, over := (ColourPickerProps{}).wash(c); over {
+		t.Error("a live picker has something drawn over it")
+	}
+
+	wash, over := (ColourPickerProps{Disabled: true}).wash(c)
+	if !over {
+		t.Fatal("a disabled picker has nothing drawn over it, so nothing about it looks unavailable")
+	}
+	if wash.A == 0 {
+		t.Error("what is drawn over a disabled picker is fully transparent, which is nothing")
+	}
+	if wash.A == 255 {
+		t.Error("what is drawn over a disabled picker is opaque, so the colour it is on cannot be seen at all")
+	}
+}

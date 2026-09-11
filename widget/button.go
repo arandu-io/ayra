@@ -74,6 +74,15 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		fill = press(fill, state.Pressed())
 	}
 
+	if p.Size == Icon {
+		// Square, which the size's own name promises and the inset alone does
+		// not give: an inset is the same on four sides and the width still
+		// follows the label, so a mark one glyph wide came out narrower than it
+		// is tall and a mark of two came out wider. A row of them was a row of
+		// different shapes.
+		c.Constraints.Min.X = 0
+	}
+
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
 		return p.surface(inner, fill, border, func(inner ayra.Context) ayra.Dimensions {
@@ -148,6 +157,13 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 	measure := op.Record(c.Ops)
 	dims := content(c)
 	drawn := measure.Stop()
+
+	if p.Size == Icon {
+		// Taken from the taller side, because a mark has to fit and a square
+		// that shrank to the narrower one would clip it.
+		side := max(dims.Size.X, dims.Size.Y)
+		dims.Size = image.Pt(side, side)
+	}
 
 	radius := c.Dp(unit.Dp(c.Theme.Metrics.Radius))
 	if p.Variant == Link {
