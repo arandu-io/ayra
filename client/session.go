@@ -65,6 +65,12 @@ func WithSession(store Store) Option {
 // sign-out request does not do. Without it a signed-out application still
 // carries the cookie, and the store still holds it after the process ends.
 func (c *Client) Forget() error {
+	// The token goes with the session it belongs to. Keeping it would mean the
+	// next request after signing out carrying the credential of a session the
+	// server has already ended -- refused, and refused in a way that reads like
+	// a bug rather than like signing out.
+	c.csrf.forget()
+
 	if j, ok := c.http.Jar.(*jar); ok {
 		return j.forget()
 	}
