@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/font/gofont"
@@ -96,7 +97,134 @@ func screens() []screen {
 		{name: "data", width: 360, height: 480, draw: data},
 		{name: "shell", width: 520, height: 420, draw: shellScreen},
 		{name: "content", width: 360, height: 480, draw: content},
+		{name: "month", width: 360, height: 470, draw: month},
+		{name: "browsing", width: 360, height: 560, draw: browsing},
+		{name: "media", width: 360, height: 620, draw: media},
 	}
+}
+
+// month draws the calendar, and the two fields that open one.
+//
+// The day is written into the props rather than read from the clock, which is
+// the whole reason these pictures can be kept at all: a control that asked the
+// machine what day it was would draw a different picture tomorrow and a
+// different one again in another timezone.
+func month() ayra.Widget {
+	var days widget.Calendar
+	var picker widget.DatePicker
+	var lookup widget.Autocomplete
+
+	today := time.Date(2026, time.September, 10, 0, 0, 0, 0, time.UTC)
+	days.Select(today.AddDate(0, 0, 4))
+	picker.Select(today)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("September", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.CalendarProps{Today: today, Monday: true}.Layout(c, &days)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.DatePickerProps{Today: today, Placeholder: "Pick a date"}.Layout(c, &picker)
+			},
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.AutocompleteProps{
+					Entries:     []string{"Arandu", "Ayra", "Joaju", "Kyse"},
+					Placeholder: "Search a repository",
+				}.Layout(c, &lookup)
+			},
+		)
+	}
+}
+
+// browsing draws a hierarchy with two of its branches open, and a listing.
+func browsing() ayra.Widget {
+	var tree widget.Tree
+	var files widget.FilePicker
+
+	tree.Expand([]int{0})
+	tree.Expand([]int{0, 0})
+	tree.Select([]int{0, 0, 1})
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Project", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.TreeProps{Roots: []widget.TreeNode{
+					{Label: "app", Children: []widget.TreeNode{
+						{Label: "Http", Children: []widget.TreeNode{
+							{Label: "Controllers"},
+							{Label: "Middleware"},
+						}},
+						{Label: "Models"},
+					}},
+					{Label: "go.mod", Detail: "1.2 kB"},
+				}}.Layout(c, &tree)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.FilePickerProps{
+					Root: "Files",
+					Path: []string{"resources"},
+					Entries: []widget.FileEntry{
+						{Name: "views", Dir: true},
+						{Name: "app.css", Size: 5186},
+						{Name: "logo.svg", Size: 2048},
+					},
+				}.Layout(c, &files)
+			},
+		)
+	}
+}
+
+// media draws the transport, a row of slides and a colour being chosen.
+func media() ayra.Widget {
+	var transport widget.Player
+	var slides widget.Carousel
+	var colours widget.ColourPicker
+
+	slides.Show(1)
+	colours.SetColour(gocolor.NRGBA{R: 0xE8, G: 0x7A, B: 0x33, A: 0xFF})
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Media", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.PlayerProps{
+					Title:    "A recording",
+					Position: 97 * time.Second,
+					Duration: 254 * time.Second,
+					Playing:  true,
+					Volume:   0.7,
+					Speed:    1,
+				}.Layout(c, &transport)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.CarouselProps{Count: 4, Dots: true, Arrows: true}.Layout(c, &slides,
+					func(c ayra.Context, index int) ayra.Dimensions {
+						return widget.CardProps{}.Layout(c, func(c ayra.Context) ayra.Dimensions {
+							return line(slideBody(index), widget.Body, false)(c)
+						})
+					})
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ColourPickerProps{}.Layout(c, &colours)
+			},
+		)
+	}
+}
+
+// slideBody is what each slide of the carousel says, so the pictures show which
+// one the window is on.
+func slideBody(index int) string {
+	return []string{"The first", "The second", "The third", "The fourth"}[index]
 }
 
 // content draws a menu, a search result with its match marked, and a feed.

@@ -2,7 +2,6 @@ package widget
 
 import (
 	"image"
-	"image/color"
 	"strings"
 
 	"github.com/arandu-io/ayra"
@@ -161,7 +160,8 @@ type TreeProps struct {
 	// Indent is how far each level is set in. Zero takes a step a row's own
 	// marker is legible against.
 	Indent unit.Dp
-	// Disabled draws it as unavailable and refuses every press.
+	// Disabled stops every row answering: neither the markers nor the labels
+	// react, and nothing is reported.
 	Disabled bool
 }
 
@@ -207,20 +207,23 @@ func (p TreeProps) branch(c ayra.Context, state *Tree, nodes []TreeNode, at []in
 }
 
 // row draws one line of the hierarchy.
+//
+// The label is a list row rather than a button, and the difference is where the
+// text sits: a button centres its label, because a button takes the width of
+// the column it is in and left-aligned text in a full-width one reads as a
+// heading with a box round it. A tree is the opposite -- every label has to
+// begin at the same place as the labels of its level, and centring them makes
+// the indent move the middle of each word instead of its start, so a hierarchy
+// draws as a column of text with no shape at all.
 func (p TreeProps) row(c ayra.Context, state *Tree, node TreeNode, path []int) ayra.Dimensions {
 	indent := p.Indent
 	if indent == 0 {
 		indent = 16
 	}
 
-	marked := samePath(path, state.marked)
-	ink := c.Theme.Colours.Foreground
-	if p.Disabled {
-		ink = fade(ink)
-	}
-
 	state.ensure()
 	row := state.row(path)
+	marked := samePath(path, state.marked)
 
 	return layout.Inset{Left: unit.Dp(float32(indent) * float32(len(path)-1))}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
@@ -230,24 +233,15 @@ func (p TreeProps) row(c ayra.Context, state *Tree, node TreeNode, path []int) a
 			}),
 			layout.Rigid(layout.Spacer{Width: 6}.Layout),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				label := node.Label
-				variant := Ghost
-				if marked {
-					variant = Secondary
-				}
-				return ButtonProps{
-					Label:    label,
-					Variant:  variant,
-					Size:     Small,
-					Disabled: p.Disabled,
-				}.Layout(inner.With(gtx), &row.pick)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if node.Detail == "" {
-					return ayra.Dimensions{}
-				}
-				return layout.Inset{Left: 8, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return drawText(inner.With(gtx), node.Detail, unit.Sp(c.Theme.Type.Small), fadeTo(c.Theme.Colours.MutedForeground, p.Disabled), 1, text.End, plain())
+				return ItemProps{
+					Title:     node.Label,
+					Pressable: !p.Disabled,
+					Selected:  marked,
+				}.Layout(inner.With(gtx), &row.pick, func(c ayra.Context) ayra.Dimensions {
+					if node.Detail == "" {
+						return ayra.Dimensions{}
+					}
+					return drawText(c, node.Detail, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.End, plain())
 				})
 			}),
 		)
@@ -288,13 +282,4 @@ func samePath(a, b []int) bool {
 		}
 	}
 	return true
-}
-
-// fadeTo halves a colour's alpha when a control is unavailable, and leaves it
-// alone otherwise.
-func fadeTo(c color.NRGBA, disabled bool) color.NRGBA {
-	if disabled {
-		return fade(c)
-	}
-	return c
 }
