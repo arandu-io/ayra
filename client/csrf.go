@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"net/http"
 	"sync"
 )
@@ -14,15 +13,6 @@ import (
 // then send it twice with nothing saying which one counts. A header is the
 // client's own and there is one of it.
 const csrfHeader = "X-CSRF-Token"
-
-// csrfField is where a page carries the token to whoever is going to need it.
-//
-// It travels at the top of a page's values because that is where the server
-// puts it: the type a screen embeds declares it, so every page rendered from
-// one carries it under this name whatever else the screen holds. Reading it
-// here means an application does not have to hand this client a token it has
-// already been sent.
-const csrfField = "Token"
 
 // safeMethods are the ones a server does not ask a token for.
 //
@@ -49,28 +39,18 @@ type tokens struct {
 	value string
 }
 
-// remember takes the token out of a page, if it carries one.
+// remember keeps the token a page arrived with, if it arrived with one.
 //
 // A page with no token leaves what is held alone. The server sends one on the
 // pages that were going to render a form and not on the others, and a page
 // without one is not the session ending -- it is a page with no form on it.
-func (t *tokens) remember(data json.RawMessage) {
-	if len(data) == 0 {
-		return
-	}
-
-	// Only the one field. Decoding the whole of a page's values here would mean
-	// this package holding a type for something that belongs to the
-	// application, and failing on a page whose values it could not fit.
-	var carrying struct {
-		Token string `json:"Token"`
-	}
-	if err := json.Unmarshal(data, &carrying); err != nil || carrying.Token == "" {
+func (t *tokens) remember(token string) {
+	if token == "" {
 		return
 	}
 
 	t.mu.Lock()
-	t.value = carrying.Token
+	t.value = token
 	t.mu.Unlock()
 }
 

@@ -50,7 +50,7 @@ func protected(t *testing.T, token string) (*httptest.Server, func() []string) {
 				_, _ = w.Write([]byte(`{"view":"list","data":[1,2,3]}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"view":"auth.login","data":{"Title":"Sign in","Token":"` + token + `"}}`))
+			_, _ = w.Write([]byte(`{"view":"auth.login","data":{"Title":"Sign in"},"token":"` + token + `"}`))
 			return
 		}
 
@@ -70,7 +70,7 @@ func protected(t *testing.T, token string) (*httptest.Server, func() []string) {
 			w.WriteHeader(419)
 			return
 		}
-		_, _ = w.Write([]byte(`{"view":"home","data":{"Token":"` + token + `"}}`))
+		_, _ = w.Write([]byte(`{"view":"home","data":{},"token":"` + token + `"}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -153,7 +153,7 @@ func TestTheTokenIsNotSentOnASafeRequest(t *testing.T) {
 			mu.Unlock()
 		}
 		w.Header().Set("Content-Type", client.ViewMediaType)
-		_, _ = w.Write([]byte(`{"view":"home","data":{"Token":"the-token"}}`))
+		_, _ = w.Write([]byte(`{"view":"home","data":{},"token":"the-token"}`))
 	}))
 	defer server.Close()
 
@@ -233,12 +233,15 @@ func TestSigningOutDropsTheToken(t *testing.T) {
 	}
 }
 
-// TestAPageThisCannotReadDoesNotLoseTheToken keeps a page whose values are not
-// an object from clearing what is held.
+// TestThePageThatCarriesNoTokenLeavesTheHeldOneAlone is the same rule read
+// through values this client could never have parsed.
 //
-// An application's page data is its own, and nothing says it is a JSON object.
-// Failing to find a token in one is not the same as being told there is none.
-func TestAPageThisCannotReadDoesNotLoseTheToken(t *testing.T) {
+// It used to look for the token inside the page's own values, so a page whose
+// values were not an object at all was a page it could not read -- and a
+// failure to find a token there had to be told apart from being told there is
+// none. The token is in the envelope now, so the values can be anything the
+// application answers with and it changes nothing.
+func TestThePageThatCarriesNoTokenLeavesTheHeldOneAlone(t *testing.T) {
 	server, sent := protected(t, "the-token")
 
 	talk, err := client.New(server.URL)
@@ -249,15 +252,74 @@ func TestAPageThisCannotReadDoesNotLoseTheToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The same client again, and values that are a list rather than an object.
 	if _, err := talk.Get(context.Background(), "/list"); err != nil {
 		t.Fatalf("a page whose values are a list was refused: %v", err)
 	}
 
 	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err != nil {
-		t.Fatalf("the post was refused after a page this could not read: %v", err)
+		t.Fatalf("the post was refused after a page whose values are a list: %v", err)
 	}
 	if carried := sent(); len(carried) != 1 || carried[0] != "the-token" {
 		t.Errorf("the server was sent %v", carried)
+	}
+}
+
+// TestTheTokenIsReadFromTheEnvelopeAndNotFromTheValues is the fix for what this
+// depended on before.
+//
+// It read a field name that nothing declared -- the page type's own field, under
+// whatever name Go happened to marshal it as. A tag on that field, a rename, or
+// a change of embedding would have moved it silently. A page whose values carry
+// something called Token and whose envelope carries none must now produce no
+// token at all.
+func TestTheTokenIsReadFromTheEnvelopeAndNotFromTheValues(t *testing.T) {
+	var sent string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", client.ViewMediaType)
+
+		if r.Method == http.MethodGet {
+			// The old shape: inside the values, and nowhere the protocol
+			// declares.
+			_, _ = w.Write([]byte(`{"view":"auth.login","data":{"Token":"from-the-values"}}`))
+			return
+		}
+		sent = r.Header.Get("X-CSRF-Token")
+		_, _ = w.Write([]byte(`{"view":"home","data":{}}`))
+	}))
+	defer server.Close()
+
+	talk, err := client.New(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if sent != "" {
+		t.Errorf("a token was taken from the page's values rather than from the envelope: %q", sent)
+	}
+}
+
+// TestTheEnvelopeFieldIsReadableByACallerThatBuildsItsOwnRequests keeps the
+// token reachable for whoever is not using Post.
+func TestTheEnvelopeFieldIsReadableByACallerThatBuildsItsOwnRequests(t *testing.T) {
+	server, _ := protected(t, "the-token")
+
+	talk, err := client.New(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := talk.Get(context.Background(), "/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if page.Token != "the-token" {
+		t.Errorf("the page answers the token %q", page.Token)
 	}
 }

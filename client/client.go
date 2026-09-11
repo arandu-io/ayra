@@ -51,6 +51,20 @@ type Page struct {
 	// the second pass wants and costs an allocation per field to do it. Into
 	// answers the screen's type directly.
 	Data json.RawMessage `json:"data"`
+
+	// Token is the CSRF token of this session, and empty on a page that has
+	// none.
+	//
+	// It is beside the view's name rather than inside the values because it is
+	// a fact about the protocol and not about the page. The markup
+	// representation of the same address carries it too, in the hidden field a
+	// form writes and the header attribute an enhanced request sends; a client
+	// that draws for itself has neither, so it is given the value and sends it
+	// back on anything that changes something.
+	//
+	// [Client] does that by itself. The field is here because a caller that
+	// builds its own requests still needs to reach it.
+	Token string `json:"token"`
 }
 
 // Into decodes a page's values into v, which is a pointer to whatever the
@@ -188,7 +202,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 	if err != nil {
 		return page, err
 	}
-	c.csrf.remember(page.Data)
+	c.csrf.remember(page.Token)
 	return page, nil
 }
 
