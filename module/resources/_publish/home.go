@@ -33,9 +33,7 @@ func (a *App) layoutHome(c ayra.Context, st status) ayra.Dimensions {
 		// the client follows it, and the page that comes back is the one the
 		// server sends a stranger to. Deciding here would be a second answer
 		// to a question the server already answers.
-		a.ask(c, func(ctx context.Context) (client.Page, error) {
-			return a.server.Post(ctx, "/logout", nil)
-		})
+		a.ask(c, a.signOut)
 	}
 
 	return centred(c, readingWidth, func(c ayra.Context) ayra.Dimensions {
@@ -51,6 +49,24 @@ func (a *App) layoutHome(c ayra.Context, st status) ayra.Dimensions {
 			},
 		)
 	})
+}
+
+// signOut ends the session on both sides.
+//
+// The server ending it is not this side ending it. Without the second half the
+// cookie is still carried, and a session kept between runs is still on disk --
+// so the next start signs back in to a session the server has already thrown
+// away, and what comes back is a refusal nobody can explain.
+//
+// A method rather than a closure inside the screen, because it is the half that
+// is easy to leave out and a closure inside a layout is a decision no test can
+// reach without pressing a button.
+func (a *App) signOut(ctx context.Context) (client.Page, error) {
+	page, err := a.server.Post(ctx, "/logout", nil)
+	if err != nil {
+		return page, err
+	}
+	return page, a.server.Forget()
 }
 
 // greeting names the person when the server said who they are.

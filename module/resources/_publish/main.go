@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/arandu-io/ayra/client"
 	"github.com/arandu-io/ayra/shell"
 )
 
@@ -40,14 +41,38 @@ const title = ""
 func main() {
 	address := flag.String("server", server, "the address of the Arandu server this draws for")
 	dark := flag.Bool("dark", false, "open with the dark palette")
+	forget := flag.Bool("forget", false, "do not keep the session between runs")
 	flag.Parse()
 
 	shell.Exit(run(Config{
-		Server: *address,
-		Title:  windowTitle(),
-		Scheme: scheme(*dark),
-		Fonts:  faces(),
+		Server:  *address,
+		Title:   windowTitle(),
+		Scheme:  scheme(*dark),
+		Fonts:   faces(),
+		Session: session(*forget),
 	}))
+}
+
+// session is where this application keeps somebody signed in between runs.
+//
+// A file under the account's own configuration directory, readable by that
+// account and no other. Return nil instead to keep the session only while the
+// process lives, which is the right answer for an application handling
+// something somebody would not want left on a shared machine.
+//
+// A store that cannot be opened is not a reason to refuse to start: the worst
+// it costs is a sign-in, and an application that will not open because it could
+// not find a directory is worse than one that asks for a password.
+func session(forget bool) client.Store {
+	if forget {
+		return nil
+	}
+
+	store, err := client.FileSession(windowTitle())
+	if err != nil {
+		return nil
+	}
+	return store
 }
 
 // windowTitle answers what to call the window.
