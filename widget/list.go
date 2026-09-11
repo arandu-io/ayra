@@ -2,6 +2,7 @@ package widget
 
 import (
 	"image"
+	"image/color"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
@@ -34,12 +35,8 @@ type ItemProps struct {
 // Layout draws the row with whatever the caller puts on its right.
 func (p ItemProps) Layout(c ayra.Context, state *Button, trailing ayra.Widget) ayra.Dimensions {
 	draw := func(c ayra.Context) ayra.Dimensions {
-		fill := c.Theme.Colours.Background
-		if p.Selected {
-			fill = c.Theme.Colours.Accent
-		}
-
-		return surface(c, fill, fill, controlRadius(c), func(c ayra.Context) ayra.Dimensions {
+		fill := p.fill(c)
+		return surface(c, fill, p.edge(c), controlRadius(c), func(c ayra.Context) ayra.Dimensions {
 			return layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 				inner := c.With(gtx)
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(inner.Context,
@@ -65,6 +62,47 @@ func (p ItemProps) Layout(c ayra.Context, state *Button, trailing ayra.Widget) a
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		return draw(c.With(gtx))
 	})
+}
+
+// fill is the colour a row paints behind itself.
+//
+// Nothing at all when the row is not the current one, so that it takes the
+// colour of whatever it was put on. It painted the page's own background, and
+// that is only invisible on the page. Inside a panel it is a block of the wrong
+// colour on every row: in the dark scheme a popover is lighter than the page,
+// so every menu entry and every option of a list drew a darker rectangle inside
+// it. On a muted surface it is worse the other way -- a muted surface and the
+// colour a chosen row uses are one value in the light scheme, so an unchosen
+// row was a white block and the chosen one vanished into its background.
+//
+// It is a function because that is the whole of one decision, and a decision
+// written inline is one no test can ask about without drawing the row onto a
+// ground where the fault is invisible -- which is the ground it was written and
+// looked at on.
+func (p ItemProps) fill(c ayra.Context) color.NRGBA {
+	if p.Selected {
+		return c.Theme.Colours.Accent
+	}
+	return color.NRGBA{}
+}
+
+// edge is the line a row draws around itself.
+//
+// Only the current one draws one, and it is what marks that row when the fill
+// cannot. The palette gives a muted surface and a chosen row one value in the
+// light scheme, so a chosen row on a muted area is the colour it is sitting on
+// and nothing about it is different -- a mark that disappears exactly where a
+// list is most often put.
+//
+// A second mark rather than a different colour, because the colour is the
+// palette's and the palette is generated from the one the browser half uses.
+// Two halves of a product whose chosen rows were different colours would be two
+// products.
+func (p ItemProps) edge(c ayra.Context) color.NRGBA {
+	if p.Selected {
+		return c.Theme.Colours.Ring
+	}
+	return color.NRGBA{}
 }
 
 // lines draws the title and whatever is under it.

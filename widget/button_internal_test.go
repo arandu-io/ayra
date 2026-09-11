@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"image"
 	"image/color"
 	"testing"
 
@@ -83,4 +84,72 @@ func TestPressIsDarkerThanHover(t *testing.T) {
 	if !(held.R < hovered.R && hovered.R < base.R) {
 		t.Errorf("at rest %d, hovered %d, held %d: the three have to be told apart", base.R, hovered.R, held.R)
 	}
+}
+
+// TestAnIconButtonIsSquare fixes what the size's own name promises.
+//
+// An inset is the same on four sides and the width still follows the label, so
+// a mark one glyph wide came out narrower than it is tall and a mark of two
+// came out wider. A row of them was a row of different shapes, which is the one
+// thing a row of icons must not be.
+func TestAnIconButtonIsSquare(t *testing.T) {
+	for _, mark := range []string{"K", "+", "icon", "×"} {
+		c, _ := field(t, theme.Light, 400)
+		c.Constraints.Min = image.Point{}
+
+		var state Button
+		dims := ButtonProps{Label: mark, Size: Icon}.Layout(c, &state)
+
+		if dims.Size.X != dims.Size.Y {
+			t.Errorf("an icon button holding %q came out %dx%d", mark, dims.Size.X, dims.Size.Y)
+		}
+	}
+}
+
+// TestEveryToneIsTellableFromTheOthers keeps a closed set from carrying a word
+// that changes nothing.
+//
+// Two of the four were the ordinary foreground and the primary colour, which
+// are thirteen of two hundred and fifty-five apart in one scheme and twenty-one
+// in the other. That is under the tolerance the picture comparison allows
+// between two machines: a word marked accent and the word beside it were the
+// same word, and the set had three members a reader could tell apart.
+func TestEveryToneIsTellableFromTheOthers(t *testing.T) {
+	const apart = 32
+
+	for name, scheme := range map[string]theme.Scheme{"light": theme.Light, "dark": theme.Dark} {
+		th := theme.New(scheme)
+		tones := map[Tone]string{Normal: "normal", Muted: "muted", Danger: "danger", Accent: "accent"}
+
+		for one, oneName := range tones {
+			for other, otherName := range tones {
+				if one >= other {
+					continue
+				}
+				if distance(one.ink(th), other.ink(th)) < apart {
+					t.Errorf("in the %s scheme %s and %s are %d apart, which nobody can see",
+						name, oneName, otherName, distance(one.ink(th), other.ink(th)))
+				}
+			}
+		}
+	}
+}
+
+// distance answers how far apart two colours are, on the widest channel.
+//
+// The widest rather than the sum, because a pair that differs a little on every
+// channel is a pair nobody can tell apart, and a sum would call that three
+// times the difference it looks.
+func distance(a, b color.NRGBA) int {
+	widest := 0
+	for _, pair := range [][2]uint8{{a.R, b.R}, {a.G, b.G}, {a.B, b.B}} {
+		apart := int(pair[0]) - int(pair[1])
+		if apart < 0 {
+			apart = -apart
+		}
+		if apart > widest {
+			widest = apart
+		}
+	}
+	return widest
 }

@@ -181,6 +181,26 @@ func (p ColourPickerProps) Layout(c ayra.Context, state *ColourPicker) ayra.Dime
 
 	if p.Disabled {
 		c.Context = c.Context.Disabled()
+
+		// Half opacity over everything this draws, which is what the field says
+		// it does and what every other control of this package does. Refusing
+		// the drag was the whole of it before: the plane, the spectrum, the
+		// opacity bar and the row of swatches were painted at full strength, so
+		// a picker nobody could move looked exactly like one they could -- and
+		// beside a live one, indistinguishable.
+		//
+		// The wash goes over rather than each colour being faded in turn.
+		// Fading the colours would be a picker misreporting the colour it is
+		// on, which is worse than one that looks unavailable.
+		defer func() {
+			wash, over := p.wash(c)
+			if !over {
+				return
+			}
+			defer clip.Rect{Max: c.Constraints.Max}.Push(c.Ops).Pop()
+			paint.ColorOp{Color: wash}.Add(c.Ops)
+			paint.PaintOp{}.Add(c.Ops)
+		}()
 	}
 
 	// The typing is read before anything is drawn, so that a hex completed on
@@ -224,6 +244,28 @@ func (p ColourPickerProps) Layout(c ayra.Context, state *ColourPicker) ayra.Dime
 	}
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
+}
+
+// wash is what is drawn over the whole control, and whether anything is.
+//
+// Half the page's own colour, over everything, when the control is unavailable.
+// Refusing the drag used to be the whole of it -- the plane, the spectrum, the
+// opacity bar and the swatches were painted at full strength, so a picker
+// nobody could move looked exactly like one they could, and beside a live one
+// the two were the same picture.
+//
+// Over the top rather than each colour faded in turn, because fading the
+// colours would be a picker misreporting the colour it is on. A control that
+// looks unavailable is a smaller problem than one that lies about its value.
+//
+// It is a function because it is the whole of one decision, and a decision
+// written inside a deferred closure is one nothing can ask about without
+// rendering the control and reading pixels.
+func (p ColourPickerProps) wash(c ayra.Context) (color.NRGBA, bool) {
+	if !p.Disabled {
+		return color.NRGBA{}, false
+	}
+	return fade(c.Theme.Colours.Background), true
 }
 
 // readHex takes what was typed into the field, and reports whether it is a

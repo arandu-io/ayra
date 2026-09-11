@@ -104,7 +104,13 @@ func (t Tone) ink(th theme.Theme) color.NRGBA {
 	case Danger:
 		return th.Colours.Destructive
 	case Accent:
-		return th.Colours.Primary
+		// The ring rather than the primary colour. Primary and the ordinary
+		// foreground are thirteen of two hundred and fifty-five apart in one
+		// scheme and twenty-one in the other, which is less than the tolerance
+		// the picture comparison allows between two machines -- so a word
+		// marked accent and a word beside it were the same word, and a closed
+		// set of four tones had three a reader could tell apart.
+		return th.Colours.Ring
 	}
 	return th.Colours.Foreground
 }
