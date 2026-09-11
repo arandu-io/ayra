@@ -186,3 +186,58 @@ func TestANumberWithNoBoundsIsNotClamped(t *testing.T) {
 		t.Errorf("an unbounded stepper clamped %d to %d", 42, state.Value())
 	}
 }
+
+// TestAMatchIsFoundWhateverTheCapitalisation fixes what a search result marks.
+//
+// A search that only matched the capitalisation somebody typed would mark
+// nothing on most results, and a result with nothing marked reads as a result
+// that does not contain what was searched for.
+func TestAMatchIsFoundWhateverTheCapitalisation(t *testing.T) {
+	for _, test := range []struct {
+		text, match           string
+		before, marked, after string
+	}{
+		{"Arandu draws its own", "draws", "Arandu ", "draws", " its own"},
+		{"Arandu Draws its own", "draws", "Arandu ", "Draws", " its own"},
+		{"ARANDU DRAWS", "draws", "ARANDU ", "DRAWS", ""},
+		{"Arandu draws", "ARANDU", "", "Arandu", " draws"},
+	} {
+		before, marked, after := HighlightProps{Text: test.text, Match: test.match}.split()
+
+		if before != test.before || marked != test.marked || after != test.after {
+			t.Errorf("%q with %q split as %q|%q|%q, want %q|%q|%q",
+				test.text, test.match, before, marked, after, test.before, test.marked, test.after)
+		}
+	}
+}
+
+// TestTheMarkedPartIsTheTextThatWasThere keeps the highlight from rewriting
+// what it found.
+//
+// The marked run comes out of the original string rather than out of the query,
+// so a result found case-insensitively still reads the way it was written.
+func TestTheMarkedPartIsTheTextThatWasThere(t *testing.T) {
+	before, marked, after := HighlightProps{Text: "Arandu DRAWS things", Match: "draws"}.split()
+
+	if marked != "DRAWS" {
+		t.Errorf("the marked part is %q; it should be what the text said", marked)
+	}
+	if before+marked+after != "Arandu DRAWS things" {
+		t.Errorf("the three parts do not rebuild the line: %q + %q + %q", before, marked, after)
+	}
+}
+
+// TestAMissingMatchLeavesTheLineWhole keeps a search with no hit from drawing a
+// mark on the first letters.
+func TestAMissingMatchLeavesTheLineWhole(t *testing.T) {
+	for _, match := range []string{"", "absent"} {
+		before, marked, after := HighlightProps{Text: "Arandu draws", Match: match}.split()
+
+		if marked != "" || after != "" {
+			t.Errorf("%q marked %q and left %q", match, marked, after)
+		}
+		if before != "Arandu draws" {
+			t.Errorf("%q changed the line to %q", match, before)
+		}
+	}
+}
