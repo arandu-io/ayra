@@ -16,7 +16,7 @@ import (
 	"github.com/arandu-io/ayra/engine/internal/byteslice"
 	"github.com/arandu-io/ayra/engine/internal/f32color"
 	"github.com/arandu-io/ayra/engine/shader"
-	"github.com/arandu-io/ayra/engine/shader/gio"
+	"github.com/arandu-io/ayra/engine/shader/compiled"
 )
 
 var dumpImages = flag.Bool("saveimages", false, "save test images")
@@ -47,7 +47,7 @@ func TestFramebufferClear(t *testing.T) {
 func TestInputShader(t *testing.T) {
 	b := newDriver(t)
 	sz := image.Point{X: 800, Y: 600}
-	vsh, fsh, err := newShaders(b, gio.Shader_input_vert, gio.Shader_simple_frag)
+	vsh, fsh, err := newShaders(b, compiled.Shader_input_vert, compiled.Shader_simple_frag)
 	if err != nil {
 		t.Fatal(err)
 	}

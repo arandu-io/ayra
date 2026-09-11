@@ -178,8 +178,8 @@ type window struct {
 	}
 }
 
-// gioView hold cached JNI methods for GioView.
-var gioView struct {
+// ayraView hold cached JNI methods for AyraView.
+var ayraView struct {
 	once               sync.Once
 	getDensity         C.jmethodID
 	getFontScale       C.jmethodID
@@ -465,8 +465,8 @@ func AppContext() uintptr {
 
 //export Java_io_arandu_ayra_AyraView_onCreateView
 func Java_io_arandu_ayra_AyraView_onCreateView(env *C.JNIEnv, class C.jclass, view C.jobject) C.jlong {
-	gioView.once.Do(func() {
-		m := &gioView
+	ayraView.once.Do(func() {
+		m := &ayraView
 		m.getDensity = getMethodID(env, class, "getDensity", "()I")
 		m.getFontScale = getMethodID(env, class, "getFontScale", "()F")
 		m.showTextInput = getMethodID(env, class, "showTextInput", "()V")
@@ -627,10 +627,10 @@ func Java_io_arandu_ayra_AyraView_onTouchExploration(env *C.JNIEnv, class C.jcla
 	}
 	// Android expects ENTER before EXIT.
 	if semID != 0 {
-		callVoidMethod(env, w.view, gioView.sendA11yEvent, TYPE_VIEW_HOVER_ENTER, jvalue(w.virtualIDFor(semID)))
+		callVoidMethod(env, w.view, ayraView.sendA11yEvent, TYPE_VIEW_HOVER_ENTER, jvalue(w.virtualIDFor(semID)))
 	}
 	if prevID := w.semantic.hoverID; prevID != 0 {
-		callVoidMethod(env, w.view, gioView.sendA11yEvent, TYPE_VIEW_HOVER_EXIT, jvalue(w.virtualIDFor(prevID)))
+		callVoidMethod(env, w.view, ayraView.sendA11yEvent, TYPE_VIEW_HOVER_EXIT, jvalue(w.virtualIDFor(prevID)))
 	}
 	w.semantic.hoverID = semID
 }
@@ -639,7 +639,7 @@ func Java_io_arandu_ayra_AyraView_onTouchExploration(env *C.JNIEnv, class C.jcla
 func Java_io_arandu_ayra_AyraView_onExitTouchExploration(env *C.JNIEnv, class C.jclass, view C.jlong) {
 	w := cgo.Handle(view).Value().(*window)
 	if w.semantic.hoverID != 0 {
-		callVoidMethod(env, w.view, gioView.sendA11yEvent, TYPE_VIEW_HOVER_EXIT, jvalue(w.virtualIDFor(w.semantic.hoverID)))
+		callVoidMethod(env, w.view, ayraView.sendA11yEvent, TYPE_VIEW_HOVER_EXIT, jvalue(w.virtualIDFor(w.semantic.hoverID)))
 		w.semantic.hoverID = 0
 	}
 }
@@ -650,7 +650,7 @@ func Java_io_arandu_ayra_AyraView_onA11yFocus(env *C.JNIEnv, class C.jclass, vie
 	if semID := w.semIDFor(virtID); semID != w.semantic.focusID {
 		w.semantic.focusID = semID
 		// Android needs invalidate to refresh the TalkBack focus indicator.
-		callVoidMethod(env, w.view, gioView.invalidate)
+		callVoidMethod(env, w.view, ayraView.invalidate)
 	}
 }
 
@@ -802,7 +802,7 @@ func (w *window) semIDFor(virtID C.jint) input.SemanticID {
 }
 
 func (w *window) detach(env *C.JNIEnv) {
-	callVoidMethod(env, w.view, gioView.unregister)
+	callVoidMethod(env, w.view, ayraView.unregister)
 	w.processEvent(AndroidViewEvent{})
 	w.handle.Delete()
 	C.jni_DeleteGlobalRef(env, w.view)
@@ -831,8 +831,8 @@ func (w *window) nativeWindow() (*C.ANativeWindow, int, int) {
 }
 
 func (w *window) loadConfig(env *C.JNIEnv, class C.jclass) {
-	dpi := int(C.jni_CallIntMethod(env, w.view, gioView.getDensity))
-	w.fontScale = float32(C.jni_CallFloatMethod(env, w.view, gioView.getFontScale))
+	dpi := int(C.jni_CallIntMethod(env, w.view, ayraView.getDensity))
+	w.fontScale = float32(C.jni_CallFloatMethod(env, w.view, ayraView.getFontScale))
 	switch dpi {
 	case C.ACONFIGURATION_DENSITY_NONE,
 		C.ACONFIGURATION_DENSITY_DEFAULT,
@@ -848,7 +848,7 @@ func (w *window) SetAnimating(anim bool) {
 	w.animating = anim
 	if anim {
 		runInJVM(javaVM(), func(env *C.JNIEnv) {
-			callVoidMethod(env, w.view, gioView.postFrameCallback)
+			callVoidMethod(env, w.view, ayraView.postFrameCallback)
 		})
 	}
 }
@@ -887,9 +887,9 @@ func (w *window) draw(env *C.JNIEnv, sync bool) {
 		Sync: sync,
 	})
 	if w.animating {
-		callVoidMethod(env, w.view, gioView.postFrameCallback)
+		callVoidMethod(env, w.view, ayraView.postFrameCallback)
 	}
-	a11yActive, err := callBooleanMethod(env, w.view, gioView.isA11yActive)
+	a11yActive, err := callBooleanMethod(env, w.view, ayraView.isA11yActive)
 	if err != nil {
 		panic(err)
 	}
@@ -903,11 +903,11 @@ func (w *window) draw(env *C.JNIEnv, sync bool) {
 				w.semantic.focusID = newR
 			}
 			w.semantic.rootID = newR
-			callVoidMethod(env, w.view, gioView.sendA11yChange, jvalue(w.virtualIDFor(newR)))
+			callVoidMethod(env, w.view, ayraView.sendA11yChange, jvalue(w.virtualIDFor(newR)))
 		}
 		w.semantic.diffs = w.callbacks.AppendSemanticDiffs(w.semantic.diffs[:0])
 		for _, id := range w.semantic.diffs {
-			callVoidMethod(env, w.view, gioView.sendA11yChange, jvalue(w.virtualIDFor(id)))
+			callVoidMethod(env, w.view, ayraView.sendA11yChange, jvalue(w.virtualIDFor(id)))
 		}
 	}
 }
@@ -1149,12 +1149,12 @@ func Java_io_arandu_ayra_AyraView_imeToUTF16(env *C.JNIEnv, class C.jclass, hand
 func (w *window) EditorStateChanged(old, new editorState) {
 	runInJVM(javaVM(), func(env *C.JNIEnv) {
 		if old.Snippet != new.Snippet {
-			callVoidMethod(env, w.view, gioView.restartInput)
+			callVoidMethod(env, w.view, ayraView.restartInput)
 			return
 		}
 		if old.Selection.Range != new.Selection.Range {
 			w.callbacks.SetComposingRegion(key.Range{Start: -1, End: -1})
-			callVoidMethod(env, w.view, gioView.updateSelection)
+			callVoidMethod(env, w.view, ayraView.updateSelection)
 		}
 		if old.Selection.Transform != new.Selection.Transform || old.Selection.Caret != new.Selection.Caret {
 			sel := new.Selection
@@ -1163,7 +1163,7 @@ func (w *window) EditorStateChanged(old, new editorState) {
 				return jvalue(math.Float32bits(v))
 			}
 			c := sel.Caret
-			callVoidMethod(env, w.view, gioView.updateCaret, f(m00), f(m01), f(m02), f(m10), f(m11), f(m12), f(c.Pos.X), f(c.Pos.Y-c.Ascent), f(c.Pos.Y), f(c.Pos.Y+c.Descent))
+			callVoidMethod(env, w.view, ayraView.updateCaret, f(m00), f(m01), f(m02), f(m10), f(m11), f(m12), f(c.Pos.X), f(c.Pos.Y-c.Ascent), f(c.Pos.Y), f(c.Pos.Y+c.Descent))
 		}
 	})
 }
@@ -1171,9 +1171,9 @@ func (w *window) EditorStateChanged(old, new editorState) {
 func (w *window) ShowTextInput(show bool) {
 	runInJVM(javaVM(), func(env *C.JNIEnv) {
 		if show {
-			callVoidMethod(env, w.view, gioView.showTextInput)
+			callVoidMethod(env, w.view, ayraView.showTextInput)
 		} else {
-			callVoidMethod(env, w.view, gioView.hideTextInput)
+			callVoidMethod(env, w.view, ayraView.hideTextInput)
 		}
 	})
 }
@@ -1218,7 +1218,7 @@ func (w *window) SetInputHint(mode key.InputHint) {
 			m = TYPE_CLASS_TEXT
 		}
 
-		callVoidMethod(env, w.view, gioView.setInputHint, m)
+		callVoidMethod(env, w.view, ayraView.setInputHint, m)
 	})
 }
 
@@ -1380,10 +1380,10 @@ func (w *window) setConfig(env *C.JNIEnv, cnf Config) {
 	if prev.Mode != cnf.Mode {
 		switch cnf.Mode {
 		case Fullscreen:
-			callVoidMethod(env, w.view, gioView.setFullscreen, C.JNI_TRUE)
+			callVoidMethod(env, w.view, ayraView.setFullscreen, C.JNI_TRUE)
 			w.config.Mode = Fullscreen
 		case Windowed:
-			callVoidMethod(env, w.view, gioView.setFullscreen, C.JNI_FALSE)
+			callVoidMethod(env, w.view, ayraView.setFullscreen, C.JNI_FALSE)
 			w.config.Mode = Windowed
 		}
 	}
@@ -1439,7 +1439,7 @@ var androidCursor = [...]uint16{
 
 func setCursor(env *C.JNIEnv, view C.jobject, cursor pointer.Cursor) {
 	curID := androidCursor[cursor]
-	callVoidMethod(env, view, gioView.setCursor, jvalue(curID))
+	callVoidMethod(env, view, ayraView.setCursor, jvalue(curID))
 }
 
 func setOrientation(env *C.JNIEnv, view C.jobject, mode Orientation) {
@@ -1456,18 +1456,18 @@ func setOrientation(env *C.JNIEnv, view C.jobject, mode Orientation) {
 	case PortraitOrientation:
 		id, idFallback = 12, 1 // SCREEN_ORIENTATION_USER_PORTRAIT (or SCREEN_ORIENTATION_PORTRAIT)
 	}
-	callVoidMethod(env, view, gioView.setOrientation, jvalue(id), jvalue(idFallback))
+	callVoidMethod(env, view, ayraView.setOrientation, jvalue(id), jvalue(idFallback))
 }
 
 func setStatusColor(env *C.JNIEnv, view C.jobject, color color.NRGBA) {
-	callVoidMethod(env, view, gioView.setStatusColor,
+	callVoidMethod(env, view, ayraView.setStatusColor,
 		jvalue(uint32(color.A)<<24|uint32(color.R)<<16|uint32(color.G)<<8|uint32(color.B)),
 		jvalue(int(f32color.LinearFromSRGB(color).Luminance()*255)),
 	)
 }
 
 func setNavigationColor(env *C.JNIEnv, view C.jobject, color color.NRGBA) {
-	callVoidMethod(env, view, gioView.setNavigationColor,
+	callVoidMethod(env, view, ayraView.setNavigationColor,
 		jvalue(uint32(color.A)<<24|uint32(color.R)<<16|uint32(color.G)<<8|uint32(color.B)),
 		jvalue(int(f32color.LinearFromSRGB(color).Luminance()*255)),
 	)

@@ -16,7 +16,7 @@ import (
 	"github.com/arandu-io/ayra/engine/internal/f32"
 	"github.com/arandu-io/ayra/engine/internal/f32color"
 	"github.com/arandu-io/ayra/engine/shader"
-	"github.com/arandu-io/ayra/engine/shader/gio"
+	"github.com/arandu-io/ayra/engine/shader/compiled"
 )
 
 type pather struct {
@@ -149,7 +149,7 @@ func newCoverer(ctx driver.Device) *coverer {
 	c.colUniforms = new(coverColUniforms)
 	c.texUniforms = new(coverTexUniforms)
 	c.linearGradientUniforms = new(coverLinearGradientUniforms)
-	pipelines, err := createColorPrograms(ctx, gio.Shader_cover_vert, gio.Shader_cover_frag,
+	pipelines, err := createColorPrograms(ctx, compiled.Shader_cover_vert, compiled.Shader_cover_frag,
 		[...][]byte{
 			byteslice.View(c.colUniforms),
 			byteslice.View(c.linearGradientUniforms),
@@ -200,7 +200,7 @@ func newStenciler(ctx driver.Device) *stenciler {
 		ctx:      ctx,
 		indexBuf: indexBuf,
 	}
-	vsh, fsh, err := newShaders(ctx, gio.Shader_stencil_vert, gio.Shader_stencil_frag)
+	vsh, fsh, err := newShaders(ctx, compiled.Shader_stencil_vert, compiled.Shader_stencil_frag)
 	if err != nil {
 		panic(err)
 	}
@@ -223,7 +223,7 @@ func newStenciler(ctx driver.Device) *stenciler {
 	if err != nil {
 		panic(err)
 	}
-	vsh, fsh, err = newShaders(ctx, gio.Shader_intersect_vert, gio.Shader_intersect_frag)
+	vsh, fsh, err = newShaders(ctx, compiled.Shader_intersect_vert, compiled.Shader_intersect_frag)
 	if err != nil {
 		panic(err)
 	}

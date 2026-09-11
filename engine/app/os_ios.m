@@ -8,11 +8,11 @@
 
 __attribute__ ((visibility ("hidden"))) Class gio_layerClass(void);
 
-@interface GioView: UIView <UIKeyInput>
+@interface AyraView: UIView <UIKeyInput>
 @property uintptr_t handle;
 @end
 
-@implementation GioViewController
+@implementation AyraViewController
 
 CGFloat _keyboardHeight;
 
@@ -22,7 +22,7 @@ CGFloat _keyboardHeight;
 	CGRect zeroFrame = CGRectMake(0, 0, 0, 0);
 	self.view = [[UIView alloc] initWithFrame:zeroFrame];
 	self.view.layoutMargins = UIEdgeInsetsMake(0, 0, 0, 0);
-	UIView *drawView = [[GioView alloc] initWithFrame:zeroFrame];
+	UIView *drawView = [[AyraView alloc] initWithFrame:zeroFrame];
 	[self.view addSubview: drawView];
 #if !TARGET_OS_TV
 	drawView.multipleTouchEnabled = YES;
@@ -55,14 +55,14 @@ CGFloat _keyboardHeight;
 }
 
 - (void)applicationWillEnterForeground:(UIApplication *)application {
-	GioView *view = (GioView *)self.view.subviews[0];
+	AyraView *view = (AyraView *)self.view.subviews[0];
 	if (view != nil) {
 		onStart(view.handle);
 	}
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
-	GioView *view = (GioView *)self.view.subviews[0];
+	AyraView *view = (AyraView *)self.view.subviews[0];
 	if (view != nil) {
 		onStop(view.handle);
 	}
@@ -70,13 +70,13 @@ CGFloat _keyboardHeight;
 
 - (void)viewDidDisappear:(BOOL)animated {
 	[super viewDidDisappear:animated];
-	GioView *view = (GioView *)self.view.subviews[0];
+	AyraView *view = (AyraView *)self.view.subviews[0];
 	onDestroy(view.handle);
 }
 
 - (void)viewDidLayoutSubviews {
 	[super viewDidLayoutSubviews];
-	GioView *view = (GioView *)self.view.subviews[0];
+	AyraView *view = (AyraView *)self.view.subviews[0];
 	CGRect frame = self.view.bounds;
 	// Adjust view bounds to make room for the keyboard.
 	frame.size.height -= _keyboardHeight;
@@ -104,7 +104,7 @@ CGFloat _keyboardHeight;
 #endif
 @end
 
-static void handleTouches(int last, GioView *view, NSSet<UITouch *> *touches, UIEvent *event) {
+static void handleTouches(int last, AyraView *view, NSSet<UITouch *> *touches, UIEvent *event) {
 	CGFloat scale = view.contentScaleFactor;
 	NSUInteger i = 0;
 	NSUInteger n = [touches count];
@@ -123,7 +123,7 @@ static void handleTouches(int last, GioView *view, NSSet<UITouch *> *touches, UI
 	}
 }
 
-@implementation GioView
+@implementation AyraView
 NSArray<UIKeyCommand *> *_keyCommands;
 + (void)onFrameCallback:(CADisplayLink *)link {
        gio_onFrameCallback((__bridge CFTypeRef)link);
@@ -269,7 +269,7 @@ NSArray<UIKeyCommand *> *_keyCommands;
 @end
 
 CFTypeRef gio_createDisplayLink(void) {
-	CADisplayLink *dl = [CADisplayLink displayLinkWithTarget:[GioView class] selector:@selector(onFrameCallback:)];
+	CADisplayLink *dl = [CADisplayLink displayLinkWithTarget:[AyraView class] selector:@selector(onFrameCallback:)];
 	dl.paused = YES;
 	NSRunLoop *runLoop = [NSRunLoop mainRunLoop];
 	[dl addToRunLoop:runLoop forMode:[runLoop currentMode]];
@@ -311,18 +311,18 @@ void gio_setCursor(NSUInteger curID) {
 }
 
 void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
-	GioView *v = (__bridge GioView *)viewRef;
+	AyraView *v = (__bridge AyraView *)viewRef;
 	v.handle = handle;
 }
 
-@interface _gioAppDelegate : UIResponder <UIApplicationDelegate>
+@interface _ayraAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
 
-@implementation _gioAppDelegate
+@implementation _ayraAppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 	self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-	GioViewController *controller = [[GioViewController alloc] initWithNibName:nil bundle:nil];
+	AyraViewController *controller = [[AyraViewController alloc] initWithNibName:nil bundle:nil];
 	self.window.rootViewController = controller;
 	[self.window makeKeyAndVisible];
 	return YES;
@@ -335,6 +335,6 @@ void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
 
 int gio_applicationMain(int argc, char *argv[]) {
 	@autoreleasepool {
-		return UIApplicationMain(argc, argv, nil, NSStringFromClass([_gioAppDelegate class]));
+		return UIApplicationMain(argc, argv, nil, NSStringFromClass([_ayraAppDelegate class]));
 	}
 }
