@@ -79,6 +79,9 @@ func (p Page) Into(v any) error {
 type Client struct {
 	base *url.URL
 	http *http.Client
+	// session is where the cookies outlive the process, and nil when they do
+	// not.
+	session Store
 }
 
 // New returns a client for the server at base.
@@ -107,7 +110,7 @@ func New(base string, opts ...Option) (*Client, error) {
 		c.http.Timeout = requestTimeout
 	}
 	if c.http.Jar == nil {
-		jar, err := newJar()
+		jar, err := newJar(u, c.session)
 		if err != nil {
 			return nil, err
 		}

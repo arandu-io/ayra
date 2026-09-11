@@ -31,6 +31,16 @@ type Config struct {
 	// Fonts are the faces text is shaped from. A binary for the browser has to
 	// carry its own, because there is no filesystem there to find any.
 	Fonts []text.FontFace
+
+	// Session is where the session is kept between runs, and nil keeps it only
+	// while the process lives.
+	//
+	// With nothing here, somebody signs in, quits, and is asked to sign in
+	// again -- which is what closing a browser tab means and is not what
+	// quitting an application means. It is a field rather than something this
+	// decides, because it writes what proves who somebody is to wherever the
+	// store puts it, and an application is entitled to say no.
+	Session client.Store
 }
 
 // run opens the window and draws until it closes.
@@ -38,7 +48,7 @@ type Config struct {
 // It is separate from main so that main stays what it is: the flags, and the
 // one line that ends the process with the right code.
 func run(cfg Config) error {
-	server, err := client.New(cfg.Server)
+	server, err := talkTo(cfg)
 	if err != nil {
 		return err
 	}
@@ -72,6 +82,14 @@ type App struct {
 	// happens on one goroutine. That is what makes it safe without a lock, and
 	// it is why the work below hands its result back instead of writing here.
 	screen Screen
+	// asked says whether the first question has been put to the server.
+	//
+	// It is asked from inside the first frame rather than before the window
+	// opens, because a request made before there is a window is a window that
+	// does not appear until the network answers -- and on a bad connection that
+	// is thirty seconds of nothing, which reads as an application that failed
+	// to start.
+	asked  bool
 	signIn signInState
 	home   homeState
 
@@ -107,6 +125,7 @@ const (
 
 // Layout draws whichever screen is showing.
 func (a *App) Layout(c ayra.Context) ayra.Dimensions {
+	a.open(c)
 	st := a.apply(c)
 
 	// A switch and not a table, because a switch is what the compiler
@@ -117,6 +136,41 @@ func (a *App) Layout(c ayra.Context) ayra.Dimensions {
 	default:
 		return a.layoutSignIn(c, st)
 	}
+}
+
+// talkTo builds the client this application draws for.
+//
+// A function of its own because it is one decision -- whether the session
+// outlives the process -- and a decision written inside the function that opens
+// a window is one nothing can ask about without opening a window.
+func talkTo(cfg Config) (*client.Client, error) {
+	options := []client.Option{}
+	if cfg.Session != nil {
+		options = append(options, client.WithSession(cfg.Session))
+	}
+	return client.New(cfg.Server, options...)
+}
+
+// open asks the server, once, which page this application starts on.
+//
+// Without it the application always opens on the form, and a session kept from
+// last time is a session nobody uses: the person signs in again, and the second
+// sign-in is what proves the first one was pointless. With it the server
+// decides, which is where the decision belongs -- it is the only side that
+// knows whether the session it handed out is still one it recognises.
+//
+// The answer is a page like any other, so the ordinary path applies: a stranger
+// is sent to the form, and somebody the server still knows is sent where they
+// were.
+func (a *App) open(c ayra.Context) {
+	if a.asked {
+		return
+	}
+	a.asked = true
+
+	a.ask(c, func(ctx context.Context) (client.Page, error) {
+		return a.server.Get(ctx, "/")
+	})
 }
 
 // status is what the screens are told about work in flight.
