@@ -28,40 +28,38 @@ go test -race ./...
 CI runs these three, and then a number of checks this file does not list --
 `.github/workflows/ci.yml` is the one that decides, and a copy of it here would
 only be a second list to keep in step. One of those checks is worth knowing
-before you write the patch: this module requires `arandu-io/framework` and
-nothing else, because it is imported by every project that draws a button, and
-a second require is a download for all of them. A pull request that adds a
-dependency needs to argue for it first, in an issue.
+before you write the patch: this module's direct dependencies are fixed by a
+test, and every one of them belongs to the engine it vendors. The test fails on
+a ninth, and it fails as well on a name in the list that nothing requires any
+more. A pull request that adds a dependency needs to argue for it first, in an
+issue -- what is imported here is downloaded by every project that opens a
+window.
 
 ## Where a test goes
 
-Under `tests/`, in one of its capitalized category directories, declaring a
-lowercase package -- `tests/Unit` holds `package unit`. The exception is a test
-that needs something the package does not export: that one goes beside the code
-it tests, named `*_internal_test.go`, and the suffix is how it says so. This is
-not a preference. `tests/test-layout-guard.sh` runs in CI and rejects a
-`*_test.go` file that is neither.
+Beside the code it tests, which is the whole rule. A package's tests live in its
+own directory, in `package X` when they need what the package does not export
+and in `package X_test` when they do not -- and the second is the one to reach
+for, because what it sees is what a caller sees.
 
-Which of the two you are writing answers one question:
+That differs from the rest of this project, where tests live under `tests/` in
+category directories. The reason is the subject: a control is proved by drawing
+it and reading what came out, and both halves of that -- the frame it is drawn
+into and the picture it produced -- are the package's own. A suite one directory
+away would import the package to draw, then reach back for the measurement, and
+the reaching back is the thing `package X_test` exists to avoid.
+
+There is one exception and it has a directory: `frame/testdata` holds the
+approved pictures. They are read by `frame/golden_test.go` and by nothing else.
 
 | where | when |
 |---|---|
-| `tests/`, importing the package | this is the **contract**. The test sees what a caller sees, which is the point |
-| beside the code, `*_internal_test.go` in `package X` | this is the **implementation**, and the test genuinely needs something the package does not export |
+| `package X_test`, beside the code | this is the **contract**. The test sees what a caller sees, which is the point |
+| `package X`, beside the code | this is the **implementation**, and the test genuinely needs something the package does not export |
 
-The second one is beside the code because there is nowhere else it can be. A
-file reaches what a package does not export only by compiling into that package,
-and `go test` attributes coverage per directory -- so the package's own
-directory is also the only place where what a test exercises is credited to the
-code it exercises. A suite under `tests/` is credited to `tests/`, and short of
-`-coverpkg` the package it imports reports what its own files reach. That is
-what the first row costs, and for a contract test it is the right price: what it
-measures is the exported surface, which is all a caller ever has.
-
-Prefer the first. Take the second only when you use it -- `plans/testpackages.go`
-in the arandu-io working tree checks exactly that, by intersecting the
-identifiers a test names with what its package declares unexported, and the
-checklist runs it across every Go repository in the project.
+Prefer the first, and take the second only when you use it. A test in the
+package that never touches an unexported name is a contract test that gave up
+its guarantee for nothing.
 
 A `package main` has no external form: it cannot be imported, so nothing under
 `tests/` can reach it. Its tests are internal, and they carry the suffix for the
