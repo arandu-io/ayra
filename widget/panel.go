@@ -48,7 +48,9 @@ type DrawerProps struct {
 	Size unit.Dp
 	// Modal darkens what is behind and swallows presses on it.
 	Modal bool
-	// Dismissible lets escape and a press outside close it.
+	// Dismissible lets escape close it, and a press outside close it when Modal
+	// is set as well: the press outside is read from the barrier the scrim puts
+	// up, and without one there is nothing to read.
 	Dismissible bool
 }
 

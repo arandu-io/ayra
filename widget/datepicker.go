@@ -83,9 +83,16 @@ func (p DatePickerProps) Layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 	}
 
 	if p.Disabled {
-		// Closed as well as unpressable: a panel left open over a field that
-		// has since been disabled is a month whose days do nothing.
+		// The field is drawn and the panel is not reached at all.
+		//
+		// Closing it and then laying the panel out anyway was not enough: the
+		// panel's own layout reads the press that toggles it, on a context
+		// nothing had disabled, so a press opened the month for that frame and
+		// only the frame after took it down. A month of days that do nothing,
+		// shown once, under a control the person can see is unavailable.
 		state.popover.Close()
+		state.seen = state.month.Selected()
+		return p.field(c, label, ink)
 	}
 
 	dims := PopoverProps{Width: 320, Above: p.Above}.Layout(c, &state.popover,

@@ -7,7 +7,7 @@
 // layout function and reads the dimensions it returns -- that path never
 // reaches a rasteriser.
 //
-// What it produces is an image, which is the only artifact that can be looked
+// What it produces is an image, which is the only artefact that can be looked
 // at by a person and compared by a machine.
 package frame
 

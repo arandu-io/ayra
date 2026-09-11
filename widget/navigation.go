@@ -7,12 +7,12 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // Crumbs is the state half of a breadcrumb: the press on each step.
 type Crumbs struct {
-	clicks []giowidget.Clickable
+	clicks []engine.Clickable
 }
 
 // Clicked reports which step was pressed, and -1 when none was.
@@ -40,7 +40,7 @@ type BreadcrumbProps struct {
 // Layout draws the trail and returns the room it took.
 func (p BreadcrumbProps) Layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 	for len(state.clicks) < len(p.Steps) {
-		state.clicks = append(state.clicks, giowidget.Clickable{})
+		state.clicks = append(state.clicks, engine.Clickable{})
 	}
 
 	children := make([]layout.FlexChild, 0, len(p.Steps)*2)

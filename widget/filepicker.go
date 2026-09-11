@@ -35,7 +35,7 @@ type FileEntry struct {
 	// Dir marks an entry that leads somewhere rather than one that can be
 	// chosen.
 	Dir bool
-	// Size is the entry in bytes. Negative says the size is not known, which
+	// Size is how big the entry is, in bytes. Negative says the size is not known, which
 	// draws nothing -- "0 B" is a claim about an empty file, and a listing that
 	// made it about every file it had not measured would be wrong on most rows.
 	Size int64
@@ -202,8 +202,8 @@ type FilePickerProps struct {
 	// Root is what the top is called -- "Files", a volume, a bucket. Empty
 	// says "Files".
 	Root string
-	// Disabled draws the picker as unavailable and stops every part of it
-	// answering.
+	// Disabled draws the rows and the filter as unavailable, and nothing is
+	// reported while it is set.
 	Disabled bool
 }
 

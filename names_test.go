@@ -21,7 +21,8 @@ import (
 // of shaders had kept its original leaf name, so every artifact built from the
 // runtime exported a symbol naming the project it was forked from.
 
-// foreign are the names that must not appear in a path or a package clause.
+// foreign are the names that must not appear in a path, a package clause, or an
+// import alias.
 var foreign = []string{"gio", "gioui"}
 
 // TestNoPackagePathCarriesAForeignName walks the module and reads the name of
@@ -100,6 +101,54 @@ func TestNoPackageClauseCarriesAForeignName(t *testing.T) {
 	// A walk that read nothing would pass in silence.
 	if read < 100 {
 		t.Errorf("only %d source files were read, and this module has many more", read)
+	}
+}
+
+// TestNoImportAliasCarriesAForeignName is the third place a name from
+// elsewhere can sit in the source.
+//
+// An alias is a local identifier and never reaches a compiled binary, so it is
+// weaker than the two checks above. It is here because it is read: every file
+// of this package opened by naming another project, and three separate readings
+// of these sources stopped at it to ask whether it was allowed. A name nobody
+// can leave alone is one to remove once.
+func TestNoImportAliasCarriesAForeignName(t *testing.T) {
+	alias := regexp.MustCompile(`(?m)^\t([a-z][A-Za-z0-9_]*) "`)
+	root := moduleRoot(t)
+
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if skipped(entry.Name()) || entry.Name() == "engine" {
+				// The engine is a maintained fork, and its own sources are
+				// where the record of that lives.
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+
+		source, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, found := range alias.FindAllSubmatch(source, -1) {
+			named := strings.ToLower(string(found[1]))
+			for _, name := range foreign {
+				if strings.Contains(named, name) {
+					relative, _ := filepath.Rel(root, path)
+					t.Errorf("%s imports under the alias %s, which names another project", relative, found[1])
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

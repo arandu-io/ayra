@@ -3,7 +3,7 @@
 // A screen is a function: it takes what it needs to draw and answers how much
 // room it took. Nothing here renders markup, loads a stylesheet or runs a
 // script, and nothing here decides anything -- the server a screen draws for
-// is the one that authorizes, validates and answers, and this side asks it the
+// is the one that authorises, validates and answers, and this side asks it the
 // same way a browser would.
 package ayra
 

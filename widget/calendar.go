@@ -54,8 +54,15 @@ func (c *Calendar) Showing(today time.Time) time.Time {
 // difference between a control a test can pin and one that draws a different
 // picture tomorrow. It is also correct: what "today" is depends on where
 // somebody is, and a control has no business deciding that.
+//
+// The consequence is that a caller must supply one of Today, a day chosen on
+// the state, or a month shown on it. With none of the three there is no month
+// to draw and nothing is drawn, rather than a month invented here: an invented
+// one is a working-looking grid of the wrong year.
 type CalendarProps struct {
-	// Today is the day to mark as the current one. The zero time marks none.
+	// Today is the day to mark as the current one, and the month to open on
+	// when nothing has been chosen. The zero time marks none, and with nothing
+	// chosen or shown either the control draws nothing at all.
 	Today time.Time
 	// Min and Max bound what can be chosen. Zero times leave that end open.
 	Min, Max time.Time
@@ -67,7 +74,12 @@ type CalendarProps struct {
 func (p CalendarProps) Layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 	month := state.Showing(p.Today)
 	if month.IsZero() {
-		month = time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+		// Nothing chosen, nothing shown, and no day passed in. Drawing a fixed
+		// month here was what this did, and it drew the same January every time
+		// -- a grid that looks like a working calendar and is one year in the
+		// past by the time anybody sees it. A blank space says what is true:
+		// this control was given no day to work from.
+		return ayra.Dimensions{}
 	}
 
 	if state.previous.Clicked(c) {

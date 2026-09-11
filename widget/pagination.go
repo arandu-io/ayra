@@ -33,8 +33,9 @@ func (p *Pages) Show(page int) { p.current = page }
 type PaginationProps struct {
 	// Total is how many pages there are.
 	Total int
-	// Window is how many numbers to show around the current one. Zero shows
-	// two either side.
+	// Window is how many numbers to show either side of the current one, at
+	// most: a row that would not fit narrows the window rather than running off
+	// the screen. Zero asks for two.
 	Window int
 }
 

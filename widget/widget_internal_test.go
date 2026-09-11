@@ -54,7 +54,7 @@ func TestEveryControlDrawsThroughTheOnePlaceThatDrawsText(t *testing.T) {
 			continue // where drawText itself lives
 		}
 		body := read(t, path)
-		if strings.Contains(body, "giowidget.Label{") {
+		if strings.Contains(body, "engine.Label{") {
 			t.Errorf("%s draws text directly instead of through drawText", filepath.Base(path))
 		}
 	}

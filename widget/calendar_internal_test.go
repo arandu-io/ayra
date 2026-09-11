@@ -214,3 +214,36 @@ func TestAMonthStartingMidWeekFillsTheWholeFirstRow(t *testing.T) {
 		}
 	}
 }
+
+// TestACalendarWithNoDayDrawsNothing fixes a grid of the wrong year.
+//
+// The control reads no clock, so with no day chosen, no month shown and no
+// today passed in there is nothing to draw a month from. It used to fall back
+// to a fixed date written into the source, which produces a calendar that looks
+// like it is working and is a year out by the time anybody opens it.
+func TestACalendarWithNoDayDrawsNothing(t *testing.T) {
+	var state Calendar
+
+	c, _ := field(t, theme.Light, 400)
+	dims := CalendarProps{}.Layout(c, &state)
+
+	if dims.Size.X != 0 || dims.Size.Y != 0 {
+		t.Errorf("a calendar with no day took %v, so it drew a month it invented", dims.Size)
+	}
+
+	// And any one of the three is enough.
+	day := time.Date(2026, time.September, 10, 0, 0, 0, 0, time.UTC)
+	for name, give := range map[string]func(*Calendar) CalendarProps{
+		"today passed in": func(*Calendar) CalendarProps { return CalendarProps{Today: day} },
+		"a day chosen":    func(s *Calendar) CalendarProps { s.Select(day); return CalendarProps{} },
+		"a month shown":   func(s *Calendar) CalendarProps { s.Show(day); return CalendarProps{} },
+	} {
+		var state Calendar
+		props := give(&state)
+
+		c, _ := field(t, theme.Light, 400)
+		if drawn := props.Layout(c, &state); drawn.Size.Y <= 0 {
+			t.Errorf("with %s the calendar drew nothing", name)
+		}
+	}
+}

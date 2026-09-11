@@ -10,7 +10,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // Disclosure is the state half of something that opens and closes.
@@ -19,17 +19,27 @@ import (
 // which is why porting it is writing it. The machine is four lines, and they
 // are four lines every product would otherwise write once per screen.
 type Disclosure struct {
-	click giowidget.Clickable
+	click engine.Clickable
 	open  bool
 }
 
-// Open shows the content, Close hides it, and Showing reports which.
-func (d *Disclosure) Open()         { d.open = true }
-func (d *Disclosure) Close()        { d.open = false }
-func (d *Disclosure) Showing() bool { return d.open }
-func (d *Disclosure) Toggle()       { d.open = !d.open }
+// Open shows the content.
+func (d *Disclosure) Open() { d.open = true }
 
-// Changed reports that somebody opened or closed it, and consumes that.
+// Close hides it.
+func (d *Disclosure) Close() { d.open = false }
+
+// Showing reports whether the content is on screen.
+func (d *Disclosure) Showing() bool { return d.open }
+
+// Toggle shows the content when it is hidden and hides it when it is shown.
+func (d *Disclosure) Toggle() { d.open = !d.open }
+
+// Changed applies the press on the summary -- opening what was closed, closing
+// what was open -- and reports that it did, once.
+//
+// It is not a passive reading. Layout does not call it, so a section nobody asks
+// about never opens.
 func (d *Disclosure) Changed(c ayra.Context) bool {
 	if !d.click.Clicked(c.Context) {
 		return false
@@ -123,7 +133,7 @@ type AccordionProps struct {
 // Accordion is the state half: which section is open, and the press on each.
 type Accordion struct {
 	open   int
-	clicks []giowidget.Clickable
+	clicks []engine.Clickable
 }
 
 // Open shows one section and closes the rest. A negative index closes them all.
@@ -135,7 +145,7 @@ func (a *Accordion) Showing() int { return a.open }
 // Layout draws the sections, asking content for the body of the open one.
 func (p AccordionProps) Layout(c ayra.Context, state *Accordion, content func(int) ayra.Widget) ayra.Dimensions {
 	for len(state.clicks) < len(p.Sections) {
-		state.clicks = append(state.clicks, giowidget.Clickable{})
+		state.clicks = append(state.clicks, engine.Clickable{})
 	}
 	if len(state.clicks) > 0 && state.open == 0 && len(p.Sections) == 0 {
 		state.open = -1
