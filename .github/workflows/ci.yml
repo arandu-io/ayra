@@ -69,6 +69,40 @@ jobs:
       - name: test
         run: go test -race ./...
 
+      # Everything above compiles one operating system for one architecture.
+      # A target that is offered and never built is found broken by whoever
+      # builds it next, and that person is cutting a release or has already
+      # downloaded one.
+      #
+      # Windows is what this runner can add with nothing installed. That
+      # backend reaches the window, the input and the GPU through the
+      # operating system's own calls rather than through a C library, so no
+      # file in the build has a compiler to look for and both architectures
+      # come out of the toolchain that is already here. The desktop and phone
+      # platforms left out each want a toolchain on this machine first --
+      # Linux on ARM a cross-compiler and the same development packages built
+      # for ARM, macOS and iOS their platform SDK, Android its native
+      # development kit -- and a runner that installs those to produce a
+      # binary nothing here can start costs more than it catches.
+      #
+      # What it does not prove is that any of this runs. The window is opened
+      # by a call this never makes, on a device it never creates, with shaders
+      # it never hands to a driver. A binary that links says the code is valid
+      # for the platform and says nothing at all about what happens when
+      # somebody opens it.
+      - name: Windows still compiles
+        env:
+          # On, because that is how a platform that draws to a window is
+          # built. Nothing under Windows reaches C today, so nothing goes
+          # looking for a compiler; the day something does, this stops instead
+          # of quietly compiling a different program from the one that ships.
+          CGO_ENABLED: "1"
+        run: |
+          for target in windows/amd64 windows/arm64; do
+            echo "building for $target"
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build ./...
+          done
+
       # The pictures, which are the only gate that says the controls draw.
       # Everything else here passes on a screen that renders nothing: a build
       # does not run the shaper, and a layout test reads dimensions without

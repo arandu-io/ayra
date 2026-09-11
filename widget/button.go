@@ -156,6 +156,13 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 	rect := image.Rectangle{Max: dims.Size}
 	shape := clip.UniformRRect(rect, radius)
 
+	// Announced against the button's own shape rather than inside the press
+	// target. A disabled control registers no target -- there is nothing to
+	// press -- so an announcement made in there disappears exactly when it
+	// matters most: what reached the tree was the label with no class and
+	// nothing saying it was unavailable, which reads as ordinary text.
+	close := announce(c, dims.Size, Announcement{Label: p.Label, Class: Pressable, Disabled: p.Disabled})
+
 	if fill.A > 0 {
 		paint.FillShape(c.Ops, fill, shape.Op(c.Ops))
 	}
@@ -165,6 +172,7 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 	}
 
 	drawn.Add(c.Ops)
+	close()
 	return dims
 }
 
