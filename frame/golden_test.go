@@ -91,6 +91,61 @@ func screens() []screen {
 		{name: "surfaces", width: 360, height: 620, draw: surfaces},
 		{name: "choices", width: 360, height: 420, draw: choices},
 		{name: "indicators", width: 360, height: 500, draw: indicators},
+		{name: "lists", width: 360, height: 560, draw: lists},
+	}
+}
+
+// lists draws the pieces a page of records is made of: a trail back, rows, a
+// meter, figures, a joined set of buttons, and the message a page with nothing
+// on it shows.
+func lists() ayra.Widget {
+	var crumbs widget.Crumbs
+	var group widget.Group
+	rows := make([]widget.Button, 3)
+	var link widget.Button
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.BreadcrumbProps{Steps: []string{"Projects", "Arandu", "Members"}}.Layout(c, &crumbs)
+			},
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ButtonGroupProps{Labels: []string{"All", "Admins", "Invited"}, Selected: 1}.Layout(c, &group)
+			},
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ItemProps{Title: "Paulo Lima", Body: "Owner", Pressable: true, Selected: true}.Layout(c, &rows[0], func(c ayra.Context) ayra.Dimensions {
+					return widget.StatusProps{Label: "Active", Tone: widget.Accent}.Layout(c)
+				})
+			},
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ItemProps{Title: "Everton Alves", Body: "Invited three days ago", Pressable: true}.Layout(c, &rows[1], func(c ayra.Context) ayra.Dimensions {
+					return widget.BadgeProps{Label: "Pending", Variant: widget.Outline}.Layout(c)
+				})
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.LabelProps{Text: "Seats used"}.Layout(c)
+			},
+			spacer(6),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.MeterProps{Value: 8, High: 10}.Layout(c)
+			},
+			spacer(14),
+			row(
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.StatProps{Value: "8", Label: "Members", Note: "of 10 seats"}.Layout(c)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.StatProps{Value: "1.2k", Label: "Requests today"}.Layout(c)
+				},
+			),
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.LinkProps{Text: "Read the billing guide"}.Layout(c, &link)
+			},
+		)
 	}
 }
 
