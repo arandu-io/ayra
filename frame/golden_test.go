@@ -93,6 +93,65 @@ func screens() []screen {
 		{name: "indicators", width: 360, height: 500, draw: indicators},
 		{name: "lists", width: 360, height: 560, draw: lists},
 		{name: "forms", width: 360, height: 620, draw: forms},
+		{name: "data", width: 360, height: 480, draw: data},
+	}
+}
+
+// data draws a toolbar over a table, a slider and a rating -- the shapes a
+// screen of records is built from.
+func data() ayra.Widget {
+	var search widget.Input
+	var add widget.Button
+	var level widget.Slider
+	level.SetValue(0.35)
+	var stars widget.Rating
+	stars.SetValue(4)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 330,
+			line("Data", widget.Heading, true),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.ToolbarProps{Divided: true}.Layout(c,
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "Search"}.Layout(c, &search)
+					},
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Label: "Add", Size: widget.Small}.Layout(c, &add)
+					},
+				)
+			},
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.TableProps{
+					Columns: []widget.Column{
+						{Title: "Name", Flex: 2},
+						{Title: "Seats", Align: widget.End, Numeric: true},
+						{Title: "Spend", Align: widget.End, Numeric: true},
+					},
+					Rows: [][]string{
+						{"Arandu", "8", "1,240"},
+						{"Peráta", "3", "890"},
+						{"Joaju", "12", "12,004"},
+					},
+					Dense: true,
+				}.Layout(c)
+			},
+			spacer(16),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.LabelProps{Text: "Threshold"}.Layout(c)
+			},
+			spacer(4),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SliderProps{}.Layout(c, &level)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.LabelProps{Text: "Rating"}.Layout(c)
+			},
+			spacer(4),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.RatingProps{}.Layout(c, &stars)
+			},
+		)
 	}
 }
 
