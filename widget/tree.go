@@ -33,18 +33,18 @@ type TreeNode struct {
 // names a different node the moment a branch above it closes, so a mark kept
 // that way jumps to a neighbour when something unrelated is collapsed.
 type Tree struct {
-	// Open is the set of paths whose children are drawn, keyed by the path
+	// open is the set of paths whose children are drawn, keyed by the path
 	// written as text. A map rather than a field on the node, because the node
 	// is the caller's and is rebuilt every frame.
 	open map[string]bool
-	// Marked is the path of the chosen row, and nil when none is.
+	// marked is the path of the chosen row, and nil when none is.
 	marked []int
-	// Rows are the two presses of each row, keyed the same way. Keyed rather
+	// rows are the two presses of each row, keyed the same way. Keyed rather
 	// than indexed for the same reason the open set is: the row at position
 	// four is a different node after a branch above it closes, and a press
 	// target kept by position then fires for whatever moved into it.
 	rows map[string]*treeRow
-	// Chosen is the mark waiting to be read.
+	// chosen is the mark waiting to be read.
 	chosen   []int
 	reported bool
 }
@@ -266,6 +266,15 @@ func (p TreeProps) turn(c ayra.Context, state *Tree, row *treeRow, node TreeNode
 	}
 
 	open := state.Expanded(path)
+	if p.Disabled {
+		// The marker is drawn and takes no press. Registering the target and
+		// then not reading it is worse than either: the press is queued rather
+		// than refused, and the branch opens by itself the moment the tree is
+		// enabled again -- a press somebody made on a control they could see
+		// was unavailable, acted on later, with nothing on screen to connect
+		// the two.
+		return marker(c, open)
+	}
 	return row.turn.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		return marker(c.With(gtx), open)
 	})

@@ -85,8 +85,8 @@ func (p TooltipProps) draw(c ayra.Context) image.Point {
 	}).Size
 }
 
-// Toasts is the state half of a stack of messages: what is showing, and when
-// each one arrived.
+// Toasts is the state half of a stack of messages: which ones are showing, and
+// the press that dismisses each.
 //
 // The queue is held here rather than by the screen because the rule about how
 // many are visible at once belongs to the control: a screen that pushed six

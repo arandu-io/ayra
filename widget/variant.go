@@ -74,7 +74,8 @@ const (
 	Icon
 )
 
-// String names the size.
+// String names the size, and answers "default" for Medium, which is what the
+// ordinary size is called wherever a size is written out.
 func (s Size) String() string {
 	switch s {
 	case ExtraSmall:

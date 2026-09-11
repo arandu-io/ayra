@@ -12,7 +12,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 
 	"github.com/arandu-io/ayra"
 )
@@ -23,27 +23,27 @@ import (
 // The caller holds it, and holds one per field. Two fields sharing a value is
 // one field drawn twice, and typing in either changes both.
 type Input struct {
-	editor giowidget.Editor
+	editor engine.Editor
 }
 
 // Text is what the field holds.
 func (i *Input) Text() string { return i.editor.Text() }
 
-// SetText replaces what the field holds, and moves the caret to the end.
+// SetText replaces what the field holds, and puts the caret at the start of it.
 func (i *Input) SetText(s string) { i.editor.SetText(s) }
 
 // Submitted reports that the person pressed return on a field that accepts it,
 // once, and consumes the event.
 //
-// Only a field whose Kind says so raises this. On a multi-line field return
-// inserts a line, which is what return means there.
+// Only a single-line field raises this. On a multi-line one return inserts a
+// line, which is what return means there, and Kind decides nothing about it.
 func (i *Input) Submitted(c ayra.Context) bool {
 	for {
 		event, ok := i.editor.Update(c.Context)
 		if !ok {
 			return false
 		}
-		if _, submitted := event.(giowidget.SubmitEvent); submitted {
+		if _, submitted := event.(engine.SubmitEvent); submitted {
 			return true
 		}
 	}
@@ -65,9 +65,12 @@ const (
 	Email
 	// Password hides what is typed and asks the platform not to correct it.
 	Password
-	// Number is digits, a decimal separator and nothing else.
+	// Number asks for the keyboard digits and a decimal separator are on. What
+	// may be typed is not narrowed, so the value is still checked where it is
+	// read: a hardware keyboard can send any character to any field.
 	Number
-	// Telephone is digits and the two symbols a dial pad has.
+	// Telephone asks for the keyboard a dial pad has. What may be typed is not
+	// narrowed.
 	Telephone
 	// URL raises a keyboard with the characters an address needs.
 	URL

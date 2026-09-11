@@ -14,12 +14,12 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // Slider is the state half of a control that picks a value along a line.
 type Slider struct {
-	value giowidget.Float
+	value engine.Float
 }
 
 // Value is where it sits, between 0 and 1.

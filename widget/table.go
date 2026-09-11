@@ -65,7 +65,7 @@ type TableProps struct {
 	// the alternative is a page that will not render because one record is
 	// missing a field.
 	Rows [][]string
-	// Dense halves the room around each cell, for a table read rather than
+	// Dense halves the room above and below each cell, for a table read rather than
 	// operated.
 	Dense bool
 }

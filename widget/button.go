@@ -11,7 +11,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/theme"
@@ -23,7 +23,7 @@ import (
 // remember anything by itself. Two buttons are two values; one value drawn
 // twice is one button in two places, and it answers Pressed for both.
 type Button struct {
-	click giowidget.Clickable
+	click engine.Clickable
 }
 
 // Clicked reports a completed press, once, and consumes it.

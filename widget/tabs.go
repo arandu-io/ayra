@@ -9,7 +9,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // Tabs is the state half: which one is selected, and the press on each.
@@ -18,7 +18,7 @@ import (
 // every frame is a Clickable that never sees the release of its own press.
 type Tabs struct {
 	selected int
-	clicks   []giowidget.Clickable
+	clicks   []engine.Clickable
 }
 
 // Selected is the index showing.
@@ -50,7 +50,7 @@ type TabsProps struct {
 // Layout draws the row and returns the room it took.
 func (p TabsProps) Layout(c ayra.Context, state *Tabs) ayra.Dimensions {
 	for len(state.clicks) < len(p.Labels) {
-		state.clicks = append(state.clicks, giowidget.Clickable{})
+		state.clicks = append(state.clicks, engine.Clickable{})
 	}
 	if state.selected >= len(p.Labels) {
 		state.selected = 0

@@ -9,7 +9,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 	"github.com/arandu-io/ayra/theme"
 )
 
@@ -180,5 +180,5 @@ func drawText(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, max
 	paint.ColorOp{Color: ink}.Add(c.Ops)
 	stop := recording.Stop()
 
-	return giowidget.Label{MaxLines: maxLines, Alignment: align}.Layout(c.Context, c.Shaper, f, size, content, stop)
+	return engine.Label{MaxLines: maxLines, Alignment: align}.Layout(c.Context, c.Shaper, f, size, content, stop)
 }

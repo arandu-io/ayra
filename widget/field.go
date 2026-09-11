@@ -7,7 +7,7 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // FieldProps is a labelled control with its help and its error.
@@ -28,7 +28,8 @@ type FieldProps struct {
 	Error string
 	// Required marks it as one that cannot be left blank.
 	Required bool
-	// Disabled draws the whole field as unavailable.
+	// Disabled draws the label as unavailable. The control below it is the
+	// caller's, so the same flag has to reach that too.
 	Disabled bool
 }
 
@@ -73,9 +74,13 @@ func (p FieldProps) Invalid() bool { return p.Error != "" }
 // a failed sign-in on a phone, where the keyboard hides half the letters and
 // autocorrect touches the rest.
 type PasswordProps struct {
+	// Placeholder is shown while the field is empty.
 	Placeholder string
-	Disabled    bool
-	Invalid     bool
+	// Disabled draws the field as unavailable and refuses input.
+	Disabled bool
+	// Invalid draws the field as rejected. What was wrong is said beside it by
+	// whoever knows; this carries the look and nothing else.
+	Invalid bool
 }
 
 // Secret is the state half of a password field: what is typed, and whether it
@@ -86,7 +91,7 @@ type PasswordProps struct {
 // for the two of them is a compile error today and a confusion afterwards.
 type Secret struct {
 	Input
-	reveal giowidget.Clickable
+	reveal engine.Clickable
 	shown  bool
 }
 

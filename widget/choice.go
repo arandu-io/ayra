@@ -14,21 +14,29 @@ import (
 
 // Select is the state half of a control that picks one of a list.
 type Select struct {
-	open     Disclosure
-	options  []Button
+	open    Disclosure
+	options []Button
+	// selected is the index picked, and chosen says whether one was.
+	//
+	// Two fields rather than a sentinel in one, because zero is an option: the
+	// first. A control that stored "nothing picked" as zero answered with the
+	// first option from the frame it was drawn, so the placeholder was never
+	// reached and a form arrived already filled in with a value nobody chose --
+	// which on a submit is the wrong answer sent without anybody being asked.
 	selected int
+	chosen   bool
 }
 
-// Selected is the index chosen, or -1 when nothing has been.
+// Selected is the index chosen, and -1 when nothing has been.
 func (s *Select) Selected() int {
-	if s.selected == 0 && len(s.options) == 0 {
+	if !s.chosen {
 		return -1
 	}
 	return s.selected
 }
 
 // Choose picks one, for the state a screen arrives with.
-func (s *Select) Choose(index int) { s.selected = index }
+func (s *Select) Choose(index int) { s.selected, s.chosen = index, true }
 
 // Showing reports whether the list is open.
 func (s *Select) Showing() bool { return s.open.Showing() }
@@ -60,7 +68,7 @@ func (p SelectProps) Layout(c ayra.Context, state *Select) ayra.Dimensions {
 	}
 	for index := range p.Options {
 		if state.options[index].Clicked(c) {
-			state.selected = index
+			state.selected, state.chosen = index, true
 			state.open.Close()
 		}
 	}
@@ -74,9 +82,10 @@ func (p SelectProps) Layout(c ayra.Context, state *Select) ayra.Dimensions {
 
 // closed draws the control itself: the chosen value and the marker.
 func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
-	label, ink := p.Placeholder, c.Theme.Colours.MutedForeground
-	if state.selected >= 0 && state.selected < len(p.Options) {
-		label, ink = p.Options[state.selected], c.Theme.Colours.Foreground
+	label, picked := p.label(state)
+	ink := c.Theme.Colours.MutedForeground
+	if picked {
+		ink = c.Theme.Colours.Foreground
 	}
 	if p.Disabled {
 		ink = fade(ink)
@@ -105,6 +114,21 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 	})
 }
 
+// label answers the text on the closed control, and whether it is a value
+// somebody chose rather than the placeholder.
+//
+// It is a function of its own because it is the whole of one decision, and the
+// decision was wrong: it asked only whether the index was in range, and zero is
+// always in range -- so the placeholder was never reached and a form arrived
+// filled in with the first option. A decision written inline is a decision no
+// test can ask about without drawing the control and reading pixels.
+func (p SelectProps) label(state *Select) (string, bool) {
+	if state.chosen && state.selected >= 0 && state.selected < len(p.Options) {
+		return p.Options[state.selected], true
+	}
+	return p.Placeholder, false
+}
+
 // list draws the options under the control.
 func (p SelectProps) list(c ayra.Context, state *Select, closed ayra.Dimensions) {
 	children := make([]layout.FlexChild, 0, len(p.Options))
@@ -112,7 +136,7 @@ func (p SelectProps) list(c ayra.Context, state *Select, closed ayra.Dimensions)
 		index, option := index, option
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
-			return ItemProps{Title: option, Pressable: true, Selected: index == state.selected}.
+			return ItemProps{Title: option, Pressable: true, Selected: state.chosen && index == state.selected}.
 				Layout(inner, &state.options[index], nil)
 		}))
 	}

@@ -131,9 +131,9 @@ type Option func(*Client)
 // WithHTTPClient hands the client the transport to use.
 //
 // It is here for a test and for a device that needs its own transport -- a
-// pinned certificate, a proxy the platform requires. A client given one that
-// carries no cookie jar keeps working and loses its session between pages,
-// which is why New fills one in when the transport arrived without.
+// pinned certificate, a proxy the platform requires. A transport that arrives
+// with no cookie jar is given one by New, because a client without one loses
+// its session between pages.
 func WithHTTPClient(h *http.Client) Option {
 	return func(c *Client) { c.http = h }
 }
@@ -215,11 +215,16 @@ func decode(method, path string, res *http.Response) (Page, error) {
 // a screen that no longer exists. A string would make each of those a match on
 // prose.
 type StatusError struct {
+	// Method is the verb the refused request carried.
 	Method string
-	Path   string
+	// Path is the address that was asked for.
+	Path string
+	// Status is the code the server answered with, and it is what a caller
+	// acts on.
 	Status int
 }
 
+// Error names the request and what the server answered.
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("ayra/client: %s %s: %s", e.Method, e.Path, http.StatusText(e.Status))
 }

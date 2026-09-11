@@ -71,7 +71,9 @@ type DialogProps struct {
 	// application should be asked for rather than inherited.
 	Modal bool
 
-	// Dismissible lets escape and a press outside close it. A dialog asking
+	// Dismissible lets escape close it, and a press outside close it when Modal
+	// is set as well: the press outside is read from the barrier the scrim puts
+	// up, and without one there is nothing to read. A dialog asking
 	// something that cannot be left unanswered sets this false and gives the
 	// person a button instead.
 	Dismissible bool

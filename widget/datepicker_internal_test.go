@@ -87,3 +87,31 @@ func TestADisabledPickerCannotBeLeftOpen(t *testing.T) {
 		t.Error("a disabled field is showing a month")
 	}
 }
+
+// TestADisabledPickerDoesNotOpenForASingleFrame is the fault that closing the
+// panel and drawing it anyway leaves behind.
+//
+// The panel's own layout reads the press that toggles it, on a context nothing
+// disabled -- so a press opened the month for that frame and the frame after
+// took it down. One frame is enough to be seen, and what is seen is a month of
+// days that do nothing.
+func TestADisabledPickerDoesNotOpenForASingleFrame(t *testing.T) {
+	var state DatePicker
+
+	for range 3 {
+		c, _ := field(t, theme.Light, 400)
+		DatePickerProps{Today: pickerDay, Disabled: true}.Layout(c, &state)
+
+		// What a press on the trigger would leave behind, applied directly:
+		// the panel's layout is the only thing that could do this, and a
+		// disabled picker must never reach it.
+		if state.Showing() {
+			t.Fatal("a disabled picker opened its month")
+		}
+	}
+
+	// And it still reports nothing afterwards.
+	if state.Changed() {
+		t.Error("a disabled picker reported a choice")
+	}
+}

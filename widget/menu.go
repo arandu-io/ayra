@@ -15,7 +15,18 @@ import (
 type Menu struct {
 	open    Disclosure
 	entries []Button
-	chosen  int
+	// chosen is the entry a press picked, and picked says whether there is one.
+	//
+	// Two fields rather than a sentinel in one, because zero is an entry: the
+	// first. A menu that stored "nothing chosen" as zero reported its first
+	// action as taken on the frame it was first drawn, and whatever that action
+	// does happened before anybody pressed anything. It was written with a
+	// guard that was meant to seed the sentinel and could not -- it asked
+	// whether the entry list was empty, and by then the list had just been
+	// filled in -- and with the one caller that noticed building its menus by
+	// hand with the sentinel already in them.
+	chosen int
+	picked bool
 }
 
 // Showing reports whether the list is open.
@@ -24,15 +35,18 @@ func (m *Menu) Showing() bool { return m.open.Showing() }
 // Close hides it, for a screen that acted on a choice.
 func (m *Menu) Close() { m.open.Close() }
 
-// Chosen reports which entry was picked since the last frame, and -1 when none
-// was.
+// Chosen reports which entry was picked since the last frame, once, and -1 when
+// none was.
 //
-// Reading it closes the menu, because every entry is an action and a menu that
-// stayed open after one covers what the action just changed.
+// The press that set it has already closed the list, because every entry is an
+// action and a menu that stayed open over what the action just changed is a
+// menu somebody has to dismiss before they can see the result.
 func (m *Menu) Chosen() int {
-	chosen := m.chosen
-	m.chosen = -1
-	return chosen
+	if !m.picked {
+		return -1
+	}
+	m.picked = false
+	return m.chosen
 }
 
 // MenuProps is a list of actions under a control.
@@ -41,7 +55,8 @@ type MenuProps struct {
 	// long enough to need grouping is one where the groups are the only way
 	// anybody finds anything.
 	Entries []string
-	// Width is how wide the list is. Zero fits the longest entry.
+	// Width is how wide the list is. Zero takes the room it is offered, and
+	// never less than the floor a one-word action is legible at.
 	Width unit.Dp
 	// Above opens it upwards, for a control near the bottom of a window.
 	Above bool
@@ -52,17 +67,13 @@ func (p MenuProps) Layout(c ayra.Context, state *Menu, trigger ayra.Widget) ayra
 	for len(state.entries) < len(p.Entries) {
 		state.entries = append(state.entries, Button{})
 	}
-	if state.chosen == 0 && len(state.entries) == 0 {
-		state.chosen = -1
-	}
-
 	state.open.Changed(c)
 	for index := range p.Entries {
 		if p.Entries[index] == "" {
 			continue
 		}
 		if state.entries[index].Clicked(c) {
-			state.chosen = index
+			state.chosen, state.picked = index, true
 			state.open.Close()
 		}
 	}
@@ -204,7 +215,7 @@ func (m *Menubar) Chosen() (menu, entry int) {
 // Layout draws the row and returns the room it took.
 func (p MenubarProps) Layout(c ayra.Context, state *Menubar) ayra.Dimensions {
 	for len(state.menus) < len(p.Titles) {
-		state.menus = append(state.menus, Menu{chosen: -1})
+		state.menus = append(state.menus, Menu{})
 	}
 
 	// One open at a time. Two menus open at once overlap, and the one behind

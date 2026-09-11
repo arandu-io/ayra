@@ -97,7 +97,7 @@ func New(s Scheme) Theme {
 //
 // It exists so that a control drawing on a surface it was handed -- a card
 // inside a dialog inside a sidebar -- does not have to know which of the
-// eleven surfaces it landed on to pick its text colour. The pairs are the ones
+// ten paired surfaces it landed on to pick its text colour. The pairs are the ones
 // the stylesheet declares: every surface has a foreground beside it, and this
 // is that mapping in one direction.
 //

@@ -10,17 +10,20 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
-	giowidget "github.com/arandu-io/ayra/engine/widget"
+	engine "github.com/arandu-io/ayra/engine/widget"
 )
 
 // Toggle is the state half of a control that is either on or off: a checkbox,
 // a switch, or one option of a radio group.
 //
 // One value for all three, because the state is the same state. What differs is
-// the drawing and the rule about how it changes -- a checkbox turns itself off
-// again, a radio does not -- and that lives in the props rather than here.
+// the drawing.
+//
+// Changed flips the value whichever control it is. A radio group turns its other
+// options off in the caller's own loop, because only the caller knows which
+// options are in the group -- nothing here does.
 type Toggle struct {
-	click giowidget.Clickable
+	click engine.Clickable
 	on    bool
 }
 
@@ -70,7 +73,9 @@ func (p CheckboxProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 // here would own the options, and a screen whose options come from a server
 // would then have to build one every frame.
 type RadioProps struct {
-	Label    string
+	// Label is the text beside it.
+	Label string
+	// Disabled draws it as unavailable and stops it answering.
 	Disabled bool
 }
 
@@ -85,7 +90,9 @@ func (p RadioProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 // checkbox is a value in a form that is submitted later, and the difference is
 // what somebody expects to happen when they let go.
 type SwitchProps struct {
-	Label    string
+	// Label is the text beside it.
+	Label string
+	// Disabled draws it as unavailable and stops it answering.
 	Disabled bool
 }
 
