@@ -889,7 +889,12 @@ func (w *window) Configure(options []Option) {
 			height = r.Bottom - r.Top
 		} else {
 			// Enable drop shadows when we draw decorations.
-			windows.DwmExtendFrameIntoClientArea(w.hwnd, windows.Margins{-1, -1, -1, -1})
+			windows.DwmExtendFrameIntoClientArea(w.hwnd, windows.Margins{
+				CxLeftWidth:    -1,
+				CxRightWidth:   -1,
+				CyTopHeight:    -1,
+				CyBottomHeight: -1,
+			})
 		}
 
 	case Fullscreen:
