@@ -1,6 +1,17 @@
+<p align="center">
+  <img src=".github/logo.png" alt="Arandu" width="140" height="140">
+</p>
+
 <h1 align="center">arandu-io/ayra</h1>
 
 <p align="center">Native Applications for Arandu</p>
+
+<p align="center">
+<a href="https://github.com/arandu-io/ayra/actions/workflows/ci.yml"><img src="https://github.com/arandu-io/ayra/actions/workflows/ci.yml/badge.svg" alt="Build Status"></a>
+<a href="https://pkg.go.dev/github.com/arandu-io/ayra"><img src="https://pkg.go.dev/badge/github.com/arandu-io/ayra.svg" alt="Go Reference"></a>
+<a href="https://github.com/arandu-io/ayra/tags"><img src="https://img.shields.io/github/v/tag/arandu-io/ayra?label=version" alt="Latest Version"></a>
+<a href="LICENSE.md"><img src="https://img.shields.io/github/license/arandu-io/ayra" alt="License"></a>
+</p>
 
 ---
 
@@ -105,7 +116,40 @@ Barbosa's *Curso de Tupi Antigo* (1956, §240).
 Sources: Navarro, *Dicionário de Tupi Antigo* (2013); Carvalho and Birchall,
 LIAMES v. 22 (2022); Dooley, *Léxico Guarani, dialeto Mbyá* (1998).
 
+## Learning Arandu
+
+The API reference is generated from the doc comments and lives on
+[pkg.go.dev](https://pkg.go.dev/github.com/arandu-io/ayra). Every exported
+symbol carries one, and that is deliberate: it is the documentation that cannot
+drift from the code, because it sits in the same file.
+
+The controls are the part worth reading first. Each one is a `Props` value you
+fill in and a state value you hold, and the doc comment on each says what the
+control guarantees and, where it matters, the fault the shape prevents.
+
+`aru native:build -list` prints every platform this builds for and what each one
+needs before it will. `aru native:dev` is the loop to develop in: it watches the
+native sources and rebuilds.
+
+A guide and a website do not exist yet, and that is a decision rather than a
+gap: a guide written against an API that still moves is work done twice, and the
+second time is worse — there is wrong documentation published.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Before opening a pull request, the
+commands at the top of that file have to pass, and CI runs them plus the ones a
+laptop cannot: a known vulnerability in either module, a dependency that entered
+the graph without a decision, and the pictures — every screen is drawn headless
+in both palettes at two densities and compared with the approved one, because
+everything below a layout call compiles whether or not it works.
+
+## Security Vulnerabilities
+
+Please review [our security policy](SECURITY.md) on how to report a
+vulnerability. Never open a public issue for one.
+
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md), and [THIRD_PARTY.md](THIRD_PARTY.md) for
-what travels with it.
+Open-sourced software licensed under the [MIT license](LICENSE.md). See
+[THIRD_PARTY.md](THIRD_PARTY.md) for what travels with it.
