@@ -95,6 +95,58 @@ func screens() []screen {
 		{name: "forms", width: 360, height: 620, draw: forms},
 		{name: "data", width: 360, height: 480, draw: data},
 		{name: "shell", width: 520, height: 420, draw: shellScreen},
+		{name: "content", width: 360, height: 480, draw: content},
+	}
+}
+
+// content draws a menu, a search result with its match marked, and a feed.
+func content() ayra.Widget {
+	var actions widget.Menu
+	var trigger widget.Button
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Content", widget.Heading, true),
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.HighlightProps{
+					Text:  "Arandu draws its own controls",
+					Match: "draws",
+				}.Layout(c)
+			},
+			spacer(6),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.HighlightProps{
+					Text:  "No match in this line",
+					Match: "absent",
+					Role:  widget.Caption,
+				}.Layout(c)
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.FeedProps{Count: 3}.Layout(c, func(index int) ayra.Widget {
+					entries := []struct{ title, body string }{
+						{"Invited", "Three days ago"},
+						{"Signed in", "Yesterday"},
+						{"Changed the plan", "An hour ago"},
+					}
+					if index >= len(entries) {
+						return nil
+					}
+					return func(c ayra.Context) ayra.Dimensions {
+						return widget.ItemProps{Title: entries[index].title, Body: entries[index].body}.
+							Layout(c, &widget.Button{}, nil)
+					}
+				})
+			},
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.MenuProps{Entries: []string{"Rename", "Duplicate", "", "Delete"}}.
+					Layout(c, &actions, func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Label: "Actions", Variant: widget.Outline, Size: widget.Small}.Layout(c, &trigger)
+					})
+			},
+		)
 	}
 }
 
