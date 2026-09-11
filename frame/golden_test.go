@@ -94,6 +94,51 @@ func screens() []screen {
 		{name: "lists", width: 360, height: 560, draw: lists},
 		{name: "forms", width: 360, height: 620, draw: forms},
 		{name: "data", width: 360, height: 480, draw: data},
+		{name: "shell", width: 520, height: 420, draw: shellScreen},
+	}
+}
+
+// shellScreen draws the pieces an application is framed with: a sidebar, a
+// segmented filter, a split action and a copy control.
+func shellScreen() ayra.Widget {
+	var nav widget.Sidebar
+	nav.Show(1)
+	var filter widget.Segments
+	filter.Choose(0)
+	var action widget.Split
+	var copier widget.Copier
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) ayra.Dimensions {
+				return widget.SidebarProps{
+					Title:   "Workspace",
+					Entries: []string{"Overview", "Members", "Billing", "Settings"},
+					Width:   160,
+				}.Layout(c.With(gtx), &nav)
+			}),
+			layout.Flexed(1, func(gtx layout.Context) ayra.Dimensions {
+				inner := c.With(gtx)
+				return layout.Inset{Left: 16}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return column(inner.With(gtx), 320,
+						line("Members", widget.Heading, true),
+						spacer(10),
+						func(c ayra.Context) ayra.Dimensions {
+							return widget.SegmentedProps{Options: []string{"All", "Admins"}}.Layout(c, &filter)
+						},
+						spacer(12),
+						row(
+							func(c ayra.Context) ayra.Dimensions {
+								return widget.SplitProps{Label: "Invite"}.Layout(c, &action)
+							},
+							func(c ayra.Context) ayra.Dimensions {
+								return widget.CopyProps{Value: "https://example.com/join", Size: widget.Small}.Layout(c, &copier)
+							},
+						),
+					)
+				})
+			}),
+		)
 	}
 }
 

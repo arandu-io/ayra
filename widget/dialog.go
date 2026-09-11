@@ -182,3 +182,12 @@ func (p DialogProps) readDismissal(c ayra.Context, state *Dialog) {
 func scrim() color.NRGBA {
 	return color.NRGBA{A: 140}
 }
+
+// registerTarget makes a gesture the thing a press at this point reaches.
+//
+// Two calls that always go together, and a pair that is easy to write half of:
+// adding the gesture without the tag registers an area nothing is listening
+// for, which swallows the press and reports nothing.
+func registerTarget(c ayra.Context, tag any) {
+	event.Op(c.Ops, tag)
+}
