@@ -3,6 +3,7 @@ package widget
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -65,18 +66,78 @@ func TestEveryControlDrawsThroughTheOnePlaceThatDrawsText(t *testing.T) {
 // Props are computed fresh every frame and carry nothing forward; state is held
 // by the caller and is the only thing that does. A Layout taking its state by
 // value is a control that cannot remember, and it compiles.
+//
+// The rule is read off the parameter rather than matched against a list of
+// state types. A list was what this test had, and it named eleven of them: every
+// control written after it was added was unguarded, and the test went on passing
+// for each one. A guard that has to be edited when the thing it guards grows is
+// a guard that stops guarding without saying so.
 func TestEveryPropsIsAValueAndEveryStateIsAPointer(t *testing.T) {
+	// The parameter and its type, with the pointer star captured when there is
+	// one.
+	holder := regexp.MustCompile(`\bstate (\*?)([A-Za-z_][A-Za-z0-9_]*)`)
+
+	guarded := 0
 	for _, path := range sources(t) {
 		for _, line := range strings.Split(read(t, path), "\n") {
 			if !strings.HasPrefix(line, "func (p ") || !strings.Contains(line, ") Layout(") {
 				continue
 			}
-			// The state argument, when there is one, comes after the context.
+
 			arguments := line[strings.Index(line, ") Layout(")+len(") Layout("):]
-			for _, name := range []string{"state Button", "state Toggle", "state Input", "state Tabs", "state Dialog", "state Pages", "state Group", "state Crumbs", "state Accordion", "state Disclosure", "state Secret"} {
-				if strings.Contains(arguments, name) {
-					t.Errorf("%s takes its state by value, so the control cannot remember anything: %s", filepath.Base(path), strings.TrimSpace(line))
+			found := holder.FindStringSubmatch(arguments)
+			if found == nil {
+				// A control with nothing to remember takes no state, and there
+				// are several: a badge, a separator, a heading.
+				continue
+			}
+
+			guarded++
+			if found[1] != "*" {
+				t.Errorf("%s takes its state by value, so the control cannot remember anything: %s", filepath.Base(path), strings.TrimSpace(line))
+			}
+		}
+	}
+
+	// A rule that matched nothing would pass in silence, which is the failure
+	// the list version had.
+	if guarded < 20 {
+		t.Errorf("only %d controls hold state, and this package has many more; the pattern stopped matching", guarded)
+	}
+}
+
+// TestEveryStateParameterIsCalledState is what lets the test above read the
+// parameter instead of a list.
+//
+// A state argument under another name is invisible to it, and would be the one
+// control in the package free to take its state by value.
+func TestEveryStateParameterIsCalledState(t *testing.T) {
+	// Every type declared in this package, so a parameter can be recognised as
+	// one of ours rather than as a context or a widget function.
+	declared := regexp.MustCompile(`(?m)^type ([A-Za-z_][A-Za-z0-9_]*) struct`)
+	ours := map[string]bool{}
+	for _, path := range sources(t) {
+		for _, found := range declared.FindAllStringSubmatch(read(t, path), -1) {
+			ours[found[1]] = true
+		}
+	}
+
+	// A parameter of one of our types, with the name it was given.
+	parameter := regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*) \*([A-Za-z_][A-Za-z0-9_]*)`)
+
+	for _, path := range sources(t) {
+		for _, line := range strings.Split(read(t, path), "\n") {
+			if !strings.HasPrefix(line, "func (p ") || !strings.Contains(line, ") Layout(") {
+				continue
+			}
+
+			arguments := line[strings.Index(line, ") Layout(")+len(") Layout("):]
+			for _, found := range parameter.FindAllStringSubmatch(arguments, -1) {
+				name, kind := found[1], found[2]
+				if !ours[kind] || name == "state" {
+					continue
 				}
+				t.Errorf("%s calls its %s parameter %q rather than state, which puts it outside the guard above: %s", filepath.Base(path), kind, name, strings.TrimSpace(line))
 			}
 		}
 	}

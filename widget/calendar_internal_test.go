@@ -3,6 +3,8 @@ package widget
 import (
 	"testing"
 	"time"
+
+	"github.com/arandu-io/ayra/theme"
 )
 
 // TestTheGridPutsTheFirstOfTheMonthOnItsOwnWeekday keeps the offset from being
@@ -164,5 +166,51 @@ func TestTwoTimesOnTheSameDayAreTheSameDay(t *testing.T) {
 	}
 	if sameDay(time.Time{}, time.Time{}) {
 		t.Error("nothing chosen matched nothing chosen, which highlights every blank cell")
+	}
+}
+
+// TestABlankCellTakesTheWidthItWasGiven fixes the fault that put the first of
+// September under Monday.
+//
+// Each cell of a week is handed an equal share of the row as both the least and
+// the most it may take, and the row advances by what the cell reports. A blank
+// that reported nothing pulled every day after it one column to the left, so a
+// month drew against the wrong weekday with every number right.
+func TestABlankCellTakesTheWidthItWasGiven(t *testing.T) {
+	c, _ := field(t, theme.Light, 400)
+	c.Constraints.Min.X = 46
+	c.Constraints.Max.X = 46
+
+	var state Calendar
+	blank := CalendarProps{}.day(c, &state, time.Time{}, 0)
+
+	if blank.Size.X != 46 {
+		t.Errorf("a blank cell took %d of the 46 it was given, which shifts the month left by a column", blank.Size.X)
+	}
+	if blank.Size.Y <= 0 {
+		t.Errorf("a blank cell took %d down, so its row is shorter than the ones beside it", blank.Size.Y)
+	}
+}
+
+// TestAMonthStartingMidWeekFillsTheWholeFirstRow is the same fault read from
+// the row rather than from the cell.
+func TestAMonthStartingMidWeekFillsTheWholeFirstRow(t *testing.T) {
+	// September 2026 opens on a Tuesday, so a Monday-first grid has one blank
+	// before it; February 2026 opens on a Sunday, which is six.
+	for _, month := range []time.Time{
+		time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC),
+	} {
+		var state Calendar
+		props := CalendarProps{Today: month, Monday: true}
+		days := props.grid(month)
+
+		c, _ := field(t, theme.Light, 350)
+		c.Constraints.Min.X = 350
+		row := props.weeks(c, &state, days)
+
+		if row.Size.X != 350 {
+			t.Errorf("%v laid its weeks out %d wide of 350, so the days are packed to one side", month.Month(), row.Size.X)
+		}
 	}
 }

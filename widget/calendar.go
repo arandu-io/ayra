@@ -180,7 +180,16 @@ func (p CalendarProps) day(c ayra.Context, state *Calendar, day time.Time, index
 		// The days before the first and after the last are blank rather than
 		// showing the neighbouring month's numbers: a grid with two months of
 		// numbers in it is one where somebody picks the wrong thirty-first.
-		return ayra.Dimensions{Size: image.Pt(0, c.Dp(unit.Dp(36)))}
+		//
+		// It still takes the width it was given. A cell of the grid is told how
+		// wide it is -- the row hands each one an equal share as both the least
+		// and the most it may take -- and the row then advances by whatever
+		// each cell reports. A blank that reported nothing packed the month
+		// leftwards by one column for every day before the first, so a month
+		// beginning on a Tuesday drew its first day under Monday. Nothing
+		// failed: the numbers were right, the grid was square, and it was the
+		// wrong weekday.
+		return ayra.Dimensions{Size: image.Pt(c.Constraints.Min.X, c.Dp(unit.Dp(36)))}
 	}
 
 	allowed := p.allowed(day)
