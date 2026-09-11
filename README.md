@@ -14,18 +14,35 @@ It is not the web application in a frame. Nothing here renders markup, loads a
 stylesheet or runs a script.
 
 ```go
-ayra.Run(ayra.Config{
-    Title: "Faturas",
-    Screen: func(ctx ayra.Context) ayra.Dimensions {
-        return widget.Column(ctx,
-            widget.Heading(ctx, "Faturas em aberto"),
-            widget.Button(ctx, &pay, widget.ButtonProps{
-                Label:   "Pagar",
-                Variant: widget.Destructive,
-            }),
-        )
-    },
-})
+package main
+
+import (
+	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/shell"
+	"github.com/arandu-io/ayra/widget"
+)
+
+func main() {
+	var pay widget.Button
+
+	shell.Exit(shell.Run(shell.Config{Title: "Faturas"}, func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return widget.TextProps{
+					Content: "Faturas em aberto",
+					Role:    widget.Heading,
+				}.Layout(c.With(gtx))
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return widget.ButtonProps{
+					Label:   "Pagar",
+					Variant: widget.Destructive,
+				}.Layout(c.With(gtx), &pay)
+			}),
+		)
+	}))
+}
 ```
 
 The vocabulary is the one the web components already use — `Variant`, `Size`,
