@@ -162,6 +162,9 @@ func semibold() font.Font { return font.Font{Weight: font.SemiBold} }
 // than as a zero value somebody forgot to fill in.
 func plain() font.Font { return font.Font{} }
 
+// mono is the face a key, an identifier or a column of figures is set in.
+func mono() font.Font { return font.Font{Typeface: "Go Mono"} }
+
 // drawLine draws one line of text in a weight, wrapping as the room allows.
 func drawLine(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, face font.Font) ayra.Dimensions {
 	return drawText(c, content, size, ink, 0, text.Start, face)
