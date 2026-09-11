@@ -14,6 +14,9 @@ package main
 
 import (
 	"flag"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/arandu-io/ayra/shell"
 )
@@ -27,7 +30,12 @@ import (
 const server = "http://localhost:8080"
 
 // title is what the window is called, in the dock and in the task switcher.
-const title = "My Application"
+//
+// Empty, and derived below from the name this was packaged under. A constant
+// here would be a second place to write the application's name, and the one
+// that gets forgotten is this one: the installed artifact says Proof and the
+// window above it says whatever the starter shipped with.
+const title = ""
 
 func main() {
 	address := flag.String("server", server, "the address of the Arandu server this draws for")
@@ -36,8 +44,30 @@ func main() {
 
 	shell.Exit(run(Config{
 		Server: *address,
-		Title:  title,
+		Title:  windowTitle(),
 		Scheme: scheme(*dark),
 		Fonts:  faces(),
 	}))
+}
+
+// windowTitle answers what to call the window.
+//
+// The name the application was packaged under is the name of the file that is
+// running, which every platform here takes from what was passed to the
+// packager. Reading it means the window, the icon's label and the installed
+// artifact cannot disagree.
+func windowTitle() string {
+	if title != "" {
+		return title
+	}
+	if len(os.Args) == 0 {
+		return "Application"
+	}
+
+	name := filepath.Base(os.Args[0])
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return "Application"
+	}
+	return name
 }
