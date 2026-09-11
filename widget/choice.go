@@ -35,10 +35,9 @@ func (s *Select) Showing() bool { return s.open.Showing() }
 
 // SelectProps is a control that picks one of a short list.
 //
-// Short, and the type says so: a list long enough to need searching is a
-// [Combobox], which does not exist here yet. A select that grew a search field
-// would be that control under this name, and a screen that needed it would find
-// two controls doing one job.
+// Short, and the type says so: a list long enough to need searching is an
+// [Autocomplete]. A select that grew a search field would be that control under
+// this name, and a screen that needed it would find two controls doing one job.
 type SelectProps struct {
 	// Options are the choices, in order.
 	Options []string
