@@ -113,3 +113,76 @@ func read(t *testing.T, path string) string {
 	}
 	return string(body)
 }
+
+// TestAPagerAlwaysShowsBothEnds fixes the two pages a person looks for.
+//
+// Neither is reachable by pressing next: page one is where somebody goes to
+// start again, and the last is how they learn how much there is.
+func TestAPagerAlwaysShowsBothEnds(t *testing.T) {
+	for _, total := range []int{1, 2, 5, 40, 400} {
+		for _, current := range []int{1, total / 2, total} {
+			if current < 1 {
+				current = 1
+			}
+			pages := PaginationProps{Total: total}.visible(current, 2)
+			if len(pages) == 0 {
+				t.Fatalf("a pager over %d pages drew nothing", total)
+			}
+			if pages[0] != 1 {
+				t.Errorf("%d pages at %d does not start at one: %v", total, current, pages)
+			}
+			if pages[len(pages)-1] != total {
+				t.Errorf("%d pages at %d does not end at the last: %v", total, current, pages)
+			}
+		}
+	}
+}
+
+// TestAPagerNeverDrawsTwoGapsTogether keeps a row reading "1 ... ... 40".
+func TestAPagerNeverDrawsTwoGapsTogether(t *testing.T) {
+	pages := PaginationProps{Total: 400}.visible(200, 1)
+
+	for index := 1; index < len(pages); index++ {
+		if pages[index] == 0 && pages[index-1] == 0 {
+			t.Fatalf("two gaps in a row: %v", pages)
+		}
+	}
+}
+
+// TestANumberStaysInsideItsBounds keeps a stepper from passing a limit it
+// declares.
+//
+// Clamped rather than refused: a control that let somebody reach a value and
+// complained afterwards wasted the press, and one that silently kept counting
+// past its own maximum is a form that submits a number the server rejects.
+func TestANumberStaysInsideItsBounds(t *testing.T) {
+	props := NumberProps{Min: 1, Max: 10}
+
+	for start, want := range map[int]int{
+		-5: 1,
+		0:  1,
+		5:  5,
+		10: 10,
+		99: 10,
+	} {
+		state := &Stepper{}
+		state.SetValue(start)
+		props.clamp(state)
+
+		if state.Value() != want {
+			t.Errorf("%d became %d, want %d", start, state.Value(), want)
+		}
+	}
+}
+
+// TestANumberWithNoBoundsIsNotClamped keeps the zero value from meaning
+// "between nought and nought".
+func TestANumberWithNoBoundsIsNotClamped(t *testing.T) {
+	state := &Stepper{}
+	state.SetValue(42)
+	NumberProps{}.clamp(state)
+
+	if state.Value() != 42 {
+		t.Errorf("an unbounded stepper clamped %d to %d", 42, state.Value())
+	}
+}

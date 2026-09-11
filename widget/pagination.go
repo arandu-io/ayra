@@ -6,6 +6,7 @@ import (
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 )
@@ -62,6 +63,15 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 		}
 	}
 
+	// The window shrinks until the row fits. A pager wider than its column
+	// loses whatever is on the right, and what is on the right is Next -- the
+	// one control most people use. Nothing about that looks broken: the row
+	// just ends after a number.
+	window := p.window()
+	for window > 0 && p.wider(c, state, window) {
+		window--
+	}
+
 	c.Constraints.Min = image.Point{}
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -69,7 +79,7 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 		}),
 	}
 
-	for _, page := range p.visible(state.current) {
+	for _, page := range p.visible(state.current, window) {
 		page := page
 		children = append(children, layout.Rigid(layout.Spacer{Width: 4}.Layout))
 
@@ -113,15 +123,51 @@ func (p PaginationProps) step(c ayra.Context, button *Button, label string, avai
 	return ButtonProps{Label: label, Variant: Outline, Size: Small, Disabled: !available}.Layout(c, button)
 }
 
+// window is how many numbers sit either side of the current page.
+func (p PaginationProps) window() int {
+	if p.Window == 0 {
+		return 2
+	}
+	return p.Window
+}
+
+// wider reports whether the row would be wider than the room there is.
+//
+// It measures rather than counts, because the answer depends on the width of
+// the numbers themselves: a pager over nine pages and one over nine hundred
+// draw a different number of digits in the same number of slots.
+func (p PaginationProps) wider(c ayra.Context, state *Pages, window int) bool {
+	available := c.Constraints.Max.X
+	if available <= 0 {
+		return false
+	}
+
+	measure := op.Record(c.Ops)
+	inner := c
+	inner.Constraints.Min = image.Point{}
+
+	width := ButtonProps{Label: "Previous", Variant: Outline, Size: Small}.Layout(inner, &state.previous).Size.X
+	width += ButtonProps{Label: "Next", Variant: Outline, Size: Small}.Layout(inner, &state.next).Size.X
+
+	gap := inner.Dp(unit.Dp(4))
+	for _, page := range p.visible(state.current, window) {
+		width += gap
+		label := "..."
+		if page != 0 {
+			label = strconv.Itoa(page)
+		}
+		width += ButtonProps{Label: label, Variant: Ghost, Size: Small}.Layout(inner, &Button{}).Size.X
+	}
+	measure.Stop()
+
+	return width > available
+}
+
 // visible answers the pages to draw, with 0 standing for a gap.
 //
 // The ends are always shown, because "page one" and "the last page" are the two
 // a person looks for and neither is reachable by pressing next.
-func (p PaginationProps) visible(current int) []int {
-	window := p.Window
-	if window == 0 {
-		window = 2
-	}
+func (p PaginationProps) visible(current, window int) []int {
 	if p.Total <= 0 {
 		return nil
 	}
