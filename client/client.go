@@ -82,6 +82,9 @@ type Client struct {
 	// session is where the cookies outlive the process, and nil when they do
 	// not.
 	session Store
+	// csrf is the token the server last sent, which every request that changes
+	// something has to carry back.
+	csrf tokens
 }
 
 // New returns a client for the server at base.
@@ -173,6 +176,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+	c.csrf.carry(req)
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -180,7 +184,12 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 	}
 	defer res.Body.Close()
 
-	return decode(method, path, res)
+	page, err := decode(method, path, res)
+	if err != nil {
+		return page, err
+	}
+	c.csrf.remember(page.Data)
+	return page, nil
 }
 
 // decode turns one response into a page, or into the error that says why the
@@ -228,9 +237,40 @@ type StatusError struct {
 }
 
 // Error names the request and what the server answered.
+//
+// The number as well as the name, and a name of this package's own where the
+// protocol has none. A server may answer with a status outside the registered
+// set -- this one does, for a request whose CSRF token is missing or spent --
+// and the standard text for such a status is the empty string. What a developer
+// saw was the request, a colon, and nothing after it.
 func (e *StatusError) Error() string {
-	return fmt.Sprintf("ayra/client: %s %s: %s", e.Method, e.Path, http.StatusText(e.Status))
+	return fmt.Sprintf("ayra/client: %s %s: %d %s", e.Method, e.Path, e.Status, statusName(e.Status))
 }
+
+// statusName is what a status is called.
+//
+// The protocol's own name where there is one, and this package's where there is
+// not. The one that matters is the token: it is the first thing a native client
+// meets when it reaches an application that protects its forms, and a blank
+// error is the worst possible thing to meet it with.
+func statusName(status int) string {
+	if name := http.StatusText(status); name != "" {
+		return name
+	}
+	if status == statusCSRFExpired {
+		return "the CSRF token was missing or is no longer valid"
+	}
+	return "answered with a status this does not have a name for"
+}
+
+// statusCSRFExpired is what a server of this project answers when a request
+// that changes something arrives without a usable token.
+//
+// It is not a registered status and there is no standard name for it, which is
+// why it is written down here. The number is the server's and this only reads
+// it: a client that refused it locally would be a client deciding something the
+// server decides.
+const statusCSRFExpired = 419
 
 // Status answers the status a refusal carried, and zero when err is not one.
 //
