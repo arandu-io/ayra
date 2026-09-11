@@ -132,11 +132,11 @@ func TestAPickerReportsNothingUntilSomethingIsPressed(t *testing.T) {
 	}
 }
 
-// TestADisabledPickerDoesNotAnswer is the half a test usually forgets: a control
+// TestADisabledFilePickerDoesNotAnswer is the half a test usually forgets: a control
 // drawn as unavailable that still reports a press is worse than one that is not
 // drawn as unavailable at all, because the screen says one thing and does
 // another.
-func TestADisabledPickerDoesNotAnswer(t *testing.T) {
+func TestADisabledFilePickerDoesNotAnswer(t *testing.T) {
 	c, _ := frame(t, theme.Light, 400)
 	var state widget.FilePicker
 
