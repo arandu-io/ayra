@@ -92,6 +92,67 @@ func screens() []screen {
 		{name: "choices", width: 360, height: 420, draw: choices},
 		{name: "indicators", width: 360, height: 500, draw: indicators},
 		{name: "lists", width: 360, height: 560, draw: lists},
+		{name: "forms", width: 360, height: 620, draw: forms},
+	}
+}
+
+// forms draws a field with its error, a revealed password, a pager, a number
+// stepper and a section that opens.
+func forms() ayra.Widget {
+	var email widget.Input
+	var secret widget.Secret
+	secret.SetText("correct horse")
+	var pages widget.Pages
+	pages.Show(4)
+	var count widget.Stepper
+	count.SetValue(3)
+	var section widget.Disclosure
+	section.Open()
+	var picked widget.Select
+	picked.Choose(1)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Forms", widget.Heading, true),
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				props := widget.FieldProps{Label: "Email", Required: true, Error: "That address has no domain."}
+				return props.Layout(c, func(c ayra.Context) ayra.Dimensions {
+					return widget.InputProps{Placeholder: "you@example.com", Kind: widget.Email, Invalid: props.Invalid()}.Layout(c, &email)
+				})
+			},
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.FieldProps{Label: "Password", Help: "At least twelve characters."}.Layout(c, func(c ayra.Context) ayra.Dimensions {
+					return widget.PasswordProps{Placeholder: "Your password"}.Layout(c, &secret)
+				})
+			},
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.FieldProps{Label: "Plan"}.Layout(c, func(c ayra.Context) ayra.Dimensions {
+					return widget.SelectProps{Options: []string{"Free", "Team", "Enterprise"}, Placeholder: "Choose one"}.Layout(c, &picked)
+				})
+			},
+			spacer(12),
+			row(
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.LabelProps{Text: "Seats"}.Layout(c)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.NumberProps{Min: 1, Max: 10}.Layout(c, &count)
+				},
+			),
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.CollapsibleProps{Summary: "Advanced"}.Layout(c, &section, func(c ayra.Context) ayra.Dimensions {
+					return line("Nothing here needs changing.", widget.Caption, false)(c)
+				})
+			},
+			spacer(14),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.PaginationProps{Total: 12}.Layout(c, &pages)
+			},
+		)
 	}
 }
 
