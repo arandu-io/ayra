@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense OR MIT
 
-package org.gioui;
+package io.arandu.ayra;
 
 import java.lang.Class;
 import java.lang.IllegalAccessException;
@@ -58,7 +58,7 @@ import android.view.accessibility.AccessibilityManager;
 
 import java.io.UnsupportedEncodingException;
 
-public final class GioView extends SurfaceView implements Choreographer.FrameCallback {
+public final class AyraView extends SurfaceView implements Choreographer.FrameCallback {
 	private static boolean jniLoaded;
 
 	private final SurfaceHolder.Callback surfCallbacks;
@@ -70,11 +70,11 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 
 	private long nhandle;
 
-	public GioView(Context context) {
+	public AyraView(Context context) {
 		this(context, null);
 	}
 
-	public GioView(Context context, AttributeSet attrs) {
+	public AyraView(Context context, AttributeSet attrs) {
 		super(context, attrs);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
 			setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
@@ -82,7 +82,7 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 		setLayoutParams(new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT));
 
 		// Late initialization of the Go runtime to wait for a valid context.
-		Gio.init(context.getApplicationContext());
+		Ayra.init(context.getApplicationContext());
 
 		// Set background color to transparent to avoid a flickering
 		// issue on ChromeOS.
@@ -93,7 +93,7 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 			scrollXScale = conf.getScaledHorizontalScrollFactor();
 			scrollYScale = conf.getScaledVerticalScrollFactor();
 
-			// The platform focus highlight is not aware of Gio's widgets.
+			// The platform focus highlight is not aware of Ayra's widgets.
 			setDefaultFocusHighlightEnabled(false);
 		} else {
 			float listItemHeight = 48; // dp
@@ -429,8 +429,8 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 	}
 
 	void showTextInput() {
-		GioView.this.requestFocus();
-		imm.showSoftInput(GioView.this, 0);
+		AyraView.this.requestFocus();
+		imm.showSoftInput(AyraView.this, 0);
 	}
 
 	void hideTextInput() {
@@ -549,7 +549,7 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 		imm.updateCursorAnchorInfo(this, inf);
 	}
 
-	static private native long onCreateView(GioView view);
+	static private native long onCreateView(AyraView view);
 	static private native void onDestroyView(long handle);
 	static private native void onStartView(long handle);
 	static private native void onStopView(long handle);
@@ -789,7 +789,7 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 	private static class Snippet {
 		String snippet;
 		// offset of snippet into the entire editor content. It is in runes because we won't require
-		// Gio editors to keep track of UTF-16 offsets. The distinction won't matter in practice because IMEs only
+		// Ayra editors to keep track of UTF-16 offsets. The distinction won't matter in practice because IMEs only
 		// ever see snippets.
 		int offset;
 
@@ -825,30 +825,30 @@ public final class GioView extends SurfaceView implements Choreographer.FrameCal
 			@Override public AccessibilityNodeInfo createAccessibilityNodeInfo(int viewId) {
 				AccessibilityNodeInfo info = null;
 				if (viewId == View.NO_ID) {
-					info = AccessibilityNodeInfo.obtain(GioView.this);
-					GioView.this.onInitializeAccessibilityNodeInfo(info);
+					info = AccessibilityNodeInfo.obtain(AyraView.this);
+					AyraView.this.onInitializeAccessibilityNodeInfo(info);
 				} else {
-					info = AccessibilityNodeInfo.obtain(GioView.this, viewId);
+					info = AccessibilityNodeInfo.obtain(AyraView.this, viewId);
 					info.setPackageName(getContext().getPackageName());
 					info.setVisibleToUser(true);
 				}
-				GioView.this.getLocationOnScreen(screenOff);
-				info = GioView.this.initializeAccessibilityNodeInfo(nhandle, viewId, screenOff[0], screenOff[1], info);
+				AyraView.this.getLocationOnScreen(screenOff);
+				info = AyraView.this.initializeAccessibilityNodeInfo(nhandle, viewId, screenOff[0], screenOff[1], info);
 				return info;
 			}
 
 			@Override public boolean performAction(int viewId, int action, Bundle arguments) {
 				if (viewId == View.NO_ID) {
-					return GioView.this.performAccessibilityAction(action, arguments);
+					return AyraView.this.performAccessibilityAction(action, arguments);
 				}
 				switch (action) {
 				case AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS:
-					GioView.this.onA11yFocus(nhandle, viewId);
-					GioView.this.sendA11yEvent(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED, viewId);
+					AyraView.this.onA11yFocus(nhandle, viewId);
+					AyraView.this.sendA11yEvent(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED, viewId);
 					return true;
 				case AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS:
-					GioView.this.onClearA11yFocus(nhandle, viewId);
-					GioView.this.sendA11yEvent(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED, viewId);
+					AyraView.this.onClearA11yFocus(nhandle, viewId);
+					AyraView.this.sendA11yEvent(AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED, viewId);
 					return true;
 				}
 				return false;

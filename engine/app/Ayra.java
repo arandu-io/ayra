@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Unlicense OR MIT
 
-package org.gioui;
+package io.arandu.ayra;
 
 import android.content.ClipboardManager;
 import android.content.ClipData;
@@ -10,7 +10,7 @@ import android.os.Looper;
 
 import java.io.UnsupportedEncodingException;
 
-public final class Gio {
+public final class Ayra {
 	private static final Object initLock = new Object();
 	private static boolean jniLoaded;
 	private static final Handler handler = new Handler(Looper.getMainLooper());
@@ -20,7 +20,7 @@ public final class Gio {
 	 * the Go main function.
 	 *
 	 * It is exported for use by Android apps that need to run Go code
-	 * outside the lifecycle of the Gio activity.
+	 * outside the lifecycle of the Ayra activity.
 	 */
 	public static synchronized void init(Context appCtx) {
 		synchronized (initLock) {
@@ -34,7 +34,7 @@ public final class Gio {
 			} catch (UnsupportedEncodingException e) {
 				throw new RuntimeException(e);
 			}
-			System.loadLibrary("gio");
+			System.loadLibrary("ayra");
 			runGoMain(dataDirUTF8, appCtx);
 			jniLoaded = true;
 		}

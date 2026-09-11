@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/arandu-io/ayra/client"
 )
@@ -306,5 +307,63 @@ func TestASuppliedJarIsKept(t *testing.T) {
 	// caller still holds a reference to.
 	if seen != "brought-along" {
 		t.Errorf("the session the caller brought did not travel: %q", seen)
+	}
+}
+
+// TestARequestThatNeverAnswersIsGivenUpOn fixes the failure a device sees and a
+// desk does not.
+//
+// A client with no timeout waits forever. On a phone, forever is a train
+// tunnel: the screen stays on "Signing in..." with its controls disabled, and
+// the only way out is to kill the application. The server here accepts the
+// connection and never replies, which is exactly what a captive network does.
+func TestARequestThatNeverAnswersIsGivenUpOn(t *testing.T) {
+	silence := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-silence
+	}))
+
+	// The channel is released before the server is closed, and the order is the
+	// point: Close waits for the handlers to return, and a handler parked on a
+	// channel nobody closed waits for the test's own deadline. Cleanups run
+	// last-registered-first, so this one has to be registered after.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(silence) })
+
+	c, err := client.New(server.URL, client.WithHTTPClient(&http.Client{Timeout: 150 * time.Millisecond}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Get(context.Background(), "/")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a request that never answered was reported as a page")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request was never given up on, and on a device that is a screen nobody can leave")
+	}
+}
+
+// TestAClientAlwaysHasATimeout keeps the fix above from being one a caller can
+// remove by accident.
+//
+// A supplied transport with no timeout is the same hang, arriving through
+// somebody who was thinking about certificates rather than about tunnels.
+func TestAClientAlwaysHasATimeout(t *testing.T) {
+	transport := &http.Client{}
+
+	if _, err := client.New("https://example.test", client.WithHTTPClient(transport)); err != nil {
+		t.Fatal(err)
+	}
+	if transport.Timeout == 0 {
+		t.Error("a supplied transport kept its lack of a timeout, and a request on it can hang forever")
 	}
 }

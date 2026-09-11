@@ -370,8 +370,8 @@ func getStaticMethodID(env *C.JNIEnv, class C.jclass, method, sig string) C.jmet
 	return jm
 }
 
-//export Java_org_gioui_Gio_runGoMain
-func Java_org_gioui_Gio_runGoMain(env *C.JNIEnv, class C.jclass, jdataDir C.jbyteArray, context C.jobject) {
+//export Java_io_arandu_ayra_Ayra_runGoMain
+func Java_io_arandu_ayra_Ayra_runGoMain(env *C.JNIEnv, class C.jclass, jdataDir C.jbyteArray, context C.jobject) {
 	initJVM(env, class, context)
 	dirBytes := C.jni_GetByteArrayElements(env, jdataDir)
 	if dirBytes == nil {
@@ -463,8 +463,8 @@ func AppContext() uintptr {
 	return uintptr(android.appCtx)
 }
 
-//export Java_org_gioui_GioView_onCreateView
-func Java_org_gioui_GioView_onCreateView(env *C.JNIEnv, class C.jclass, view C.jobject) C.jlong {
+//export Java_io_arandu_ayra_AyraView_onCreateView
+func Java_io_arandu_ayra_AyraView_onCreateView(env *C.JNIEnv, class C.jclass, view C.jobject) C.jlong {
 	gioView.once.Do(func() {
 		m := &gioView
 		m.getDensity = getMethodID(env, class, "getDensity", "()I")
@@ -516,21 +516,21 @@ func Java_org_gioui_GioView_onCreateView(env *C.JNIEnv, class C.jclass, view C.j
 	return C.jlong(w.handle)
 }
 
-//export Java_org_gioui_GioView_onDestroyView
-func Java_org_gioui_GioView_onDestroyView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onDestroyView
+func Java_io_arandu_ayra_AyraView_onDestroyView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.detach(env)
 }
 
-//export Java_org_gioui_GioView_onStopView
-func Java_org_gioui_GioView_onStopView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onStopView
+func Java_io_arandu_ayra_AyraView_onStopView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.started = false
 	w.visible = false
 }
 
-//export Java_org_gioui_GioView_onStartView
-func Java_org_gioui_GioView_onStartView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onStartView
+func Java_io_arandu_ayra_AyraView_onStartView(env *C.JNIEnv, class C.jclass, handle C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.started = true
 	if w.win != nil {
@@ -538,15 +538,15 @@ func Java_org_gioui_GioView_onStartView(env *C.JNIEnv, class C.jclass, handle C.
 	}
 }
 
-//export Java_org_gioui_GioView_onSurfaceDestroyed
-func Java_org_gioui_GioView_onSurfaceDestroyed(env *C.JNIEnv, class C.jclass, handle C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onSurfaceDestroyed
+func Java_io_arandu_ayra_AyraView_onSurfaceDestroyed(env *C.JNIEnv, class C.jclass, handle C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.win = nil
 	w.visible = false
 }
 
-//export Java_org_gioui_GioView_onSurfaceChanged
-func Java_org_gioui_GioView_onSurfaceChanged(env *C.JNIEnv, class C.jclass, handle C.jlong, surf C.jobject) {
+//export Java_io_arandu_ayra_AyraView_onSurfaceChanged
+func Java_io_arandu_ayra_AyraView_onSurfaceChanged(env *C.JNIEnv, class C.jclass, handle C.jlong, surf C.jobject) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.win = C.ANativeWindow_fromSurface(env, surf)
 	if w.started {
@@ -554,21 +554,21 @@ func Java_org_gioui_GioView_onSurfaceChanged(env *C.JNIEnv, class C.jclass, hand
 	}
 }
 
-//export Java_org_gioui_GioView_onLowMemory
-func Java_org_gioui_GioView_onLowMemory(env *C.JNIEnv, class C.jclass) {
+//export Java_io_arandu_ayra_AyraView_onLowMemory
+func Java_io_arandu_ayra_AyraView_onLowMemory(env *C.JNIEnv, class C.jclass) {
 	runtime.GC()
 	debug.FreeOSMemory()
 }
 
-//export Java_org_gioui_GioView_onConfigurationChanged
-func Java_org_gioui_GioView_onConfigurationChanged(env *C.JNIEnv, class C.jclass, view C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onConfigurationChanged
+func Java_io_arandu_ayra_AyraView_onConfigurationChanged(env *C.JNIEnv, class C.jclass, view C.jlong) {
 	w := cgo.Handle(view).Value().(*window)
 	w.loadConfig(env, class)
 	w.draw(env, true)
 }
 
-//export Java_org_gioui_GioView_onFrameCallback
-func Java_org_gioui_GioView_onFrameCallback(env *C.JNIEnv, class C.jclass, view C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onFrameCallback
+func Java_io_arandu_ayra_AyraView_onFrameCallback(env *C.JNIEnv, class C.jclass, view C.jlong) {
 	w, exist := cgo.Handle(view).Value().(*window)
 	if !exist {
 		return
@@ -576,8 +576,8 @@ func Java_org_gioui_GioView_onFrameCallback(env *C.JNIEnv, class C.jclass, view 
 	w.draw(env, false)
 }
 
-//export Java_org_gioui_GioView_onBack
-func Java_org_gioui_GioView_onBack(env *C.JNIEnv, class C.jclass, view C.jlong) C.jboolean {
+//export Java_io_arandu_ayra_AyraView_onBack
+func Java_io_arandu_ayra_AyraView_onBack(env *C.JNIEnv, class C.jclass, view C.jlong) C.jboolean {
 	w := cgo.Handle(view).Value().(*window)
 	if w.processEvent(key.Event{Name: key.NameBack}) {
 		return C.JNI_TRUE
@@ -585,15 +585,15 @@ func Java_org_gioui_GioView_onBack(env *C.JNIEnv, class C.jclass, view C.jlong) 
 	return C.JNI_FALSE
 }
 
-//export Java_org_gioui_GioView_onFocusChange
-func Java_org_gioui_GioView_onFocusChange(env *C.JNIEnv, class C.jclass, view C.jlong, focus C.jboolean) {
+//export Java_io_arandu_ayra_AyraView_onFocusChange
+func Java_io_arandu_ayra_AyraView_onFocusChange(env *C.JNIEnv, class C.jclass, view C.jlong, focus C.jboolean) {
 	w := cgo.Handle(view).Value().(*window)
 	w.config.Focused = focus == C.JNI_TRUE
 	w.processEvent(ConfigEvent{Config: w.config})
 }
 
-//export Java_org_gioui_GioView_onWindowInsets
-func Java_org_gioui_GioView_onWindowInsets(env *C.JNIEnv, class C.jclass, view C.jlong, top, right, bottom, left C.jint) {
+//export Java_io_arandu_ayra_AyraView_onWindowInsets
+func Java_io_arandu_ayra_AyraView_onWindowInsets(env *C.JNIEnv, class C.jclass, view C.jlong, top, right, bottom, left C.jint) {
 	w := cgo.Handle(view).Value().(*window)
 	w.insets = pixelInsets{
 		top:    int(top),
@@ -604,8 +604,8 @@ func Java_org_gioui_GioView_onWindowInsets(env *C.JNIEnv, class C.jclass, view C
 	w.draw(env, true)
 }
 
-//export Java_org_gioui_GioView_initializeAccessibilityNodeInfo
-func Java_org_gioui_GioView_initializeAccessibilityNodeInfo(env *C.JNIEnv, class C.jclass, view C.jlong, virtID, screenX, screenY C.jint, info C.jobject) C.jobject {
+//export Java_io_arandu_ayra_AyraView_initializeAccessibilityNodeInfo
+func Java_io_arandu_ayra_AyraView_initializeAccessibilityNodeInfo(env *C.JNIEnv, class C.jclass, view C.jlong, virtID, screenX, screenY C.jint, info C.jobject) C.jobject {
 	w := cgo.Handle(view).Value().(*window)
 	semID := w.semIDFor(virtID)
 	sem, found := w.callbacks.LookupSemantic(semID)
@@ -618,8 +618,8 @@ func Java_org_gioui_GioView_initializeAccessibilityNodeInfo(env *C.JNIEnv, class
 	return info
 }
 
-//export Java_org_gioui_GioView_onTouchExploration
-func Java_org_gioui_GioView_onTouchExploration(env *C.JNIEnv, class C.jclass, view C.jlong, x, y C.jfloat) {
+//export Java_io_arandu_ayra_AyraView_onTouchExploration
+func Java_io_arandu_ayra_AyraView_onTouchExploration(env *C.JNIEnv, class C.jclass, view C.jlong, x, y C.jfloat) {
 	w := cgo.Handle(view).Value().(*window)
 	semID, _ := w.callbacks.SemanticAt(f32.Pt(float32(x), float32(y)))
 	if w.semantic.hoverID == semID {
@@ -635,8 +635,8 @@ func Java_org_gioui_GioView_onTouchExploration(env *C.JNIEnv, class C.jclass, vi
 	w.semantic.hoverID = semID
 }
 
-//export Java_org_gioui_GioView_onExitTouchExploration
-func Java_org_gioui_GioView_onExitTouchExploration(env *C.JNIEnv, class C.jclass, view C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onExitTouchExploration
+func Java_io_arandu_ayra_AyraView_onExitTouchExploration(env *C.JNIEnv, class C.jclass, view C.jlong) {
 	w := cgo.Handle(view).Value().(*window)
 	if w.semantic.hoverID != 0 {
 		callVoidMethod(env, w.view, gioView.sendA11yEvent, TYPE_VIEW_HOVER_EXIT, jvalue(w.virtualIDFor(w.semantic.hoverID)))
@@ -644,8 +644,8 @@ func Java_org_gioui_GioView_onExitTouchExploration(env *C.JNIEnv, class C.jclass
 	}
 }
 
-//export Java_org_gioui_GioView_onA11yFocus
-func Java_org_gioui_GioView_onA11yFocus(env *C.JNIEnv, class C.jclass, view C.jlong, virtID C.jint) {
+//export Java_io_arandu_ayra_AyraView_onA11yFocus
+func Java_io_arandu_ayra_AyraView_onA11yFocus(env *C.JNIEnv, class C.jclass, view C.jlong, virtID C.jint) {
 	w := cgo.Handle(view).Value().(*window)
 	if semID := w.semIDFor(virtID); semID != w.semantic.focusID {
 		w.semantic.focusID = semID
@@ -654,16 +654,16 @@ func Java_org_gioui_GioView_onA11yFocus(env *C.JNIEnv, class C.jclass, view C.jl
 	}
 }
 
-//export Java_org_gioui_GioView_onClearA11yFocus
-func Java_org_gioui_GioView_onClearA11yFocus(env *C.JNIEnv, class C.jclass, view C.jlong, virtID C.jint) {
+//export Java_io_arandu_ayra_AyraView_onClearA11yFocus
+func Java_io_arandu_ayra_AyraView_onClearA11yFocus(env *C.JNIEnv, class C.jclass, view C.jlong, virtID C.jint) {
 	w := cgo.Handle(view).Value().(*window)
 	if w.semantic.focusID == w.semIDFor(virtID) {
 		w.semantic.focusID = 0
 	}
 }
 
-//export Java_org_gioui_GioView_onOpenURI
-func Java_org_gioui_GioView_onOpenURI(env *C.JNIEnv, class C.jclass, view C.jlong, uri C.jstring) {
+//export Java_io_arandu_ayra_AyraView_onOpenURI
+func Java_io_arandu_ayra_AyraView_onOpenURI(env *C.JNIEnv, class C.jclass, view C.jlong, uri C.jstring) {
 	evt, err := newURLEvent(goString(env, uri))
 	if err != nil {
 		return
@@ -965,8 +965,8 @@ func convertKeyCode(code C.jint) (key.Name, bool) {
 	return n, true
 }
 
-//export Java_org_gioui_GioView_onKeyEvent
-func Java_org_gioui_GioView_onKeyEvent(env *C.JNIEnv, class C.jclass, handle C.jlong, keyCode, r C.jint, pressed C.jboolean, t C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onKeyEvent
+func Java_io_arandu_ayra_AyraView_onKeyEvent(env *C.JNIEnv, class C.jclass, handle C.jlong, keyCode, r C.jint, pressed C.jboolean, t C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	if pressed == C.JNI_TRUE && keyCode == C.AKEYCODE_DPAD_CENTER {
 		w.callbacks.ClickFocus()
@@ -984,8 +984,8 @@ func Java_org_gioui_GioView_onKeyEvent(env *C.JNIEnv, class C.jclass, handle C.j
 	}
 }
 
-//export Java_org_gioui_GioView_onTouchEvent
-func Java_org_gioui_GioView_onTouchEvent(env *C.JNIEnv, class C.jclass, handle C.jlong, action, pointerID, tool C.jint, x, y, scrollX, scrollY C.jfloat, jbtns C.jint, t C.jlong) {
+//export Java_io_arandu_ayra_AyraView_onTouchEvent
+func Java_io_arandu_ayra_AyraView_onTouchEvent(env *C.JNIEnv, class C.jclass, handle C.jlong, action, pointerID, tool C.jint, x, y, scrollX, scrollY C.jfloat, jbtns C.jint, t C.jlong) {
 	w := cgo.Handle(handle).Value().(*window)
 	var kind pointer.Kind
 	switch action {
@@ -1038,8 +1038,8 @@ func Java_org_gioui_GioView_onTouchEvent(env *C.JNIEnv, class C.jclass, handle C
 	})
 }
 
-//export Java_org_gioui_GioView_imeSelectionStart
-func Java_org_gioui_GioView_imeSelectionStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeSelectionStart
+func Java_io_arandu_ayra_AyraView_imeSelectionStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	sel := w.callbacks.EditorState().Selection
 	start := sel.Start
@@ -1049,8 +1049,8 @@ func Java_org_gioui_GioView_imeSelectionStart(env *C.JNIEnv, class C.jclass, han
 	return C.jint(start)
 }
 
-//export Java_org_gioui_GioView_imeSelectionEnd
-func Java_org_gioui_GioView_imeSelectionEnd(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeSelectionEnd
+func Java_io_arandu_ayra_AyraView_imeSelectionEnd(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	sel := w.callbacks.EditorState().Selection
 	end := sel.End
@@ -1060,8 +1060,8 @@ func Java_org_gioui_GioView_imeSelectionEnd(env *C.JNIEnv, class C.jclass, handl
 	return C.jint(end)
 }
 
-//export Java_org_gioui_GioView_imeComposingStart
-func Java_org_gioui_GioView_imeComposingStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeComposingStart
+func Java_io_arandu_ayra_AyraView_imeComposingStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	comp := w.callbacks.EditorState().compose
 	start := comp.Start
@@ -1071,8 +1071,8 @@ func Java_org_gioui_GioView_imeComposingStart(env *C.JNIEnv, class C.jclass, han
 	return C.jint(start)
 }
 
-//export Java_org_gioui_GioView_imeComposingEnd
-func Java_org_gioui_GioView_imeComposingEnd(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeComposingEnd
+func Java_io_arandu_ayra_AyraView_imeComposingEnd(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	comp := w.callbacks.EditorState().compose
 	end := comp.End
@@ -1082,21 +1082,21 @@ func Java_org_gioui_GioView_imeComposingEnd(env *C.JNIEnv, class C.jclass, handl
 	return C.jint(end)
 }
 
-//export Java_org_gioui_GioView_imeSnippet
-func Java_org_gioui_GioView_imeSnippet(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jstring {
+//export Java_io_arandu_ayra_AyraView_imeSnippet
+func Java_io_arandu_ayra_AyraView_imeSnippet(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jstring {
 	w := cgo.Handle(handle).Value().(*window)
 	snip := w.callbacks.EditorState().Snippet.Text
 	return javaString(env, snip)
 }
 
-//export Java_org_gioui_GioView_imeSnippetStart
-func Java_org_gioui_GioView_imeSnippetStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeSnippetStart
+func Java_io_arandu_ayra_AyraView_imeSnippetStart(env *C.JNIEnv, class C.jclass, handle C.jlong) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	return C.jint(w.callbacks.EditorState().Snippet.Start)
 }
 
-//export Java_org_gioui_GioView_imeSetSnippet
-func Java_org_gioui_GioView_imeSetSnippet(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
+//export Java_io_arandu_ayra_AyraView_imeSetSnippet
+func Java_io_arandu_ayra_AyraView_imeSetSnippet(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
 	w := cgo.Handle(handle).Value().(*window)
 	if start < 0 {
 		start = 0
@@ -1108,15 +1108,15 @@ func Java_org_gioui_GioView_imeSetSnippet(env *C.JNIEnv, class C.jclass, handle 
 	w.callbacks.SetEditorSnippet(r)
 }
 
-//export Java_org_gioui_GioView_imeSetSelection
-func Java_org_gioui_GioView_imeSetSelection(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
+//export Java_io_arandu_ayra_AyraView_imeSetSelection
+func Java_io_arandu_ayra_AyraView_imeSetSelection(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
 	w := cgo.Handle(handle).Value().(*window)
 	r := key.Range{Start: int(start), End: int(end)}
 	w.callbacks.SetEditorSelection(r)
 }
 
-//export Java_org_gioui_GioView_imeSetComposingRegion
-func Java_org_gioui_GioView_imeSetComposingRegion(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
+//export Java_io_arandu_ayra_AyraView_imeSetComposingRegion
+func Java_io_arandu_ayra_AyraView_imeSetComposingRegion(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint) {
 	w := cgo.Handle(handle).Value().(*window)
 	w.callbacks.SetComposingRegion(key.Range{
 		Start: int(start),
@@ -1124,23 +1124,23 @@ func Java_org_gioui_GioView_imeSetComposingRegion(env *C.JNIEnv, class C.jclass,
 	})
 }
 
-//export Java_org_gioui_GioView_imeReplace
-func Java_org_gioui_GioView_imeReplace(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint, jtext C.jstring) {
+//export Java_io_arandu_ayra_AyraView_imeReplace
+func Java_io_arandu_ayra_AyraView_imeReplace(env *C.JNIEnv, class C.jclass, handle C.jlong, start, end C.jint, jtext C.jstring) {
 	w := cgo.Handle(handle).Value().(*window)
 	r := key.Range{Start: int(start), End: int(end)}
 	text := goString(env, jtext)
 	w.callbacks.EditorReplace(r, text)
 }
 
-//export Java_org_gioui_GioView_imeToRunes
-func Java_org_gioui_GioView_imeToRunes(env *C.JNIEnv, class C.jclass, handle C.jlong, chars C.jint) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeToRunes
+func Java_io_arandu_ayra_AyraView_imeToRunes(env *C.JNIEnv, class C.jclass, handle C.jlong, chars C.jint) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	state := w.callbacks.EditorState()
 	return C.jint(state.RunesIndex(int(chars)))
 }
 
-//export Java_org_gioui_GioView_imeToUTF16
-func Java_org_gioui_GioView_imeToUTF16(env *C.JNIEnv, class C.jclass, handle C.jlong, runes C.jint) C.jint {
+//export Java_io_arandu_ayra_AyraView_imeToUTF16
+func Java_io_arandu_ayra_AyraView_imeToUTF16(env *C.JNIEnv, class C.jclass, handle C.jlong, runes C.jint) C.jint {
 	w := cgo.Handle(handle).Value().(*window)
 	state := w.callbacks.EditorState()
 	return C.jint(state.UTF16Index(int(runes)))
@@ -1483,8 +1483,8 @@ func runOnMain(f func(env *C.JNIEnv)) {
 	}()
 }
 
-//export Java_org_gioui_Gio_scheduleMainFuncs
-func Java_org_gioui_Gio_scheduleMainFuncs(env *C.JNIEnv, cls C.jclass) {
+//export Java_io_arandu_ayra_Ayra_scheduleMainFuncs
+func Java_io_arandu_ayra_Ayra_scheduleMainFuncs(env *C.JNIEnv, cls C.jclass) {
 	for {
 		select {
 		case f := <-mainFuncs:
