@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package key implements key and text events and operations.
 package key
 

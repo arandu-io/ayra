@@ -36,26 +36,24 @@ The fourth holds on its own, and honouring it costs two text files.
 
 ### What is being rewritten, and how far it has got
 
-Every Go file in this repository declares its own provenance on the first line,
-and the build of any derived corpus reads that mark rather than asking anyone:
+**No source file carries a licence header.** The terms live in the two `LICENSE`
+files and in this one, which is where this project keeps them and what Go itself
+does. A tag repeated at the top of two hundred files is a claim made two hundred
+times and checked nowhere.
 
-| mark | meaning |
-|---|---|
-| `SPDX-License-Identifier: Unlicense OR MIT` | literal copy |
-| `SPDX-License-Identifier: MIT AND (Unlicense OR MIT)` | rewritten here, still derived |
-| `SPDX-License-Identifier: MIT` | written here |
-
-The mark is mandatory and its absence fails the build, because "unmarked means
-ours" would let the dangerous failure — rewriting badly and forgetting to mark —
-pass in silence.
-
-Count it yourself; the numbers here are a snapshot and the commands are not:
+Provenance is **measured rather than declared**. A file is still the original
+when its content still is, and that is a comparison anybody can run — not a line
+anybody can forget to update, or update wrongly:
 
 ```sh
-grep -rl 'SPDX-License-Identifier: Unlicense OR MIT'           --include='*.go' . | wc -l   # 178
-grep -rl 'SPDX-License-Identifier: MIT AND (Unlicense OR MIT)' --include='*.go' . | wc -l   #   0
-find engine -name '*.go' | wc -l                                                            # 201
+GOWORK=off go test -run TestNothingClaimedAsOursIsStillTheOriginal ./...
 ```
+
+It reads a pinned copy of the original, normalises both sides — no whitespace,
+no comments, because a rewrite that only touches comments is exactly what it
+exists to catch — and reports how much of each file is still what it was. The
+tree-wide figure is the honest answer to "how much of this is ours", and it is a
+measurement carrying a date rather than a status somebody typed.
 
 Renaming an identifier and rewriting a comment does not end derivation. What is
 protected is the expression — how the work divides into files and types, the

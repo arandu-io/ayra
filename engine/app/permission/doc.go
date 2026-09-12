@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package permission includes sub-packages that should be imported
 by a Gio program or by one of its dependencies to indicate that specific

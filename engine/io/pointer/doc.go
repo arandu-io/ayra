@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package pointer implements pointer events and operations.
 A pointer is either a mouse controlled cursor or a touch

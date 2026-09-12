@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package gofont exports the Go fonts as a text.Collection.
 //
 // See https://blog.golang.org/go-fonts for a description of the

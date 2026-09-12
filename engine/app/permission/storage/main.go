@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package storage implements read and write storage permissions
 on mobile devices.

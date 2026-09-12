@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package opentype implements text layout and shaping for OpenType
 // files.
 //

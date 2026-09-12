@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package app
 
 // DestroyEvent is the last event sent through

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 @import UIKit;
 
 #include <stdint.h>

@@ -1,7 +1,5 @@
 #version 310 es
 
-// SPDX-License-Identifier: Unlicense OR MIT
-
 precision mediump float;
 
 layout(binding = 0) uniform sampler2D tex;

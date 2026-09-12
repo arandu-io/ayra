@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package gpu
 
 import "github.com/arandu-io/ayra/engine/gpu/internal/driver"

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Most of the algorithms to compute strokes and their offsets have been
 // extracted, adapted from (and used as a reference implementation):
 //  - github.com/tdewolff/canvas (Licensed under MIT)

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package f32 is an internal version of the public package f32 with
 extra types for internal use.

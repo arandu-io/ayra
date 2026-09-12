@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package gpu
 
 // GPU accelerated path drawing using the algorithms from

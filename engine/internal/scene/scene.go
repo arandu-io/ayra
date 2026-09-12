@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package scene encodes and decodes graphics commands in the format used by the
 // compute renderer.
 package scene

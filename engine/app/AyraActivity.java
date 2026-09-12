@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package io.arandu.ayra;
 
 import android.app.Activity;

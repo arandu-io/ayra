@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 struct m3x2 {
 	vec3 r0;
 	vec3 r1;
