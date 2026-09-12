@@ -1,63 +1,68 @@
 package widget
 
 import (
-	"fmt"
-	"math/bits"
+	"image"
 
 	"github.com/arandu-io/ayra/engine/io/system"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op/clip"
 )
 
-// Decorations handles the states of window decorations.
+// Decorations owns the interaction state of the project's titlebar.
+//
+// The project draws the titlebar so its controls share the behavior and visual
+// language of the rest of the application on every supported platform.
 type Decorations struct {
-	// Maximized controls the look and behaviour of the maximize
-	// button. It is the user's responsibility to set Maximized
-	// according to the window state reported through [app.ConfigEvent].
+	// Maximized controls the look and behaviour of the maximize button. The
+	// caller keeps it synchronized with the window state reported by the app.
 	Maximized bool
-	clicks    map[int]*Clickable
+
+	clicks map[system.Action]*Clickable
 }
 
-// LayoutMove lays out the widget that makes a window movable.
-func (d *Decorations) LayoutMove(gtx layout.Context, w layout.Widget) layout.Dimensions {
-	dims := w(gtx)
-	defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
+// LayoutMove lays out content and marks its area as a window drag handle.
+func (d *Decorations) LayoutMove(gtx layout.Context, content layout.Widget) layout.Dimensions {
+	dimensions := content(gtx)
+	defer clip.Rect(image.Rectangle{Max: dimensions.Size}).Push(gtx.Ops).Pop()
 	system.ActionInputOp(system.ActionMove).Add(gtx.Ops)
-	return dims
+	return dimensions
 }
 
-// Clickable returns the clickable for the given single action.
+// Clickable returns the stable clickable associated with one window action.
 func (d *Decorations) Clickable(action system.Action) *Clickable {
-	if bits.OnesCount(uint(action)) != 1 {
-		panic(fmt.Errorf("not a single action"))
+	if action == 0 || action&(action-1) != 0 {
+		panic("window decoration requires one action")
 	}
-	idx := bits.TrailingZeros(uint(action))
-	click, found := d.clicks[idx]
-	if !found {
-		click = new(Clickable)
-		if d.clicks == nil {
-			d.clicks = make(map[int]*Clickable)
-		}
-		d.clicks[idx] = click
+	if d.clicks == nil {
+		d.clicks = make(map[system.Action]*Clickable)
 	}
+	if click := d.clicks[action]; click != nil {
+		return click
+	}
+
+	click := new(Clickable)
+	d.clicks[action] = click
 	return click
 }
 
-// Update the state and return the set of actions activated by the user.
+// Update returns every window action activated since the previous update.
 func (d *Decorations) Update(gtx layout.Context) system.Action {
-	var actions system.Action
-	for idx, clk := range d.clicks {
-		if !clk.Clicked(gtx) {
-			continue
+	var activated system.Action
+	for action, click := range d.clicks {
+		if click.Clicked(gtx) {
+			activated |= d.actionForState(action)
 		}
-		action := system.Action(1 << idx)
-		switch {
-		case action == system.ActionMaximize && d.Maximized:
-			action = system.ActionUnmaximize
-		case action == system.ActionUnmaximize && !d.Maximized:
-			action = system.ActionMaximize
-		}
-		actions |= action
 	}
-	return actions
+	return activated
+}
+
+func (d *Decorations) actionForState(action system.Action) system.Action {
+	switch {
+	case action == system.ActionMaximize && d.Maximized:
+		return system.ActionUnmaximize
+	case action == system.ActionUnmaximize && !d.Maximized:
+		return system.ActionMaximize
+	default:
+		return action
+	}
 }
