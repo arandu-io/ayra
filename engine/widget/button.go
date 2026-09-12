@@ -13,7 +13,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 )
 
-// Clickable represents a clickable area.
+// Clickable is the persistent input state of one or more clickable areas.
 type Clickable struct {
 	click   gesture.Click
 	history []Press
@@ -22,31 +22,32 @@ type Clickable struct {
 	pressedKey    key.Name
 }
 
-// Click represents a click.
+// Click describes a completed pointer, keyboard, or programmatic activation.
 type Click struct {
+	// Modifiers are the keys held when the activation completed.
 	Modifiers key.Modifiers
+	// NumClicks is the number of activations represented by this event.
 	NumClicks int
 }
 
-// Press represents a past pointer press.
+// Press records a pointer press for transient visual feedback.
 type Press struct {
-	// Position of the press.
+	// Position is where the pointer went down.
 	Position image.Point
 	// Start is when the press began.
 	Start time.Time
-	// End is when the press was ended by a release or cancel.
-	// A zero End means it hasn't ended yet.
+	// End is when the press ended. Zero means it is still active.
 	End time.Time
-	// Cancelled is true for cancelled presses.
+	// Cancelled reports that the gesture ended without activating the control.
 	Cancelled bool
 }
 
-// Click executes a simple programmatic click.
+// Click queues one programmatic activation for the next update.
 func (b *Clickable) Click() {
 	b.requestClicks++
 }
 
-// Clicked calls Update and reports whether a click was registered.
+// Clicked updates the control and consumes one pending click report.
 func (b *Clickable) Clicked(gtx layout.Context) bool {
 	return b.clicked(b, gtx)
 }
@@ -56,130 +57,156 @@ func (b *Clickable) clicked(t event.Tag, gtx layout.Context) bool {
 	return clicked
 }
 
-// Hovered reports whether a pointer is over the element.
+// Hovered reports whether a pointer is over any registered area.
 func (b *Clickable) Hovered() bool {
 	return b.click.Hovered()
 }
 
-// Pressed reports whether a pointer is pressing the element.
+// Pressed reports whether a pointer is holding a registered area.
 func (b *Clickable) Pressed() bool {
 	return b.click.Pressed()
 }
 
-// History is the past pointer presses useful for drawing markers.
-// History is retained for a short duration (about a second).
+// History returns recent pointer presses for drawing transient feedback.
 func (b *Clickable) History() []Press {
 	return b.history
 }
 
-// Layout and update the button state.
+// Layout updates the state, lays out w, and registers its dimensions as an
+// input area for the following frame.
 func (b *Clickable) Layout(gtx layout.Context, w layout.Widget) layout.Dimensions {
 	return b.layout(b, gtx, w)
 }
 
-func (b *Clickable) layout(t event.Tag, gtx layout.Context, w layout.Widget) layout.Dimensions {
+func (b *Clickable) layout(target event.Tag, gtx layout.Context, widget layout.Widget) layout.Dimensions {
 	for {
-		_, ok := b.update(t, gtx)
+		_, ok := b.update(target, gtx)
 		if !ok {
 			break
 		}
 	}
-	m := op.Record(gtx.Ops)
-	dims := w(gtx)
-	c := m.Stop()
+	recording := op.Record(gtx.Ops)
+	dims := widget(gtx)
+	drawing := recording.Stop()
 	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops).Pop()
 	semantic.EnabledOp(gtx.Enabled()).Add(gtx.Ops)
 	b.click.Add(gtx.Ops)
-	event.Op(gtx.Ops, t)
-	c.Add(gtx.Ops)
+	event.Op(gtx.Ops, target)
+	drawing.Add(gtx.Ops)
 	return dims
 }
 
-// Update the button state by processing events, and return the next
-// click, if any.
+// Update processes input and returns the next activation, if any.
 func (b *Clickable) Update(gtx layout.Context) (Click, bool) {
 	return b.update(b, gtx)
 }
 
-func (b *Clickable) update(t event.Tag, gtx layout.Context) (Click, bool) {
+func (b *Clickable) update(target event.Tag, gtx layout.Context) (Click, bool) {
+	b.expireHistory(gtx.Now)
+	if requested, ok := b.takeRequestedClicks(); ok {
+		return requested, true
+	}
+	if clicked, ok := b.pointerClick(gtx); ok {
+		return clicked, true
+	}
+	return b.keyClick(target, gtx)
+}
+
+func (b *Clickable) expireHistory(now time.Time) {
 	for len(b.history) > 0 {
-		c := b.history[0]
-		if c.End.IsZero() || gtx.Now.Sub(c.End) < 1*time.Second {
-			break
+		oldest := b.history[0]
+		if oldest.End.IsZero() || now.Sub(oldest.End) < time.Second {
+			return
 		}
-		n := copy(b.history, b.history[1:])
-		b.history = b.history[:n]
+		copy(b.history, b.history[1:])
+		b.history = b.history[:len(b.history)-1]
 	}
-	if c := b.requestClicks; c > 0 {
-		b.requestClicks = 0
-		return Click{
-			NumClicks: c,
-		}, true
+}
+
+func (b *Clickable) takeRequestedClicks() (Click, bool) {
+	count := b.requestClicks
+	if count == 0 {
+		return Click{}, false
 	}
+	b.requestClicks = 0
+	return Click{NumClicks: count}, true
+}
+
+func (b *Clickable) pointerClick(gtx layout.Context) (Click, bool) {
 	for {
-		e, ok := b.click.Update(gtx.Source)
+		incoming, ok := b.click.Update(gtx.Source)
 		if !ok {
-			break
+			return Click{}, false
 		}
-		switch e.Kind {
+		switch incoming.Kind {
 		case gesture.KindClick:
-			if l := len(b.history); l > 0 {
-				b.history[l-1].End = gtx.Now
-			}
+			b.finishLastPress(gtx.Now)
 			return Click{
-				Modifiers: e.Modifiers,
-				NumClicks: e.NumClicks,
+				Modifiers: incoming.Modifiers,
+				NumClicks: incoming.NumClicks,
 			}, true
 		case gesture.KindCancel:
-			for i := range b.history {
-				b.history[i].Cancelled = true
-				if b.history[i].End.IsZero() {
-					b.history[i].End = gtx.Now
-				}
-			}
+			b.cancelPresses(gtx.Now)
 		case gesture.KindPress:
 			b.history = append(b.history, Press{
-				Position: e.Position,
+				Position: incoming.Position,
 				Start:    gtx.Now,
 			})
 		}
 	}
+}
+
+func (b *Clickable) finishLastPress(now time.Time) {
+	if last := len(b.history) - 1; last >= 0 {
+		b.history[last].End = now
+	}
+}
+
+func (b *Clickable) cancelPresses(now time.Time) {
+	for i := range b.history {
+		b.history[i].Cancelled = true
+		if b.history[i].End.IsZero() {
+			b.history[i].End = now
+		}
+	}
+}
+
+func (b *Clickable) keyClick(target event.Tag, gtx layout.Context) (Click, bool) {
 	for {
-		e, ok := gtx.Event(
-			key.FocusFilter{Target: t},
-			key.Filter{Focus: t, Name: key.NameReturn},
-			key.Filter{Focus: t, Name: key.NameSpace},
+		incoming, ok := gtx.Event(
+			key.FocusFilter{Target: target},
+			key.Filter{Focus: target, Name: key.NameReturn},
+			key.Filter{Focus: target, Name: key.NameSpace},
 		)
 		if !ok {
-			break
+			return Click{}, false
 		}
-		switch e := e.(type) {
+		switch incoming := incoming.(type) {
 		case key.FocusEvent:
-			if e.Focus {
+			if incoming.Focus {
 				b.pressedKey = ""
 			}
 		case key.Event:
-			if !gtx.Focused(t) {
-				break
+			if !gtx.Focused(target) || !isClickKey(incoming.Name) {
+				continue
 			}
-			if e.Name != key.NameReturn && e.Name != key.NameSpace {
-				break
-			}
-			switch e.State {
+			switch incoming.State {
 			case key.Press:
-				b.pressedKey = e.Name
+				b.pressedKey = incoming.Name
 			case key.Release:
-				if b.pressedKey != e.Name {
-					break
+				if b.pressedKey != incoming.Name {
+					continue
 				}
-				// only register a key as a click if the key was pressed and released while this button was focused
 				b.pressedKey = ""
 				return Click{
-					Modifiers: e.Modifiers,
+					Modifiers: incoming.Modifiers,
 					NumClicks: 1,
 				}, true
 			}
 		}
 	}
-	return Click{}, false
+}
+
+func isClickKey(name key.Name) bool {
+	return name == key.NameReturn || name == key.NameSpace
 }

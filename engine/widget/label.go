@@ -16,209 +16,200 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// Label is a widget for laying out and drawing text. Labels are always
-// non-interactive text. They cannot be selected or copied.
+// Label lays out and paints non-interactive text.
 type Label struct {
-	// Alignment specifies the text alignment.
+	// Alignment places each line within the width offered to the label.
 	Alignment text.Alignment
-	// MaxLines limits the number of lines. Zero means no limit.
+	// MaxLines limits visible lines. Zero permits every line.
 	MaxLines int
-	// Truncator is the text that will be shown at the end of the final
-	// line if MaxLines is exceeded. Defaults to "…" if empty.
+	// Truncator replaces omitted text on the final line. Empty uses "…".
 	Truncator string
-	// WrapPolicy configures how displayed text will be broken into lines.
+	// WrapPolicy chooses where soft line breaks may occur.
 	WrapPolicy text.WrapPolicy
-	// LineHeight controls the distance between the baselines of lines of text.
-	// If zero, a sensible default will be used.
+	// LineHeight is the distance between baselines. Zero uses the font's
+	// natural line height.
 	LineHeight unit.Sp
-	// LineHeightScale applies a scaling factor to the LineHeight. If zero, a
-	// sensible default will be used.
+	// LineHeightScale multiplies LineHeight. Zero uses the default scale.
 	LineHeightScale float32
 }
 
-// Layout the label with the given shaper, font, size, text, and material.
-func (l Label) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, txt string, textMaterial op.CallOp) layout.Dimensions {
-	dims, _ := l.LayoutDetailed(gtx, lt, font, size, txt, textMaterial)
+// Layout shapes and paints content and returns the constrained dimensions.
+func (l Label) Layout(gtx layout.Context, shaper *text.Shaper, face font.Font, size unit.Sp, content string, material op.CallOp) layout.Dimensions {
+	dims, _ := l.LayoutDetailed(gtx, shaper, face, size, content, material)
 	return dims
 }
 
-// TextInfo provides metadata about shaped text.
+// TextInfo describes content omitted from a label.
 type TextInfo struct {
-	// Truncated contains the number of runes of text that are represented by a truncator
-	// symbol in the text. If zero, there is no truncator symbol.
+	// Truncated is the number of runes represented by the truncator. Zero means
+	// that all content is visible.
 	Truncated int
 }
 
-// Layout the label with the given shaper, font, size, text, and material, returning metadata about the shaped text.
-func (l Label) LayoutDetailed(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, txt string, textMaterial op.CallOp) (layout.Dimensions, TextInfo) {
-	cs := gtx.Constraints
-	textSize := fixed.I(gtx.Sp(size))
-	lineHeight := fixed.I(gtx.Sp(l.LineHeight))
-	lt.LayoutString(text.Parameters{
-		Font:            font,
-		PxPerEm:         textSize,
+// LayoutDetailed is Layout with truncation metadata.
+func (l Label) LayoutDetailed(gtx layout.Context, shaper *text.Shaper, face font.Font, size unit.Sp, content string, material op.CallOp) (layout.Dimensions, TextInfo) {
+	constraints := gtx.Constraints
+	shaper.LayoutString(text.Parameters{
+		Font:            face,
+		PxPerEm:         fixed.I(gtx.Sp(size)),
 		MaxLines:        l.MaxLines,
 		Truncator:       l.Truncator,
 		Alignment:       l.Alignment,
 		WrapPolicy:      l.WrapPolicy,
-		MaxWidth:        cs.Max.X,
-		MinWidth:        cs.Min.X,
+		MaxWidth:        constraints.Max.X,
+		MinWidth:        constraints.Min.X,
 		Locale:          gtx.Locale,
-		LineHeight:      lineHeight,
+		LineHeight:      fixed.I(gtx.Sp(l.LineHeight)),
 		LineHeightScale: l.LineHeightScale,
-	}, txt)
-	m := op.Record(gtx.Ops)
-	viewport := image.Rectangle{Max: cs.Max}
-	it := textIterator{
-		viewport: viewport,
+	}, content)
+
+	recording := op.Record(gtx.Ops)
+	painter := textIterator{
+		viewport: image.Rectangle{Max: constraints.Max},
 		maxLines: l.MaxLines,
-		material: textMaterial,
+		material: material,
 	}
-	semantic.LabelOp(txt).Add(gtx.Ops)
-	var glyphs [32]text.Glyph
-	line := glyphs[:0]
-	for g, ok := lt.NextGlyph(); ok; g, ok = lt.NextGlyph() {
-		var ok bool
-		if line, ok = it.paintGlyph(gtx, lt, g, line); !ok {
+	semantic.LabelOp(content).Add(gtx.Ops)
+
+	var glyphStorage [32]text.Glyph
+	line := glyphStorage[:0]
+	for {
+		glyph, ok := shaper.NextGlyph()
+		if !ok {
+			break
+		}
+		line, ok = painter.paintGlyph(gtx, shaper, glyph, line)
+		if !ok {
 			break
 		}
 	}
-	call := m.Stop()
-	viewport.Min = viewport.Min.Add(it.padding.Min)
-	viewport.Max = viewport.Max.Add(it.padding.Max)
-	clipStack := clip.Rect(viewport).Push(gtx.Ops)
-	call.Add(gtx.Ops)
-	dims := layout.Dimensions{Size: it.bounds.Size()}
-	dims.Size = cs.Constrain(dims.Size)
-	dims.Baseline = dims.Size.Y - it.baseline
-	clipStack.Pop()
-	return dims, TextInfo{Truncated: it.truncated}
+	drawing := recording.Stop()
+
+	viewport := painter.viewport
+	viewport.Min = viewport.Min.Add(painter.padding.Min)
+	viewport.Max = viewport.Max.Add(painter.padding.Max)
+	clipped := clip.Rect(viewport).Push(gtx.Ops)
+	drawing.Add(gtx.Ops)
+	clipped.Pop()
+
+	sizePx := constraints.Constrain(painter.bounds.Size())
+	dims := layout.Dimensions{
+		Size:     sizePx,
+		Baseline: sizePx.Y - painter.baseline,
+	}
+	return dims, TextInfo{Truncated: painter.truncated}
 }
 
-// textIterator computes the bounding box of and paints text.
+// textIterator turns the shaper's glyph stream into visible lines while
+// accumulating the dimensions returned to layout.
 type textIterator struct {
-	// viewport is the rectangle of document coordinates that the iterator is
-	// trying to fill with text.
+	// These fields remain concrete rather than hidden behind another iterator:
+	// the glyph loop is hot and its fixed line buffer must stay on the stack.
 	viewport image.Rectangle
-	// maxLines is the maximum number of text lines that should be displayed.
 	maxLines int
-	// material sets the paint material for the text glyphs. If none is provided
-	// the color of the glyphs is undefined and may change unpredictably if the
-	// text contains color glyphs.
 	material op.CallOp
-	// truncated tracks the count of truncated runes in the text.
+
 	truncated int
-	// linesSeen tracks the quantity of line endings this iterator has seen.
 	linesSeen int
-	// lineOff tracks the origin for the glyphs in the current line.
-	lineOff f32.Point
-	// padding is the space needed outside of the bounds of the text to ensure no
-	// part of a glyph is clipped.
-	padding image.Rectangle
-	// bounds is the logical bounding box of the text.
-	bounds image.Rectangle
-	// visible tracks whether the most recently iterated glyph is visible within
-	// the viewport.
-	visible bool
-	// first tracks whether the iterator has processed a glyph yet.
-	first bool
-	// baseline tracks the location of the first line of text's baseline.
-	baseline int
+	lineOff   f32.Point
+	padding   image.Rectangle
+	bounds    image.Rectangle
+	visible   bool
+	first     bool
+	baseline  int
 }
 
-// processGlyph checks whether the glyph is visible within the iterator's configured
-// viewport and (if so) updates the iterator's text dimensions to include the glyph.
-func (it *textIterator) processGlyph(g text.Glyph, ok bool) (visibleOrBefore bool) {
-	if it.maxLines > 0 {
-		if g.Flags&text.FlagTruncator != 0 && g.Flags&text.FlagClusterBreak != 0 {
-			// A glyph carrying both of these flags provides the count of truncated runes.
-			it.truncated = int(g.Runes)
-		}
-		if g.Flags&text.FlagLineBreak != 0 {
-			it.linesSeen++
-		}
-		if it.linesSeen == it.maxLines && g.Flags&text.FlagParagraphBreak != 0 {
-			return false
-		}
+// processGlyph includes a glyph in the measured bounds when it intersects the
+// viewport. Its second argument is carried through for callers that already
+// know iteration must stop.
+func (it *textIterator) processGlyph(glyph text.Glyph, keepGoing bool) bool {
+	if !it.withinLineLimit(glyph) {
+		return false
 	}
-	// Compute the maximum extent to which glyphs overhang on the horizontal
-	// axis.
-	if d := g.Bounds.Min.X.Floor(); d < it.padding.Min.X {
-		// If the distance between the dot and the left edge of this glyph is
-		// less than the current padding, increase the left padding.
-		it.padding.Min.X = d
-	}
-	if d := (g.Bounds.Max.X - g.Advance).Ceil(); d > it.padding.Max.X {
-		// If the distance between the dot and the right edge of this glyph
-		// minus the logical advance of this glyph is greater than the current
-		// padding, increase the right padding.
-		it.padding.Max.X = d
-	}
-	if d := (g.Bounds.Min.Y + g.Ascent).Floor(); d < it.padding.Min.Y {
-		// If the distance between the dot and the top of this glyph is greater
-		// than the ascent of the glyph, increase the top padding.
-		it.padding.Min.Y = d
-	}
-	if d := (g.Bounds.Max.Y - g.Descent).Ceil(); d > it.padding.Max.Y {
-		// If the distance between the dot and the bottom of this glyph is greater
-		// than the descent of the glyph, increase the bottom padding.
-		it.padding.Max.Y = d
-	}
-	logicalBounds := image.Rectangle{
-		Min: image.Pt(g.X.Floor(), int(g.Y)-g.Ascent.Ceil()),
-		Max: image.Pt((g.X + g.Advance).Ceil(), int(g.Y)+g.Descent.Ceil()),
+	it.includeOverhang(glyph)
+
+	logical := image.Rectangle{
+		Min: image.Pt(glyph.X.Floor(), int(glyph.Y)-glyph.Ascent.Ceil()),
+		Max: image.Pt((glyph.X + glyph.Advance).Ceil(), int(glyph.Y)+glyph.Descent.Ceil()),
 	}
 	if !it.first {
 		it.first = true
-		it.baseline = int(g.Y)
-		it.bounds = logicalBounds
+		it.baseline = int(glyph.Y)
+		it.bounds = logical
 	}
 
-	above := logicalBounds.Max.Y < it.viewport.Min.Y
-	below := logicalBounds.Min.Y > it.viewport.Max.Y
-	left := logicalBounds.Max.X < it.viewport.Min.X
-	right := logicalBounds.Min.X > it.viewport.Max.X
+	above := logical.Max.Y < it.viewport.Min.Y
+	below := logical.Min.Y > it.viewport.Max.Y
+	left := logical.Max.X < it.viewport.Min.X
+	right := logical.Min.X > it.viewport.Max.X
 	it.visible = !above && !below && !left && !right
 	if it.visible {
-		it.bounds.Min.X = min(it.bounds.Min.X, logicalBounds.Min.X)
-		it.bounds.Min.Y = min(it.bounds.Min.Y, logicalBounds.Min.Y)
-		it.bounds.Max.X = max(it.bounds.Max.X, logicalBounds.Max.X)
-		it.bounds.Max.Y = max(it.bounds.Max.Y, logicalBounds.Max.Y)
+		it.bounds.Min.X = min(it.bounds.Min.X, logical.Min.X)
+		it.bounds.Min.Y = min(it.bounds.Min.Y, logical.Min.Y)
+		it.bounds.Max.X = max(it.bounds.Max.X, logical.Max.X)
+		it.bounds.Max.Y = max(it.bounds.Max.Y, logical.Max.Y)
 	}
-	return ok && !below
+	return keepGoing && !below
 }
 
-func fixedToFloat(i fixed.Int26_6) float32 {
-	return float32(i) / 64.0
+func (it *textIterator) withinLineLimit(glyph text.Glyph) bool {
+	if it.maxLines <= 0 {
+		return true
+	}
+	if glyph.Flags&text.FlagTruncator != 0 && glyph.Flags&text.FlagClusterBreak != 0 {
+		it.truncated = int(glyph.Runes)
+	}
+	if glyph.Flags&text.FlagLineBreak != 0 {
+		it.linesSeen++
+	}
+	return it.linesSeen != it.maxLines || glyph.Flags&text.FlagParagraphBreak == 0
 }
 
-// paintGlyph buffers up and paints text glyphs. It should be invoked iteratively upon each glyph
-// until it returns false. The line parameter should be a slice with
-// a backing array of sufficient size to buffer multiple glyphs.
-// A modified slice will be returned with each invocation, and is
-// expected to be passed back in on the following invocation.
-// This design is awkward, but prevents the line slice from escaping
-// to the heap.
+func (it *textIterator) includeOverhang(glyph text.Glyph) {
+	if left := glyph.Bounds.Min.X.Floor(); left < it.padding.Min.X {
+		it.padding.Min.X = left
+	}
+	if right := (glyph.Bounds.Max.X - glyph.Advance).Ceil(); right > it.padding.Max.X {
+		it.padding.Max.X = right
+	}
+	if top := (glyph.Bounds.Min.Y + glyph.Ascent).Floor(); top < it.padding.Min.Y {
+		it.padding.Min.Y = top
+	}
+	if bottom := (glyph.Bounds.Max.Y - glyph.Descent).Ceil(); bottom > it.padding.Max.Y {
+		it.padding.Max.Y = bottom
+	}
+}
+
+func fixedPixels(value fixed.Int26_6) float32 {
+	return float32(value) / 64
+}
+
+// paintGlyph buffers one visible glyph and flushes at a line boundary, a full
+// stack buffer, or the end of the visible viewport.
 func (it *textIterator) paintGlyph(gtx layout.Context, shaper *text.Shaper, glyph text.Glyph, line []text.Glyph) ([]text.Glyph, bool) {
 	visibleOrBefore := it.processGlyph(glyph, true)
 	if it.visible {
 		if len(line) == 0 {
-			it.lineOff = f32.Point{X: fixedToFloat(glyph.X), Y: float32(glyph.Y)}.Sub(layout.FPt(it.viewport.Min))
+			it.lineOff = f32.Point{X: fixedPixels(glyph.X), Y: float32(glyph.Y)}.Sub(layout.FPt(it.viewport.Min))
 		}
 		line = append(line, glyph)
 	}
-	if glyph.Flags&text.FlagLineBreak != 0 || cap(line)-len(line) == 0 || !visibleOrBefore {
-		t := op.Affine(f32.AffineId().Offset(it.lineOff)).Push(gtx.Ops)
-		path := shaper.Shape(line)
-		outline := clip.Outline{Path: path}.Op().Push(gtx.Ops)
-		it.material.Add(gtx.Ops)
-		paint.PaintOp{}.Add(gtx.Ops)
-		outline.Pop()
-		if call := shaper.Bitmaps(line); call != (op.CallOp{}) {
-			call.Add(gtx.Ops)
-		}
-		t.Pop()
-		line = line[:0]
+	flush := glyph.Flags&text.FlagLineBreak != 0 || len(line) == cap(line) || !visibleOrBefore
+	if flush {
+		line = it.paintLine(gtx, shaper, line)
 	}
 	return line, visibleOrBefore
+}
+
+func (it *textIterator) paintLine(gtx layout.Context, shaper *text.Shaper, line []text.Glyph) []text.Glyph {
+	positioned := op.Affine(f32.AffineId().Offset(it.lineOff)).Push(gtx.Ops)
+	outline := clip.Outline{Path: shaper.Shape(line)}.Op().Push(gtx.Ops)
+	it.material.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	outline.Pop()
+	if bitmaps := shaper.Bitmaps(line); bitmaps != (op.CallOp{}) {
+		bitmaps.Add(gtx.Ops)
+	}
+	positioned.Pop()
+	return line[:0]
 }
