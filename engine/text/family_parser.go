@@ -193,14 +193,15 @@ func (l *lexer) run(input string) ([]token, error) {
 	l.input = input
 	l.tokens = l.tokens[:0]
 	l.pos = 0
+	l.err = nil
 	for state := lexText; state != nil; {
 		state = state(l)
 	}
 	return l.tokens, l.err
 }
 
-// parser implements a simple recursive descent parser for font family fallback
-// expressions.
+// parser reads the comma-delimited family fallback syntax stored in Typeface.
+// Its returned slice is valid until the next call.
 type parser struct {
 	faces  []string
 	lexer  lexer
@@ -217,30 +218,36 @@ func (p *parser) parse(rule string) ([]string, error) {
 		return nil, err
 	}
 	p.faces = p.faces[:0]
-	return p.faces, p.parseList()
+	if err := p.parseList(); err != nil {
+		return nil, err
+	}
+	return p.faces, nil
 }
 
 // parse implements the production:
 //
 //	LIST ::= <FACE> <COMMA> <LIST> | <FACE>
 func (p *parser) parseList() error {
-	if len(p.tokens) == 0 {
-		return fmt.Errorf("expected family name, got EOF")
-	}
-	if head := p.tokens[0]; head.kind != tokenStr {
-		return fmt.Errorf("expected family name, got %s", head)
-	} else {
+	for {
+		if len(p.tokens) == 0 {
+			return fmt.Errorf("expected family name, got EOF")
+		}
+		head := p.tokens[0]
+		if head.kind != tokenStr || head.value == "" {
+			return fmt.Errorf("expected family name, got %s", head)
+		}
 		p.faces = append(p.faces, head.value)
 		p.tokens = p.tokens[1:]
-	}
-
-	switch head := p.tokens[0]; head.kind {
-	case tokenEOF:
-		return nil
-	case tokenComma:
-		p.tokens = p.tokens[1:]
-		return p.parseList()
-	default:
-		return fmt.Errorf("unexpected token %s", head)
+		if len(p.tokens) == 0 {
+			return fmt.Errorf("expected comma or EOF, got EOF")
+		}
+		switch separator := p.tokens[0]; separator.kind {
+		case tokenEOF:
+			return nil
+		case tokenComma:
+			p.tokens = p.tokens[1:]
+		default:
+			return fmt.Errorf("unexpected token %s", separator)
+		}
 	}
 }
