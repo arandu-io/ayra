@@ -19,10 +19,10 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// ayraEnglish is a left to right locale, which is what the properties below
+// editorEnglish is a left to right locale, which is what the properties below
 // are stated in. Direction is not incidental here: which arrow key moves the
 // caret forward depends on it.
-var ayraEnglish = system.Locale{
+var editorEnglish = system.Locale{
 	Language:  "EN",
 	Direction: system.LTR,
 }
@@ -57,7 +57,7 @@ func newAyraField(t *testing.T, singleLine bool) *ayraField {
 	f.gtx = layout.Context{
 		Ops:         new(op.Ops),
 		Constraints: layout.Exact(image.Pt(200, 100)),
-		Locale:      ayraEnglish,
+		Locale:      editorEnglish,
 		Source:      f.router.Source(),
 	}
 	f.gtx.Execute(key.FocusCmd{Tag: f.editor})

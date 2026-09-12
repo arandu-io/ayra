@@ -14,7 +14,7 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-var ayraEnglish = system.Locale{Language: "EN", Direction: system.LTR}
+var indexEnglish = system.Locale{Language: "EN", Direction: system.LTR}
 
 var ayraArabic = system.Locale{Language: "AR", Direction: system.RTL}
 
@@ -75,7 +75,7 @@ func TestIndexSearchIsMonotonic(t *testing.T) {
 		"the quick brown fox",
 		strings.Repeat("é", 12),
 	} {
-		index := ayraIndex(t, source, 16, 400, ayraEnglish)
+		index := ayraIndex(t, source, 16, 400, indexEnglish)
 		if len(index.lines) != 1 {
 			t.Fatalf("%q was expected to fit on one line, got %d", source, len(index.lines))
 		}
@@ -103,7 +103,7 @@ func TestIndexPositionRoundTripsThroughRegion(t *testing.T) {
 		"the quick brown fox jumps over the lazy dog and keeps going",
 		"one\ntwo\nthree",
 	} {
-		index := ayraIndex(t, source, 16, 200, ayraEnglish)
+		index := ayraIndex(t, source, 16, 200, indexEnglish)
 		runes := len([]rune(strings.ReplaceAll(source, "\n", "\n")))
 		for r := 0; r <= runes; r++ {
 			pos, _ := index.closestToRune(r)
@@ -134,7 +134,7 @@ func TestIndexPositionRoundTripsThroughRegion(t *testing.T) {
 // the last, and there is no third outcome.
 func TestIndexClampsClicksOutsideTheText(t *testing.T) {
 	source := "the quick brown fox jumps over the lazy dog"
-	index := ayraIndex(t, source, 16, 200, ayraEnglish)
+	index := ayraIndex(t, source, 16, 200, indexEnglish)
 	last := index.positions[len(index.positions)-1]
 	first := index.positions[0]
 
@@ -222,7 +222,7 @@ func TestIndexCountsRunesNotGlyphs(t *testing.T) {
 		locale    system.Locale
 		monotonic bool
 	}{
-		{name: "combining marks", source: strings.Repeat("é", 10), locale: ayraEnglish, monotonic: true},
+		{name: "combining marks", source: strings.Repeat("é", 10), locale: indexEnglish, monotonic: true},
 		{name: "arabic ligatures", source: strings.Repeat("لا", 8), locale: ayraArabic},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestIndexCountsRunesNotGlyphs(t *testing.T) {
 // at the end of a line lands inside it.
 func TestIndexEndOfLineIsFoundByPositionNotByRune(t *testing.T) {
 	source := "The quick سماء שלום لا fox تمط שלום غير the lazy dog."
-	index := ayraIndex(t, source, 16, 400, ayraEnglish)
+	index := ayraIndex(t, source, 16, 400, indexEnglish)
 
 	if len(index.positions) <= index.positions[len(index.positions)-1].runes+1 {
 		t.Fatalf("the sample no longer holds more positions than runes: %d positions, %d runes",
@@ -303,7 +303,7 @@ func TestIndexEndOfLineIsFoundByPositionNotByRune(t *testing.T) {
 // long enough to wrap.
 func TestIndexLocatesRegionsInsideTheViewport(t *testing.T) {
 	source := "the quick brown fox jumps over the lazy dog and keeps going for a while"
-	index := ayraIndex(t, source, 16, 200, ayraEnglish)
+	index := ayraIndex(t, source, 16, 200, indexEnglish)
 	if len(index.lines) < 3 {
 		t.Fatalf("the sample was expected to wrap, got %d lines", len(index.lines))
 	}
