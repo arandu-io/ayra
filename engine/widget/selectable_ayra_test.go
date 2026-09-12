@@ -260,6 +260,35 @@ func TestSelectableTouchTapMovesTheCaret(t *testing.T) {
 	}
 }
 
+func TestSelectableTouchJitterRemainsATap(t *testing.T) {
+	f := newSelectableFixture(t, "alpha beta gamma")
+	f.s.SetCaret(0, 5)
+	target := f.at(12)
+	jitter := f32.Pt(target.X, target.Y+1)
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Press, Source: pointer.Touch, PointerID: 7,
+		Time: f.now, Position: target,
+	})
+	f.frame()
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Move, Source: pointer.Touch, PointerID: 7,
+		Time: f.now + 10*time.Millisecond, Position: jitter,
+	})
+	f.frame()
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Release, Source: pointer.Touch, PointerID: 7,
+		Time: f.now + 20*time.Millisecond, Position: jitter,
+	})
+	f.frame()
+
+	if start, end := f.s.Selection(); start != 12 || end != 12 {
+		t.Errorf("a touch with sub-slop jitter ended at [%d,%d), want [12,12)", start, end)
+	}
+	if !f.s.Focused() {
+		t.Error("a touch with sub-slop jitter did not focus the selectable")
+	}
+}
+
 // A touch that moves belongs to the enclosing scroller, not to a read-only
 // selector that only implements mouse dragging. It must neither change the
 // selection nor grab the pointer and cancel the enclosing handler.

@@ -83,6 +83,7 @@ type Selectable struct {
 	touchDown     bool
 	touchMoved    bool
 	touchID       pointer.ID
+	touchStart    f32.Point
 	touchClicks   int
 	lastTouchTime time.Duration
 }
@@ -255,7 +256,7 @@ func (s *Selectable) processPointer(gtx layout.Context) {
 			continue
 		}
 		if evt.Source == pointer.Touch {
-			focus = s.handleTouch(evt) || focus
+			focus = s.handleTouch(gtx.Metric, evt) || focus
 			continue
 		}
 		if evt.Source != pointer.Mouse {
@@ -274,7 +275,7 @@ func (s *Selectable) processPointer(gtx layout.Context) {
 
 const (
 	multiClickInterval = 200 * time.Millisecond
-	mouseDragSlop      = unit.Dp(3)
+	pointerDragSlop    = unit.Dp(3)
 )
 
 func nextClick(count *int, last *time.Duration, now time.Duration) int {
@@ -285,6 +286,12 @@ func nextClick(count *int, last *time.Duration, now time.Duration) int {
 	}
 	*last = now
 	return *count
+}
+
+func movedPastDragSlop(metric unit.Metric, start, end f32.Point) bool {
+	delta := end.Sub(start)
+	slop := metric.Dp(pointerDragSlop)
+	return delta.X*delta.X+delta.Y*delta.Y > float32(slop*slop)
 }
 
 func (s *Selectable) handlePress(evt pointer.Event) bool {
@@ -334,9 +341,7 @@ func (s *Selectable) handleDrag(gtx layout.Context, evt pointer.Event) {
 		return
 	}
 	if !s.pointerGrab && evt.Priority < pointer.Grabbed {
-		delta := evt.Position.Sub(s.pointerStart)
-		slop := gtx.Metric.Dp(mouseDragSlop)
-		if delta.X*delta.X+delta.Y*delta.Y > float32(slop*slop) {
+		if movedPastDragSlop(gtx.Metric, s.pointerStart, evt.Position) {
 			gtx.Execute(pointer.GrabCmd{Tag: s, ID: evt.PointerID})
 			s.pointerGrab = true
 		}
@@ -356,7 +361,7 @@ func (s *Selectable) handleRelease(evt pointer.Event) {
 	s.dragging = false
 }
 
-func (s *Selectable) handleTouch(evt pointer.Event) bool {
+func (s *Selectable) handleTouch(metric unit.Metric, evt pointer.Event) bool {
 	switch evt.Kind {
 	case pointer.Press:
 		if s.touchDown {
@@ -365,13 +370,16 @@ func (s *Selectable) handleTouch(evt pointer.Event) bool {
 		s.touchDown = true
 		s.touchMoved = false
 		s.touchID = evt.PointerID
+		s.touchStart = evt.Position
 		nextClick(&s.touchClicks, &s.lastTouchTime, evt.Time)
 	case pointer.Drag:
 		if !s.touchDown || evt.PointerID != s.touchID {
 			return false
 		}
-		s.touchMoved = true
-		s.touchClicks = 0
+		if movedPastDragSlop(metric, s.touchStart, evt.Position) {
+			s.touchMoved = true
+			s.touchClicks = 0
+		}
 	case pointer.Release:
 		if !s.touchDown || evt.PointerID != s.touchID {
 			return false
