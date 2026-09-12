@@ -35,12 +35,12 @@ const original = "gioui.org@v0.10.2"
 // ceiling. It may fall -- that is the work -- and a rise fails, which is what
 // stops the decision from being undone on an afternoon when something does not
 // compile.
-const stillTheirs = 105
+const stillTheirs = 74
 
 // comparable is how many files of the copy carry code and have a counterpart to
 // compare against. It is asserted so that a walk which stopped matching reports
 // a smaller universe instead of a smaller count, which would read as progress.
-const comparable = 137
+const comparable = 129
 
 // A file with no code in it is not counted, and leaving it in was a fault in
 // this measurement rather than a detail of it.
