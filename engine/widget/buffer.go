@@ -3,7 +3,6 @@ package widget
 import (
 	"errors"
 	"io"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -117,7 +116,7 @@ func (e *editBuffer) ReadAt(dst []byte, offset int64) (int, error) {
 
 func (e *editBuffer) ReplaceRunes(byteOffset, runeCount int64, replacement string) {
 	byteOffset = min(max(byteOffset, 0), e.Size())
-	replacement = strings.ToValidUTF8(replacement, "\uFFFD")
+	replacement = string([]rune(replacement))
 
 	e.deleteRunes(int(byteOffset), runeCount)
 	insertion := e.gapstart

@@ -191,7 +191,7 @@ func (e *textView) MoveLines(distance int, selAct selectionAction) {
 	pos := e.closestToLineCol(caret.lineCol.line+distance, 0)
 	pos, atEndOfLine := e.closestToXYGraphemes(x, pos.y)
 	if atEndOfLine && pos.runes > 0 {
-		pos.runes--
+		pos.runes = e.moveByGraphemes(pos.runes, -1)
 	}
 	e.caret.start = pos.runes
 	e.caret.xoff = x - pos.x

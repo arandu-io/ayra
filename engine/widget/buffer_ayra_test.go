@@ -2,7 +2,6 @@ package widget
 
 import (
 	"io"
-	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -264,13 +263,13 @@ func TestAByteOffsetIsNotARuneCount(t *testing.T) {
 // text that is drawn.
 func TestIllFormedTextIsRepairedOnTheWayIn(t *testing.T) {
 	var e editBuffer
-	bufferType(&e, 0, "a\xffb")
+	bufferType(&e, 0, "a\xff\xffb")
 
 	got := bufferText(t, &e)
 	if !utf8.ValidString(got) {
 		t.Fatalf("the buffer stored ill-formed text: %q", got)
 	}
-	if !strings.HasPrefix(got, "a") || !strings.HasSuffix(got, "b") {
-		t.Fatalf("repairing the text lost the good bytes around it: %q", got)
+	if want := "a\uFFFD\uFFFDb"; got != want {
+		t.Fatalf("repairing consecutive bad bytes produced %q, want %q", got, want)
 	}
 }

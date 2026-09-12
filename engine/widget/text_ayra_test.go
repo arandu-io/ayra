@@ -410,6 +410,47 @@ func TestScrollingIsClampedToTheTextThatExists(t *testing.T) {
 	})
 }
 
+// TestVerticalMovementStopsAtAGraphemeBoundary fixes the far edge of a soft
+// wrapped line. The index names that edge with the first position of the next
+// line; moving back from it must step over the whole preceding grapheme, not
+// subtract one rune and leave the caret between a base letter and its mark.
+func TestVerticalMovementStopsAtAGraphemeBoundary(t *testing.T) {
+	content := strings.Repeat("e\u0301", 20)
+	var (
+		view     *textView
+		boundary int
+		want     int
+	)
+	for width := 1; width <= 200 && view == nil; width++ {
+		candidate := ayraView(content, width)
+		for i := 0; i+1 < len(candidate.index.positions); i++ {
+			if !candidate.index.atEndOfLine(i) {
+				continue
+			}
+			nextLine := candidate.index.positions[i+1]
+			priorGrapheme := candidate.moveByGraphemes(nextLine.runes, -1)
+			if priorGrapheme < nextLine.runes-1 {
+				view = candidate
+				boundary = nextLine.runes
+				want = priorGrapheme
+				break
+			}
+		}
+	}
+	if view == nil {
+		t.Fatal("the bundled shaper produced no suitable wrapped grapheme")
+	}
+
+	view.caret.start = boundary
+	view.caret.end = boundary
+	view.caret.xoff = 1 << 20
+	view.MoveLines(-1, selectionClear)
+
+	if got, _ := view.Selection(); got != want {
+		t.Fatalf("vertical movement stopped at rune %d, want grapheme boundary %d", got, want)
+	}
+}
+
 // TestReplaceCarriesTheCaretWithTheTextAroundIt says an edit somewhere else in
 // the document does not move the caret through the text.
 //
