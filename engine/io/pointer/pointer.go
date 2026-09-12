@@ -1,6 +1,7 @@
 package pointer
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,299 +12,151 @@ import (
 	"github.com/arandu-io/ayra/engine/op"
 )
 
-// Event is a pointer event.
+// Event is one thing a pointer did.
+//
+// It is a single struct for every kind rather than a type per kind, because a
+// control switches on [Event.Kind] in one place and reads the two or three
+// fields that kind fills. Splitting it would replace that switch with a type
+// assertion per kind and change nothing else, and the fields a kind does not
+// fill are zero, which is the answer a control wants anyway: no buttons held is
+// no buttons.
 type Event struct {
-	Kind   Kind
+	// Kind is what happened. It is exactly one kind on a delivered event; the
+	// bitmask form is for [Filter.Kinds], which names a set.
+	Kind Kind
+	// Source says whether a mouse, a finger or a pen did it. A control reads
+	// it where the difference is real -- a hover no finger can perform, a
+	// target too small for one -- and ignores it everywhere else.
 	Source Source
-	// PointerID is the id for the pointer and can be used
-	// to track a particular pointer from Press to
-	// Release. Populated for Press, Release, Move, Drag,
-	// Enter, Leave, and Cancel; Scroll events are not
-	// bound to a tracked pointer and leave it zero.
+	// PointerID identifies one pointer from its Press to its Release, which is
+	// what makes more than one finger on a screen tractable: two touches are
+	// two ids, and a control tracking a drag follows the id it started with
+	// rather than the most recent event.
+	//
+	// It is filled for Press, Release, Move, Drag, Enter, Leave and Cancel.
+	// Scroll is not bound to a tracked pointer and leaves it zero.
 	PointerID ID
-	// Priority is the priority of the receiving handler
-	// for this event.
+	// Priority says whether this handler is alone in the set matched by the
+	// pointer, which is how a gesture that is still ambiguous is told apart
+	// from one that has been settled.
 	Priority Priority
-	// Time is when the event was received. The
-	// timestamp is relative to an undefined base.
+	// Time is when the event was received, measured from a base this package
+	// does not define. It is a duration rather than a wall clock because the
+	// only honest use of it is the difference between two events -- the gap
+	// that separates a click from a double click, the gap a long press has to
+	// exceed -- and a wall clock invites the one use that breaks, which is
+	// comparing it to now.
 	Time time.Duration
-	// Buttons are the set of pressed mouse buttons for this event.
+	// Buttons is the set of mouse buttons held down at this event, not the one
+	// that caused it. A second button pressed while the first is down reports
+	// both.
 	Buttons Buttons
-	// Position is the coordinates of the event in the local coordinate
-	// system of the receiving tag. The transformation from global window
-	// coordinates to local coordinates is performed by the inverse of
-	// the effective transformation of the tag.
+	// Position is where the pointer is, in the receiving control's own
+	// coordinates: whatever transforms were in effect where the control
+	// declared itself have been undone. A control compares it against its own
+	// size and never has to know where on the window it was drawn.
 	Position f32.Point
-	// Scroll is the scroll amount, if any.
+	// Scroll is how far this event asks to scroll, already clipped to the
+	// range the receiving filter declared.
 	Scroll f32.Point
-	// Modifiers is the set of active modifiers when
-	// the mouse button was pressed.
+	// Modifiers is the set of modifier keys held when the button was pressed.
 	Modifiers key.Modifiers
 }
 
-// PassOp sets the pass-through mode. InputOps added while the pass-through
-// mode is set don't block events to siblings.
-type PassOp struct{}
-
-// PassStack represents a PassOp on the pass stack.
-type PassStack struct {
-	ops     *ops.Ops
-	id      ops.StackID
-	macroID uint32
-}
-
-// Filter matches every [Event] that target the Tag and whose kind is
-// included in Kinds. Note that only tags specified in [event.Op] can
-// be targeted by pointer events.
-type Filter struct {
-	Target event.Tag
-	// Kinds is a bitwise-or of event types to match.
-	Kinds Kind
-	// ScrollX and ScrollY constrain the range of scrolling events delivered
-	// to Target. Specifically, any Event e delivered to Tag will satisfy
-	//
-	// ScrollX.Min <= e.Scroll.X <= ScrollX.Max (horizontal axis)
-	// ScrollY.Min <= e.Scroll.Y <= ScrollY.Max (vertical axis)
-	ScrollX ScrollRange
-	ScrollY ScrollRange
-}
-
-// ScrollRange describes the range of scrolling distances in an
-// axis.
-type ScrollRange struct {
-	Min, Max int
-}
-
-// GrabCmd requests a pointer grab on the pointer identified by ID.
-type GrabCmd struct {
-	Tag event.Tag
-	ID  ID
-}
-
+// ID identifies one pointer among several. Two fingers on a screen are two ids.
 type ID uint16
 
-// Kind of an Event.
+// Kind is what a pointer did, and in a [Filter] a set of those.
+//
+// The values are single bits so that a filter naming several reads as one
+// or-ed expression. A delivered [Event] carries exactly one of them.
 type Kind uint
 
-// Priority of an Event.
-type Priority uint8
-
-// Source of an Event.
-type Source uint8
-
-// Buttons is a set of mouse buttons
-type Buttons uint8
-
-// Cursor denotes a pre-defined cursor shape. Its Add method adds an
-// operation that sets the cursor shape for the current clip area.
-type Cursor byte
-
-// The cursors correspond to CSS pointer naming.
 const (
-	// CursorDefault is the default cursor.
-	CursorDefault Cursor = iota
-	// CursorNone hides the cursor. To show it again, use any other cursor.
-	CursorNone
-	// CursorText is for selecting and inserting text.
-	CursorText
-	// CursorVerticalText is for selecting and inserting vertical text.
-	CursorVerticalText
-	// CursorPointer is for a link.
-	// Usually displayed as a pointing hand.
-	CursorPointer
-	// CursorCrosshair is for a precise location.
-	CursorCrosshair
-	// CursorAllScroll is for indicating scrolling in all directions.
-	// Usually displayed as arrows to all four directions.
-	CursorAllScroll
-	// CursorColResize is for vertical resize.
-	// Usually displayed as a vertical bar with arrows pointing east and west.
-	CursorColResize
-	// CursorRowResize is for horizontal resize.
-	// Usually displayed as a horizontal bar with arrows pointing north and south.
-	CursorRowResize
-	// CursorGrab is for content that can be grabbed (dragged to be moved).
-	// Usually displayed as an open hand.
-	CursorGrab
-	// CursorGrabbing is for content that is being grabbed (dragged to be moved).
-	// Usually displayed as a closed hand.
-	CursorGrabbing
-	// CursorNotAllowed is shown when the request action cannot be carried out.
-	// Usually displayed as a circle with a line through.
-	CursorNotAllowed
-	// CursorWait is shown when the program is busy and user cannot interact.
-	// Usually displayed as a hourglass or the system equivalent.
-	CursorWait
-	// CursorProgress is shown when the program is busy, but the user can still interact.
-	// Usually displayed as a default cursor with a hourglass.
-	CursorProgress
-	// CursorNorthWestResize is for top-left corner resizing.
-	// Usually displayed as an arrow towards north-west.
-	CursorNorthWestResize
-	// CursorNorthEastResize is for top-right corner resizing.
-	// Usually displayed as an arrow towards north-east.
-	CursorNorthEastResize
-	// CursorSouthWestResize is for bottom-left corner resizing.
-	// Usually displayed as an arrow towards south-west.
-	CursorSouthWestResize
-	// CursorSouthEastResize is for bottom-right corner resizing.
-	// Usually displayed as an arrow towards south-east.
-	CursorSouthEastResize
-	// CursorNorthSouth is for top-bottom resizing.
-	// Usually displayed as a bi-directional arrow towards north-south.
-	CursorNorthSouthResize
-	// CursorEastWestResize is for left-right resizing.
-	// Usually displayed as a bi-directional arrow towards east-west.
-	CursorEastWestResize
-	// CursorWestResize is for left resizing.
-	// Usually displayed as an arrow towards west.
-	CursorWestResize
-	// CursorEastResize is for right resizing.
-	// Usually displayed as an arrow towards east.
-	CursorEastResize
-	// CursorNorthResize is for top resizing.
-	// Usually displayed as an arrow towards north.
-	CursorNorthResize
-	// CursorSouthResize is for bottom resizing.
-	// Usually displayed as an arrow towards south.
-	CursorSouthResize
-	// CursorNorthEastSouthWestResize is for top-right to bottom-left diagonal resizing.
-	// Usually displayed as a double ended arrow on the corresponding diagonal.
-	CursorNorthEastSouthWestResize
-	// CursorNorthWestSouthEastResize is for top-left to bottom-right diagonal resizing.
-	// Usually displayed as a double ended arrow on the corresponding diagonal.
-	CursorNorthWestSouthEastResize
-)
-
-const (
-	// A Cancel event is generated when the current gesture is
-	// interrupted by other handlers or the system.
+	// Cancel says a gesture in progress will not complete: another handler
+	// grabbed the pointer, or the system took it. It is the event that undoes
+	// whatever a handler did in anticipation -- a highlight, a half-drawn
+	// selection -- and a handler that ignores it is one that leaves a button
+	// lit after the press went elsewhere.
 	Cancel Kind = 1 << iota
 	// Press of a pointer.
 	Press
 	// Release of a pointer.
 	Release
-	// Move of a pointer.
+	// Move of a pointer that is not pressed.
 	Move
-	// Drag of a pointer.
+	// Drag of a pointer that is pressed. It is separate from Move so that a
+	// control need not track pressedness to tell them apart.
 	Drag
-	// Pointer enters an area watching for pointer input
+	// Enter is the pointer arriving over the area.
 	Enter
-	// Pointer leaves an area watching for pointer input
+	// Leave is the pointer departing the area, and it also arrives when the
+	// pointer is taken away without moving -- a window losing focus, a finger
+	// lifted. A hover drawn on Enter is undone here.
 	Leave
-	// Scroll of a pointer.
+	// Scroll of a pointer, delivered by position rather than to a tracked
+	// pointer.
 	Scroll
 )
+
+// kindNames is the text of each kind, in the order of the bits above.
+var kindNames = [...]string{
+	"Cancel",
+	"Press",
+	"Release",
+	"Move",
+	"Drag",
+	"Enter",
+	"Leave",
+	"Scroll",
+}
+
+// String names the kinds in the set, low bit first, joined by a pipe.
+//
+// The order is the order of the bits and not the order they were written in, so
+// two filters asking for the same kinds read the same and the text is worth
+// comparing.
+//
+// A value carrying a bit this package does not name still answers, and says the
+// number. The only moment any of these is read is a moment when something is
+// already wrong -- a comparison that failed, a log line about an event that
+// should not have arrived -- and a String that panicked there would replace the
+// value that was wrong with a stack trace from the code printing it.
+func (k Kind) String() string {
+	var text strings.Builder
+	rest := k
+	for i, name := range kindNames {
+		bit := Kind(1) << i
+		if k&bit == 0 {
+			continue
+		}
+		rest &^= bit
+		if text.Len() > 0 {
+			text.WriteByte('|')
+		}
+		text.WriteString(name)
+	}
+	if rest != 0 || k == 0 {
+		if text.Len() > 0 {
+			text.WriteByte('|')
+		}
+		text.WriteString("Kind(0x" + strconv.FormatUint(uint64(rest), 16) + ")")
+	}
+	return text.String()
+}
+
+// Source is what performed the event.
+type Source uint8
 
 const (
 	// Mouse generated event.
 	Mouse Source = iota
-	// Touch generated event.
+	// Touch generated event, from a finger or a pen.
 	Touch
 )
 
-const (
-	// Shared priority is for handlers that
-	// are part of a matching set larger than 1.
-	Shared Priority = iota
-	// Grabbed is used for matching sets of size 1.
-	Grabbed
-)
-
-const (
-	// ButtonPrimary is the primary button, usually the left button for a
-	// right-handed user.
-	ButtonPrimary Buttons = 1 << iota
-	// ButtonSecondary is the secondary button, usually the right button for a
-	// right-handed user.
-	ButtonSecondary
-	// ButtonTertiary is the tertiary button, usually the middle button.
-	ButtonTertiary
-	// ButtonQuaternary is the fourth button, usually used for browser
-	// navigation (backward)
-	ButtonQuaternary
-	// ButtonQuinary is the fifth button, usually used for browser
-	// navigation (forward)
-	ButtonQuinary
-)
-
-func (s ScrollRange) Union(s2 ScrollRange) ScrollRange {
-	return ScrollRange{
-		Min: min(s.Min, s2.Min),
-		Max: max(s.Max, s2.Max),
-	}
-}
-
-// Push the current pass mode to the pass stack and set the pass mode.
-func (p PassOp) Push(o *op.Ops) PassStack {
-	id, mid := ops.PushOp(&o.Internal, ops.PassStack)
-	data := ops.Write(&o.Internal, ops.TypePassLen)
-	data[0] = byte(ops.TypePass)
-	return PassStack{ops: &o.Internal, id: id, macroID: mid}
-}
-
-func (p PassStack) Pop() {
-	ops.PopOp(p.ops, ops.PassStack, p.id, p.macroID)
-	data := ops.Write(p.ops, ops.TypePopPassLen)
-	data[0] = byte(ops.TypePopPass)
-}
-
-func (op Cursor) Add(o *op.Ops) {
-	data := ops.Write(&o.Internal, ops.TypeCursorLen)
-	data[0] = byte(ops.TypeCursor)
-	data[1] = byte(op)
-}
-
-func (t Kind) String() string {
-	if t == Cancel {
-		return "Cancel"
-	}
-	var buf strings.Builder
-	for tt := Kind(1); tt > 0; tt <<= 1 {
-		if t&tt > 0 {
-			if buf.Len() > 0 {
-				buf.WriteByte('|')
-			}
-			buf.WriteString((t & tt).string())
-		}
-	}
-	return buf.String()
-}
-
-func (t Kind) string() string {
-	switch t {
-	case Press:
-		return "Press"
-	case Release:
-		return "Release"
-	case Cancel:
-		return "Cancel"
-	case Move:
-		return "Move"
-	case Drag:
-		return "Drag"
-	case Enter:
-		return "Enter"
-	case Leave:
-		return "Leave"
-	case Scroll:
-		return "Scroll"
-	default:
-		panic("unknown Type")
-	}
-}
-
-func (p Priority) String() string {
-	switch p {
-	case Shared:
-		return "Shared"
-	case Grabbed:
-		return "Grabbed"
-	default:
-		panic("unknown priority")
-	}
-}
-
+// String names the source, or says the number of one this package does not
+// name.
 func (s Source) String() string {
 	switch s {
 	case Mouse:
@@ -311,97 +164,206 @@ func (s Source) String() string {
 	case Touch:
 		return "Touch"
 	default:
-		panic("unknown source")
+		return "Source(" + strconv.FormatUint(uint64(s), 10) + ")"
 	}
 }
 
-// Contain reports whether the set b contains
-// all of the buttons.
+// Priority tells a handler whether the pointer is still ambiguous.
+type Priority uint8
+
+const (
+	// Shared is for a handler in a matching set larger than one: the gesture
+	// could still turn out to belong to another handler, and anything done now
+	// has to be undoable on a Cancel.
+	Shared Priority = iota
+	// Grabbed is for a handler that is alone in the set. Nothing else will
+	// claim this pointer.
+	Grabbed
+)
+
+// String names the priority, or says the number of one this package does not
+// name.
+func (p Priority) String() string {
+	switch p {
+	case Shared:
+		return "Shared"
+	case Grabbed:
+		return "Grabbed"
+	default:
+		return "Priority(" + strconv.FormatUint(uint64(p), 10) + ")"
+	}
+}
+
+// Buttons is a set of mouse buttons, not one of them.
+//
+// A set rather than a single value because more than one can be down at once,
+// and because [Event.Buttons] reports what is held rather than what changed:
+// a press of the second button while the first is down reports both.
+type Buttons uint8
+
+const (
+	// ButtonPrimary is the primary button, the left one under a right hand.
+	// It is named by role and not by side because the two swap.
+	ButtonPrimary Buttons = 1 << iota
+	// ButtonSecondary is the secondary button, the right one under a right
+	// hand, and the one that opens a context menu.
+	ButtonSecondary
+	// ButtonTertiary is the tertiary button, usually the wheel pressed down.
+	ButtonTertiary
+	// ButtonQuaternary is the fourth button, usually meaning backward.
+	ButtonQuaternary
+	// ButtonQuinary is the fifth button, usually meaning forward.
+	ButtonQuinary
+)
+
+// buttonNames is the text of each button, in the order of the bits above.
+var buttonNames = [...]string{
+	"ButtonPrimary",
+	"ButtonSecondary",
+	"ButtonTertiary",
+	"ButtonQuaternary",
+	"ButtonQuinary",
+}
+
+// Contain reports whether every button of the argument is in the set.
+//
+// It is all-of, not any-of. Nothing is asked of an empty argument, so every set
+// contains one -- including the empty set. A caller that wants any-of is asking
+// a different question and has to write it, which is the reason this one is
+// spelled out here rather than left to the reader of a bitwise and.
 func (b Buttons) Contain(buttons Buttons) bool {
 	return b&buttons == buttons
 }
 
+// String names the buttons in the set, low bit first, joined by a pipe. An
+// empty set, and a set carrying a bit this package does not name, say the
+// number for the reason given on [Kind.String].
 func (b Buttons) String() string {
-	var strs []string
-	if b.Contain(ButtonPrimary) {
-		strs = append(strs, "ButtonPrimary")
+	var text strings.Builder
+	rest := b
+	for i, name := range buttonNames {
+		bit := Buttons(1) << i
+		if b&bit == 0 {
+			continue
+		}
+		rest &^= bit
+		if text.Len() > 0 {
+			text.WriteByte('|')
+		}
+		text.WriteString(name)
 	}
-	if b.Contain(ButtonSecondary) {
-		strs = append(strs, "ButtonSecondary")
+	if rest != 0 || b == 0 {
+		if text.Len() > 0 {
+			text.WriteByte('|')
+		}
+		text.WriteString("Buttons(0x" + strconv.FormatUint(uint64(rest), 16) + ")")
 	}
-	if b.Contain(ButtonTertiary) {
-		strs = append(strs, "ButtonTertiary")
-	}
-	if b.Contain(ButtonQuaternary) {
-		strs = append(strs, "ButtonQuaternary")
-	}
-	if b.Contain(ButtonQuinary) {
-		strs = append(strs, "ButtonQuinary")
-	}
-	return strings.Join(strs, "|")
+	return text.String()
 }
 
-func (c Cursor) String() string {
-	switch c {
-	case CursorDefault:
-		return "Default"
-	case CursorNone:
-		return "None"
-	case CursorText:
-		return "Text"
-	case CursorVerticalText:
-		return "VerticalText"
-	case CursorPointer:
-		return "Pointer"
-	case CursorCrosshair:
-		return "Crosshair"
-	case CursorAllScroll:
-		return "AllScroll"
-	case CursorColResize:
-		return "ColResize"
-	case CursorRowResize:
-		return "RowResize"
-	case CursorGrab:
-		return "Grab"
-	case CursorGrabbing:
-		return "Grabbing"
-	case CursorNotAllowed:
-		return "NotAllowed"
-	case CursorWait:
-		return "Wait"
-	case CursorProgress:
-		return "Progress"
-	case CursorNorthWestResize:
-		return "NorthWestResize"
-	case CursorNorthEastResize:
-		return "NorthEastResize"
-	case CursorSouthWestResize:
-		return "SouthWestResize"
-	case CursorSouthEastResize:
-		return "SouthEastResize"
-	case CursorNorthSouthResize:
-		return "NorthSouthResize"
-	case CursorEastWestResize:
-		return "EastWestResize"
-	case CursorWestResize:
-		return "WestResize"
-	case CursorEastResize:
-		return "EastResize"
-	case CursorNorthResize:
-		return "NorthResize"
-	case CursorSouthResize:
-		return "SouthResize"
-	case CursorNorthEastSouthWestResize:
-		return "NorthEastSouthWestResize"
-	case CursorNorthWestSouthEastResize:
-		return "NorthWestSouthEastResize"
-	default:
-		panic("unknown Type")
-	}
+// Filter is what a control asks for.
+//
+// Only a tag declared with event.Op can be targeted: the declaration is what
+// puts the tag in a hit area, and a filter naming a tag that was never declared
+// matches nothing rather than matching everywhere.
+type Filter struct {
+	// Target is the tag declared with event.Op.
+	Target event.Tag
+	// Kinds is the set of kinds to match, or-ed together. A zero set matches
+	// nothing, which is what a control that wants no pointer events should
+	// have -- by not asking.
+	Kinds Kind
+	// ScrollX and ScrollY are how much of a scroll this control can use, per
+	// axis. Every [Scroll] event delivered to Target satisfies
+	//
+	//	ScrollX.Min <= e.Scroll.X <= ScrollX.Max
+	//	ScrollY.Min <= e.Scroll.Y <= ScrollY.Max
+	//
+	// and what is left over is offered to the next control under the pointer.
+	// That is what makes a list inside a list behave: the inner one takes what
+	// it can until it reaches its end, and the remainder moves the outer one
+	// instead of being lost.
+	//
+	// Both are zero by default, so a control that asks for Scroll without
+	// setting them receives events carrying no distance. A control that
+	// scrolls has to say how far it can go.
+	ScrollX ScrollRange
+	ScrollY ScrollRange
 }
 
+// ImplementsFilter marks Filter as an event filter.
+func (Filter) ImplementsFilter() {}
+
+// ImplementsEvent marks Event as an event.
 func (Event) ImplementsEvent() {}
 
+// ScrollRange is how far a control can scroll in one axis, as a distance it
+// will accept rather than a position it is at.
+//
+// Min is negative and Max positive for a control that can go both ways; a
+// control already at its top leaves Min at zero and is offered nothing
+// upward, which is what hands the gesture to whatever encloses it.
+type ScrollRange struct {
+	Min, Max int
+}
+
+// Union is the range that accepts what either range accepts.
+//
+// It is what merges the filters of one tag that asked more than once in a
+// frame. The result is the widest of the two rather than the narrowest,
+// because two asks from the same control are two things it is willing to do,
+// and an intersection would let the second silently cancel the first.
+func (s ScrollRange) Union(s2 ScrollRange) ScrollRange {
+	return ScrollRange{
+		Min: min(s.Min, s2.Min),
+		Max: max(s.Max, s2.Max),
+	}
+}
+
+// GrabCmd claims a pointer for one handler.
+//
+// Every other handler that matched the pointer is sent a [Cancel] and stops
+// receiving it, and the claim holds until the grabbing handler stops being
+// declared. It is how a gesture that was ambiguous gets settled: a drag that
+// has travelled far enough to no longer be a tap grabs, and the tap handler is
+// told to undo what it had drawn.
+//
+// The claim is refused unless ID names a pressed pointer and Tag is among the
+// handlers it matched. A handler cannot grab a pointer that was never over it.
+type GrabCmd struct {
+	Tag event.Tag
+	ID  ID
+}
+
+// ImplementsCommand marks GrabCmd as a command.
 func (GrabCmd) ImplementsCommand() {}
 
-func (Filter) ImplementsFilter() {}
+// PassOp marks the handlers declared inside it as pass-through: they receive
+// the event without stopping it reaching what is behind them.
+//
+// It is for an overlay whose hit area is deliberately larger than its ink --
+// the edge strip that opens a drawer covers a band of the interface, and the
+// interface underneath has to keep working while the drawer is shut.
+type PassOp struct{}
+
+// PassStack is a pushed [PassOp], and is popped to end its scope.
+type PassStack struct {
+	ops     *ops.Ops
+	id      ops.StackID
+	macroID uint32
+}
+
+// Push begins a pass-through scope, and returns the stack entry that ends it.
+func (p PassOp) Push(o *op.Ops) PassStack {
+	id, mid := ops.PushOp(&o.Internal, ops.PassStack)
+	data := ops.Write(&o.Internal, ops.TypePassLen)
+	data[0] = byte(ops.TypePass)
+	return PassStack{ops: &o.Internal, id: id, macroID: mid}
+}
+
+// Pop ends the scope begun by Push, restoring the pass mode that was in effect.
+func (p PassStack) Pop() {
+	ops.PopOp(p.ops, ops.PassStack, p.id, p.macroID)
+	data := ops.Write(p.ops, ops.TypePopPassLen)
+	data[0] = byte(ops.TypePopPass)
+}
