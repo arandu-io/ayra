@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-text/typesetting/di"
 	"github.com/go-text/typesetting/font"
-	gotextot "github.com/go-text/typesetting/font/opentype"
+	typeface "github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/language"
 	"github.com/go-text/typesetting/shaping"
@@ -19,7 +19,7 @@ import (
 	"golang.org/x/text/unicode/bidi"
 
 	"github.com/arandu-io/ayra/engine/f32"
-	giofont "github.com/arandu-io/ayra/engine/font"
+	enginefont "github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/font/opentype"
 	"github.com/arandu-io/ayra/engine/internal/debug"
 	"github.com/arandu-io/ayra/engine/io/system"
@@ -28,8 +28,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 )
 
-// document holds a collection of shaped lines and alignment information for
-// those lines.
+// document is a shaped block of text and the width its lines align within.
 type document struct {
 	lines     []line
 	alignment Alignment
@@ -38,8 +37,7 @@ type document struct {
 	unreadRuneCount int
 }
 
-// append adds the lines of other to the end of l and ensures they
-// are aligned to the same width.
+// append joins another paragraph and recomputes every vertical position.
 func (l *document) append(other document) {
 	l.lines = append(l.lines, other.lines...)
 	l.alignWidth = max(l.alignWidth, other.alignWidth)
@@ -129,7 +127,7 @@ func (l *line) setTruncatedCount(truncatedCount int) {
 		if i == finalGlyphIdx {
 			l.runs[finalRunIdx].Glyphs[finalGlyphIdx].runeCount = truncatedCount
 		} else {
-			l.runs[finalRunIdx].Glyphs[finalGlyphIdx].runeCount = 0
+			l.runs[finalRunIdx].Glyphs[i].runeCount = 0
 		}
 	}
 }
@@ -202,7 +200,7 @@ type shaperImpl struct {
 	fontMap      *fontscan.FontMap
 	faces        []*font.Face
 	faceToIndex  map[*font.Font]int
-	faceMeta     []giofont.Font
+	faceMeta     []enginefont.Font
 	defaultFaces []string
 	logger       interface {
 		Printf(format string, args ...any)
@@ -272,7 +270,7 @@ func (s *shaperImpl) Load(f FontFace) {
 	s.addFace(face, f.Font)
 }
 
-func (s *shaperImpl) addFace(f *font.Face, md giofont.Font) {
+func (s *shaperImpl) addFace(f *font.Face, md enginefont.Font) {
 	if _, ok := s.faceToIndex[f.Font]; ok {
 		return
 	}
@@ -424,46 +422,44 @@ func (s *shaperImpl) shapeText(ppem fixed.Int26_6, lc system.Locale, txt []rune)
 		if input.Face != nil {
 			s.outScratchBuf = append(s.outScratchBuf, s.shaper.Shape(input))
 		} else {
-			s.outScratchBuf = append(s.outScratchBuf, shaping.Output{
-				// Use the text size as the advance of the entire fake run so that
-				// it doesn't occupy zero space.
-				Advance: input.Size,
-				Size:    input.Size,
-				Glyphs: []shaping.Glyph{
-					{
-						Width:        input.Size,
-						Height:       input.Size,
-						XBearing:     0,
-						YBearing:     0,
-						Advance:      input.Size,
-						XOffset:      0,
-						YOffset:      0,
-						ClusterIndex: input.RunStart,
-						RuneCount:    input.RunEnd - input.RunStart,
-						GlyphCount:   1,
-						GlyphID:      0,
-						Mask:         0,
-					},
-				},
-				LineBounds: shaping.Bounds{
-					Ascent:  input.Size,
-					Descent: 0,
-					Gap:     0,
-				},
-				GlyphBounds: shaping.Bounds{
-					Ascent:  input.Size,
-					Descent: 0,
-					Gap:     0,
-				},
-				Direction: input.Direction,
-				Runes: shaping.Range{
-					Offset: input.RunStart,
-					Count:  input.RunEnd - input.RunStart,
-				},
-			})
+			s.outScratchBuf = append(s.outScratchBuf, missingFaceOutput(input))
 		}
 	}
 	return s.outScratchBuf
+}
+
+// missingFaceOutput makes absent glyph coverage visible without making empty
+// text occupy space. The line metrics remain available in both cases so an
+// empty editor can still size its caret.
+func missingFaceOutput(input shaping.Input) shaping.Output {
+	runeCount := input.RunEnd - input.RunStart
+	advance := input.Size
+	var glyphs []shaping.Glyph
+	if runeCount == 0 {
+		advance = 0
+	} else {
+		glyphs = []shaping.Glyph{{
+			Width:        input.Size,
+			Height:       input.Size,
+			Advance:      input.Size,
+			ClusterIndex: input.RunStart,
+			RuneCount:    runeCount,
+			GlyphCount:   1,
+		}}
+	}
+	metrics := shaping.Bounds{Ascent: input.Size}
+	return shaping.Output{
+		Advance:     advance,
+		Size:        input.Size,
+		Glyphs:      glyphs,
+		LineBounds:  metrics,
+		GlyphBounds: metrics,
+		Direction:   input.Direction,
+		Runes: shaping.Range{
+			Offset: input.RunStart,
+			Count:  runeCount,
+		},
+	}
 }
 
 func wrapPolicyToGoText(p WrapPolicy) shaping.LineBreakPolicy {
@@ -536,12 +532,12 @@ func replaceControlCharacters(in []rune) []rune {
 	return in
 }
 
-// Layout shapes and wraps the text, and returns the result in Gio's shaped text format.
+// LayoutString shapes and wraps a string.
 func (s *shaperImpl) LayoutString(params Parameters, txt string) document {
 	return s.LayoutRunes(params, []rune(txt))
 }
 
-// Layout shapes and wraps the text, and returns the result in Gio's shaped text format.
+// Layout shapes and wraps text from a rune reader.
 func (s *shaperImpl) Layout(params Parameters, txt io.RuneReader) document {
 	s.scratchRunes = s.scratchRunes[:0]
 	for r, _, err := txt.ReadRune(); err != nil; r, _, err = txt.ReadRune() {
@@ -565,7 +561,7 @@ func calculateYOffsets(lines []line) {
 	}
 }
 
-// LayoutRunes shapes and wraps the text, and returns the result in Gio's shaped text format.
+// LayoutRunes shapes and wraps runes without converting them through bytes.
 func (s *shaperImpl) LayoutRunes(params Parameters, txt []rune) document {
 	hasNewline := len(txt) > 0 && txt[len(txt)-1] == '\n'
 	var ls []shaping.Line
@@ -677,9 +673,9 @@ func (s *shaperImpl) Shape(pathOps *op.Ops, gs []Glyph) clip.PathSpec {
 		for _, fseg := range outline.Segments {
 			nargs := 1
 			switch fseg.Op {
-			case gotextot.SegmentOpQuadTo:
+			case typeface.SegmentOpQuadTo:
 				nargs = 2
-			case gotextot.SegmentOpCubeTo:
+			case typeface.SegmentOpCubeTo:
 				nargs = 3
 			}
 			var args [3]f32.Point
@@ -694,13 +690,13 @@ func (s *shaperImpl) Shape(pathOps *op.Ops, gs []Glyph) clip.PathSpec {
 				}
 			}
 			switch fseg.Op {
-			case gotextot.SegmentOpMoveTo:
+			case typeface.SegmentOpMoveTo:
 				builder.Move(args[0])
-			case gotextot.SegmentOpLineTo:
+			case typeface.SegmentOpLineTo:
 				builder.Line(args[0])
-			case gotextot.SegmentOpQuadTo:
+			case typeface.SegmentOpQuadTo:
 				builder.Quad(args[0], args[1])
-			case gotextot.SegmentOpCubeTo:
+			case typeface.SegmentOpCubeTo:
 				builder.Cube(args[0], args[1], args[2])
 			default:
 				panic("unsupported segment op")
@@ -838,13 +834,12 @@ func unmapDirection(d di.Direction) system.TextDirection {
 	return system.LTR
 }
 
-// toGioGlyphs converts text shaper glyphs into the minimal representation
-// that Gio needs.
-func toGioGlyphs(in []shaping.Glyph, ppem fixed.Int26_6, faceIdx int) []glyph {
+// convertGlyphs keeps only the measurements the drawing path consumes.
+func convertGlyphs(in []shaping.Glyph, ppem fixed.Int26_6, faceIdx int) []glyph {
 	out := make([]glyph, 0, len(in))
 	for _, g := range in {
-		// To better understand how to calculate the bounding box, see here:
-		// https://freetype.org/freetype2/docs/glyphs/glyph-metrics-3.svg
+		// Bearings locate the glyph from the pen; width and height extend from
+		// that point, with vertical coordinates inverted into screen space.
 		var bounds fixed.Rectangle26_6
 		bounds.Min.X = g.XBearing
 		bounds.Min.Y = -g.YBearing
@@ -884,7 +879,7 @@ func toLine(faceToIndex map[*font.Font]int, o shaping.Line, dir system.TextDirec
 			font = run.Face.Font
 		}
 		line.runs[i] = runLayout{
-			Glyphs: toGioGlyphs(run.Glyphs, run.Size, faceToIndex[font]),
+			Glyphs: convertGlyphs(run.Glyphs, run.Size, faceToIndex[font]),
 			Runes: Range{
 				Count:  run.Runes.Count,
 				Offset: line.runeCount,

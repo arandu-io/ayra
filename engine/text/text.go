@@ -24,7 +24,7 @@ func (a Alignment) String() string {
 	case Middle:
 		return "Middle"
 	default:
-		panic("invalid Alignment")
+		return fmt.Sprintf("Alignment(%d)", uint8(a))
 	}
 }
 
@@ -49,6 +49,6 @@ func (a Alignment) Align(dir system.TextDirection, width fixed.Int26_6, maxWidth
 	case Start:
 		return 0
 	default:
-		panic(fmt.Errorf("unknown alignment %v", a))
+		return 0
 	}
 }

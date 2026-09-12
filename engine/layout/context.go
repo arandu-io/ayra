@@ -9,42 +9,45 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// Context carries the state needed by almost all layouts and widgets.
-// A zero value Context never returns events, map units to pixels
-// with a scale of 1.0, and returns the zero time from Now.
+// Context is the per-frame state a widget uses to measure, draw and receive
+// input.
+//
+// Its zero value has no events or operation list, uses a one-to-one display
+// metric and carries the zero time.
 type Context struct {
-	// Constraints track the constraints for the active widget or
-	// layout.
+	// Constraints are the minimum and maximum size of the active widget.
 	Constraints Constraints
 
+	// Metric converts logical lengths and text sizes to device pixels.
 	Metric unit.Metric
-	// Now is the animation time.
+	// Now is the time represented by the current frame.
 	Now time.Time
 
-	// Locale provides information on the system's language preferences.
+	// Locale describes the system's language preferences.
 	// BUG(whereswaldon): this field is not currently populated automatically.
 	// Interested users must look up and populate these values manually.
 	Locale system.Locale
 
-	// Values is a map of program global data associated with the context.
-	// It is not for use by widgets.
+	// Values carries application-wide data. Widgets should not use it for their
+	// own state.
 	Values map[string]any
 
 	input.Source
 	*op.Ops
 }
 
-// Dp converts v to pixels.
+// Dp converts a device-independent length to whole device pixels.
 func (c Context) Dp(v unit.Dp) int {
 	return c.Metric.Dp(v)
 }
 
-// Sp converts v to pixels.
+// Sp converts a scaled text size to whole device pixels.
 func (c Context) Sp(v unit.Sp) int {
 	return c.Metric.Sp(v)
 }
 
-// Disabled returns a copy of this context that don't deliver any events.
+// Disabled returns a copy that does not deliver events. Drawing state,
+// constraints and application values are unchanged.
 func (c Context) Disabled() Context {
 	c.Source = c.Source.Disabled()
 	return c

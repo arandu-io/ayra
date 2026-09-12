@@ -21,138 +21,116 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// textSource provides text data for use in widgets. If the underlying data type
-// can fail due to I/O errors, it is the responsibility of that type to provide
-// its own mechanism to surface and handle those errors. They will not always
-// be returned by widgets using these functions.
+// textSource is the byte-oriented storage used by an interactive text view.
+// Storage implementations surface their own persistent I/O failures; the view
+// deliberately treats short reads as the available contents.
 type textSource interface {
 	io.ReaderAt
-	// Size returns the total length of the data in bytes.
+
+	// Size is measured in bytes, while editing operations are measured in runes.
 	Size() int64
-	// Changed returns whether the contents have changed since the last call
-	// to Changed.
 	Changed() bool
-	// ReplaceRunes replaces runeCount runes starting at byteOffset within the
-	// data with the provided string. Implementations of read-only text sources
-	// are free to make this a no-op.
 	ReplaceRunes(byteOffset int64, runeCount int64, replacement string)
 }
 
-// textView provides efficient shaping and indexing of interactive text. When provided
-// with a TextSource, textView will shape and cache the runes within that source.
-// It provides methods for configuring a viewport onto the shaped text which can
-// be scrolled, and for configuring and drawing text selection boxes.
+type textCaret struct {
+	// start is both the insertion point and one end of the selection. It may be
+	// greater than end when a selection was extended backwards.
+	start, end int
+	// xoff preserves the intended horizontal position across vertical moves.
+	xoff fixed.Int26_6
+}
+
+// textView owns the conversions between source bytes, logical rune positions,
+// and shaped pixel positions. Shaping is lazy: any input change invalidates the
+// derived indexes and the next geometry query rebuilds them.
 type textView struct {
 	Alignment text.Alignment
-	// LineHeight controls the distance between the baselines of lines of text.
-	// If zero, a sensible default will be used.
+	// LineHeight is the requested distance between adjacent baselines. Zero asks
+	// the shaper for its normal value.
 	LineHeight unit.Sp
-	// LineHeightScale applies a scaling factor to the LineHeight. If zero, a
-	// sensible default will be used.
+	// LineHeightScale multiplies the normal line height when it is non-zero.
 	LineHeightScale float32
-	// SingleLine forces the text to stay on a single line.
-	// SingleLine also sets the scrolling direction to
-	// horizontal.
+	// SingleLine disables wrapping and changes scrolling to the horizontal axis.
 	SingleLine bool
-	// MaxLines limits the shaped text to a specific quantity of shaped lines.
+	// MaxLines limits the shaped output; zero leaves it unrestricted.
 	MaxLines int
-	// Truncator is the text that will be shown at the end of the final
-	// line if MaxLines is exceeded. Defaults to "…" if empty.
-	Truncator string
-	// WrapPolicy configures how displayed text will be broken into lines.
+	// Truncator marks omitted text when MaxLines is reached.
+	Truncator  string
 	WrapPolicy text.WrapPolicy
-	// DisableSpaceTrim configures whether trailing whitespace on a line will have its
-	// width zeroed. Set to true for editors, but false for non-editable text.
+	// DisableSpaceTrim retains the advance of whitespace at a line boundary.
 	DisableSpaceTrim bool
-	// Mask replaces the visual display of each rune in the contents with the given rune.
-	// Newline characters are not masked. When non-zero, the unmasked contents
-	// are accessed by Len, Text, and SetText.
+	// Mask substitutes each non-newline rune only while shaping. Source reads and
+	// editing continue to use the original contents.
 	Mask rune
 
-	params     text.Parameters
-	shaper     *text.Shaper
-	seekCursor int64
 	rr         textSource
-	maskReader maskReader
-	// graphemes tracks the indices of grapheme cluster boundaries within rr.
-	graphemes []int
-	// paragraphReader is used to populate graphemes.
+	shaper     *text.Shaper
+	params     text.Parameters
+	lastMask   rune
+	seekCursor int64
+
+	maskReader      maskReader
 	paragraphReader graphemeReader
-	lastMask        rune
-	viewSize        image.Point
-	valid           bool
-	version         uint64
-	regions         []Region
-	dims            layout.Dimensions
+	graphemes       []int
+	offIndex        []offEntry
+	index           glyphIndex
 
-	// offIndex is an index of rune index to byte offsets.
-	offIndex []offEntry
-
-	index glyphIndex
-
-	caret struct {
-		// xoff is the offset to the current position when moving between lines.
-		xoff fixed.Int26_6
-		// start is the current caret position in runes, and also the start position of
-		// selected text. end is the end position of selected text. If start
-		// == end, then there's no selection. Note that it's possible (and
-		// common) that the caret (start) is after the end, e.g. after
-		// Shift-DownArrow.
-		start int
-		end   int
-	}
-
+	dims      layout.Dimensions
+	viewSize  image.Point
 	scrollOff image.Point
+	caret     textCaret
+	regions   []Region
+
+	valid   bool
+	version uint64
 }
 
 func (e *textView) Changed() bool {
 	return e.rr.Changed()
 }
 
-// Dimensions returns the dimensions of the visible text.
+// Dimensions reports the constrained viewport while retaining the document's
+// baseline distance from its bottom edge.
 func (e *textView) Dimensions() layout.Dimensions {
-	basePos := e.dims.Size.Y - e.dims.Baseline
-	return layout.Dimensions{Size: e.viewSize, Baseline: e.viewSize.Y - basePos}
+	belowBaseline := e.dims.Size.Y - e.dims.Baseline
+	return layout.Dimensions{
+		Size:     e.viewSize,
+		Baseline: e.viewSize.Y - belowBaseline,
+	}
 }
 
-// FullDimensions returns the dimensions of all shaped text, including
-// text that isn't visible within the current viewport.
+// FullDimensions reports the unconstrained shaped document.
 func (e *textView) FullDimensions() layout.Dimensions {
 	return e.dims
 }
 
-// SetSource initializes the underlying data source for the Text. This
-// must be done before invoking any other methods on Text.
+// SetSource replaces the backing store and drops every derived index.
 func (e *textView) SetSource(source textSource) {
 	e.rr = source
-	e.invalidate()
 	e.seekCursor = 0
+	e.invalidate()
 }
 
-// ReadRuneAt reads the rune starting at the given byte offset, if any.
+// ReadRuneAt decodes the rune beginning at off.
 func (e *textView) ReadRuneAt(off int64) (rune, int, error) {
 	var buf [utf8.UTFMax]byte
-	b := buf[:]
-	n, err := e.rr.ReadAt(b, off)
-	b = b[:n]
-	r, s := utf8.DecodeRune(b)
-	return r, s, err
+	n, err := e.rr.ReadAt(buf[:], off)
+	r, size := utf8.DecodeRune(buf[:n])
+	return r, size, err
 }
 
-// ReadRuneAt reads the run prior to the given byte offset, if any.
+// ReadRuneBefore decodes the rune ending immediately before off.
 func (e *textView) ReadRuneBefore(off int64) (rune, int, error) {
 	var buf [utf8.UTFMax]byte
-	b := buf[:]
-	if off < utf8.UTFMax {
-		b = b[:off]
-		off = 0
-	} else {
-		off -= utf8.UTFMax
+	start := off - utf8.UTFMax
+	if start < 0 {
+		start = 0
 	}
-	n, err := e.rr.ReadAt(b, off)
-	b = b[:n]
-	r, s := utf8.DecodeLastRune(b)
-	return r, s, err
+	want := int(off - start)
+	n, err := e.rr.ReadAt(buf[:want], start)
+	r, size := utf8.DecodeLastRune(buf[:n])
+	return r, size, err
 }
 
 func (e *textView) makeValid() {
@@ -180,28 +158,23 @@ func (e *textView) closestToXY(x fixed.Int26_6, y int) (combinedPos, bool) {
 }
 
 func (e *textView) closestToXYGraphemes(x fixed.Int26_6, y int) (combinedPos, bool) {
-	// Find the closest existing rune position to the provided coordinates.
 	pos, atEndOfLine := e.closestToXY(x, y)
 	if atEndOfLine {
 		return pos, true
 	}
-	// Resolve cluster boundaries on either side of the rune position.
-	firstOption := e.moveByGraphemes(pos.runes, 0)
-	distance := 1
-	if firstOption > pos.runes {
-		distance = -1
+
+	firstRune := e.moveByGraphemes(pos.runes, 0)
+	direction := 1
+	if firstRune > pos.runes {
+		direction = -1
 	}
-	secondOption := e.moveByGraphemes(firstOption, distance)
-	// Choose the closest grapheme cluster boundary to the desired point.
-	first := e.closestToRune(firstOption)
-	firstDist := absFixed(first.x - x)
-	second := e.closestToRune(secondOption)
-	secondDist := absFixed(second.x - x)
-	if firstDist > secondDist {
+	secondRune := e.moveByGraphemes(firstRune, direction)
+	first := e.closestToRune(firstRune)
+	second := e.closestToRune(secondRune)
+	if absFixed(first.x-x) > absFixed(second.x-x) {
 		return second, false
-	} else {
-		return first, false
 	}
+	return first, false
 }
 
 func absFixed(i fixed.Int26_6) fixed.Int26_6 {
@@ -211,176 +184,142 @@ func absFixed(i fixed.Int26_6) fixed.Int26_6 {
 	return i
 }
 
-// MaxLines moves the cursor the specified number of lines vertically, ensuring
-// that the resulting position is aligned to a grapheme cluster.
+// MoveLines moves the caret vertically while retaining its preferred x.
 func (e *textView) MoveLines(distance int, selAct selectionAction) {
-	caretStart := e.closestToRune(e.caret.start)
-	x := caretStart.x + e.caret.xoff
-	// Seek to line.
-	pos := e.closestToLineCol(caretStart.lineCol.line+distance, 0)
+	caret := e.closestToRune(e.caret.start)
+	x := caret.x + e.caret.xoff
+	pos := e.closestToLineCol(caret.lineCol.line+distance, 0)
 	pos, atEndOfLine := e.closestToXYGraphemes(x, pos.y)
-	e.caret.start = pos.runes
 	if atEndOfLine && pos.runes > 0 {
-		e.caret.start = pos.runes - 1
+		pos.runes = e.moveByGraphemes(pos.runes, -1)
 	}
+	e.caret.start = pos.runes
 	e.caret.xoff = x - pos.x
 	e.updateSelection(selAct)
 }
 
-// calculateViewSize determines the size of the current visible content,
-// ensuring that even if there is no text content, some space is reserved
-// for the caret.
+// calculateViewSize reserves horizontal space for an empty field's caret, then
+// applies the caller's constraints.
 func (e *textView) calculateViewSize(gtx layout.Context) image.Point {
-	base := e.dims.Size
-	if caretWidth := e.caretWidth(gtx); base.X < caretWidth {
-		base.X = caretWidth
+	size := e.dims.Size
+	if width := e.caretWidth(gtx); size.X < width {
+		size.X = width
 	}
-	return gtx.Constraints.Constrain(base)
+	return gtx.Constraints.Constrain(size)
 }
 
-// Layout the text, reshaping it as necessary.
-func (e *textView) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp) {
-	if e.params.Locale != gtx.Locale {
-		e.params.Locale = gtx.Locale
-		e.invalidate()
-	}
-	textSize := fixed.I(gtx.Sp(size))
-	if e.params.Font != font || e.params.PxPerEm != textSize {
-		e.invalidate()
-		e.params.Font = font
-		e.params.PxPerEm = textSize
-	}
+func (e *textView) syncLayoutInputs(gtx layout.Context, shaper *text.Shaper, face font.Font, size unit.Sp) {
 	maxWidth := gtx.Constraints.Max.X
 	if e.SingleLine {
 		maxWidth = math.MaxInt
 	}
-	minWidth := gtx.Constraints.Min.X
-	if maxWidth != e.params.MaxWidth {
-		e.params.MaxWidth = maxWidth
-		e.invalidate()
-	}
-	if minWidth != e.params.MinWidth {
-		e.params.MinWidth = minWidth
-		e.invalidate()
-	}
-	if lt != e.shaper {
-		e.shaper = lt
-		e.invalidate()
-	}
-	if e.Mask != e.lastMask {
+
+	next := e.params
+	next.Locale = gtx.Locale
+	next.Font = face
+	next.PxPerEm = fixed.I(gtx.Sp(size))
+	next.MinWidth = gtx.Constraints.Min.X
+	next.MaxWidth = maxWidth
+	next.Alignment = e.Alignment
+	next.Truncator = e.Truncator
+	next.MaxLines = e.MaxLines
+	next.WrapPolicy = e.WrapPolicy
+	next.LineHeight = fixed.I(gtx.Sp(e.LineHeight))
+	next.LineHeightScale = e.LineHeightScale
+	next.DisableSpaceTrim = e.DisableSpaceTrim
+
+	if next != e.params || shaper != e.shaper || e.Mask != e.lastMask {
+		e.params = next
+		e.shaper = shaper
 		e.lastMask = e.Mask
 		e.invalidate()
 	}
-	if e.Alignment != e.params.Alignment {
-		e.params.Alignment = e.Alignment
-		e.invalidate()
-	}
-	if e.Truncator != e.params.Truncator {
-		e.params.Truncator = e.Truncator
-		e.invalidate()
-	}
-	if e.MaxLines != e.params.MaxLines {
-		e.params.MaxLines = e.MaxLines
-		e.invalidate()
-	}
-	if e.WrapPolicy != e.params.WrapPolicy {
-		e.params.WrapPolicy = e.WrapPolicy
-		e.invalidate()
-	}
-	if lh := fixed.I(gtx.Sp(e.LineHeight)); lh != e.params.LineHeight {
-		e.params.LineHeight = lh
-		e.invalidate()
-	}
-	if e.LineHeightScale != e.params.LineHeightScale {
-		e.params.LineHeightScale = e.LineHeightScale
-		e.invalidate()
-	}
-	if e.DisableSpaceTrim != e.params.DisableSpaceTrim {
-		e.params.DisableSpaceTrim = e.DisableSpaceTrim
-		e.invalidate()
-	}
-
-	e.makeValid()
-
-	if viewSize := e.calculateViewSize(gtx); viewSize != e.viewSize {
-		e.viewSize = viewSize
-		e.invalidate()
-	}
-	e.makeValid()
 }
 
-// PaintSelection clips and paints the visible text selection rectangles using
-// the provided material to fill the rectangles.
+// Layout synchronizes shaping inputs and constrains the resulting document to
+// the current viewport.
+func (e *textView) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp) {
+	e.syncLayoutInputs(gtx, lt, font, size)
+	e.makeValid()
+	nextView := e.calculateViewSize(gtx)
+	if nextView != e.viewSize {
+		e.viewSize = nextView
+		e.invalidate()
+		e.makeValid()
+	}
+}
+
+func (e *textView) documentViewport() image.Rectangle {
+	return image.Rectangle{Min: e.scrollOff, Max: e.viewSize.Add(e.scrollOff)}
+}
+
+// PaintSelection paints only the portion of the current selection inside the
+// viewport.
 func (e *textView) PaintSelection(gtx layout.Context, material op.CallOp) {
-	localViewport := image.Rectangle{Max: e.viewSize}
-	docViewport := image.Rectangle{Max: e.viewSize}.Add(e.scrollOff)
-	defer clip.Rect(localViewport).Push(gtx.Ops).Pop()
-	e.regions = e.index.locate(docViewport, e.caret.start, e.caret.end, e.regions)
+	defer clip.Rect(image.Rectangle{Max: e.viewSize}).Push(gtx.Ops).Pop()
+	e.regions = e.index.locate(e.documentViewport(), e.caret.start, e.caret.end, e.regions)
 	for _, region := range e.regions {
-		area := clip.Rect(region.Bounds).Push(gtx.Ops)
+		selection := clip.Rect(region.Bounds).Push(gtx.Ops)
 		material.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
-		area.Pop()
+		selection.Pop()
 	}
 }
 
-// PaintText clips and paints the visible text glyph outlines using the provided
-// material to fill the glyphs.
-func (e *textView) PaintText(gtx layout.Context, material op.CallOp) {
-	m := op.Record(gtx.Ops)
-	viewport := image.Rectangle{
-		Min: e.scrollOff,
-		Max: e.viewSize.Add(e.scrollOff),
+func (e *textView) firstVisibleGlyph(viewport image.Rectangle) int {
+	first := 0
+	for _, line := range e.index.lines {
+		if line.yOff+line.descent.Ceil() >= viewport.Min.Y {
+			break
+		}
+		first += line.glyphs
 	}
+	return first
+}
+
+// PaintText records the visible glyphs, then clips their padded outline to the
+// viewport before replaying the recording.
+func (e *textView) PaintText(gtx layout.Context, material op.CallOp) {
+	recording := op.Record(gtx.Ops)
+	viewport := e.documentViewport()
 	it := textIterator{
 		viewport: viewport,
 		material: material,
 	}
 
-	startGlyph := 0
-	for _, line := range e.index.lines {
-		if line.descent.Ceil()+line.yOff >= viewport.Min.Y {
-			break
-		}
-		startGlyph += line.glyphs
-	}
-	var glyphs [32]text.Glyph
-	line := glyphs[:0]
-	for _, g := range e.index.glyphs[startGlyph:] {
-		var ok bool
-		if line, ok = it.paintGlyph(gtx, e.shaper, g, line); !ok {
+	var scratch [32]text.Glyph
+	line := scratch[:0]
+	for _, glyph := range e.index.glyphs[e.firstVisibleGlyph(viewport):] {
+		var visible bool
+		line, visible = it.paintGlyph(gtx, e.shaper, glyph, line)
+		if !visible {
 			break
 		}
 	}
 
-	call := m.Stop()
+	call := recording.Stop()
 	viewport.Min = viewport.Min.Add(it.padding.Min)
 	viewport.Max = viewport.Max.Add(it.padding.Max)
 	defer clip.Rect(viewport.Sub(e.scrollOff)).Push(gtx.Ops).Pop()
 	call.Add(gtx.Ops)
 }
 
-// caretWidth returns the width occupied by the caret for the current
-// gtx.
 func (e *textView) caretWidth(gtx layout.Context) int {
-	carWidth2 := max(gtx.Dp(1)/2, 1)
-	return carWidth2
+	return max(gtx.Dp(1)/2, 1)
 }
 
-// PaintCaret clips and paints the caret rectangle, adding material immediately
-// before painting to set the appropriate paint material.
+// PaintCaret draws the insertion caret if any part of it intersects the view.
 func (e *textView) PaintCaret(gtx layout.Context, material op.CallOp) {
-	carWidth2 := e.caretWidth(gtx)
-	caretPos, carAsc, carDesc := e.CaretInfo()
+	halfWidth := e.caretWidth(gtx)
+	position, ascent, descent := e.CaretInfo()
 
-	carRect := image.Rectangle{
-		Min: caretPos.Sub(image.Pt(carWidth2, carAsc)),
-		Max: caretPos.Add(image.Pt(carWidth2, carDesc)),
+	caret := image.Rectangle{
+		Min: position.Sub(image.Pt(halfWidth, ascent)),
+		Max: position.Add(image.Pt(halfWidth, descent)),
 	}
-	cl := image.Rectangle{Max: e.viewSize}
-	carRect = cl.Intersect(carRect)
-	if !carRect.Empty() {
-		defer clip.Rect(carRect).Push(gtx.Ops).Pop()
+	caret = image.Rectangle{Max: e.viewSize}.Intersect(caret)
+	if !caret.Empty() {
+		defer clip.Rect(caret).Push(gtx.Ops).Pop()
 		material.Add(gtx.Ops)
 		paint.PaintOp{}.Add(gtx.Ops)
 	}
@@ -392,223 +331,216 @@ func (e *textView) CaretInfo() (pos image.Point, ascent, descent int) {
 	ascent = caretStart.ascent.Ceil()
 	descent = caretStart.descent.Ceil()
 
-	pos = image.Point{
-		X: caretStart.x.Round(),
-		Y: caretStart.y,
-	}
-	pos = pos.Sub(e.scrollOff)
+	pos = image.Pt(caretStart.x.Round(), caretStart.y).Sub(e.scrollOff)
 	return
 }
 
-// ByteOffset returns the start byte of the rune at the given
-// rune offset, clamped to the size of the text.
+// ByteOffset converts a logical rune offset to a source byte offset, clamping
+// through the shaped rune index first.
 func (e *textView) ByteOffset(runeOffset int) int64 {
 	return int64(e.runeOffset(e.closestToRune(runeOffset).runes))
 }
 
-// Len is the length of the editor contents, in runes.
+// Len is the number of shaped source runes.
 func (e *textView) Len() int {
 	e.makeValid()
 	return e.closestToRune(math.MaxInt).runes
 }
 
-// Text returns the contents of the editor. If the provided buf is large enough, it will
-// be filled and returned. Otherwise a new buffer will be allocated.
-// Callers can guarantee that buf is large enough by giving it capacity e.Len()*utf8.UTFMax.
+// Text copies the source bytes into buf, reusing its allocation when possible.
 func (e *textView) Text(buf []byte) []byte {
-	size := e.rr.Size()
-	if cap(buf) < int(size) {
+	size := int(e.rr.Size())
+	if cap(buf) < size {
 		buf = make([]byte, size)
 	}
 	buf = buf[:size]
-	e.Seek(0, io.SeekStart)
+	_, _ = e.Seek(0, io.SeekStart)
 	n, _ := io.ReadFull(e, buf)
-	buf = buf[:n]
-	return buf
+	return buf[:n]
 }
 
+// ScrollBounds returns the legal document offsets for the active scroll axis.
 func (e *textView) ScrollBounds() image.Rectangle {
-	var b image.Rectangle
+	var bounds image.Rectangle
 	if e.SingleLine {
 		if len(e.index.lines) > 0 {
 			line := e.index.lines[0]
-			b.Min.X = min(line.xOff.Floor(), 0)
+			bounds.Min.X = min(line.xOff.Floor(), 0)
 		}
-		b.Max.X = e.dims.Size.X + b.Min.X - e.viewSize.X
+		bounds.Max.X = e.dims.Size.X + bounds.Min.X - e.viewSize.X
 	} else {
-		b.Max.Y = e.dims.Size.Y - e.viewSize.Y
+		bounds.Max.Y = e.dims.Size.Y - e.viewSize.Y
 	}
-	return b
+	return bounds
 }
 
 func (e *textView) ScrollRel(dx, dy int) {
 	e.scrollAbs(e.scrollOff.X+dx, e.scrollOff.Y+dy)
 }
 
-// ScrollOff returns the scroll offset of the text viewport.
+// ScrollOff returns the viewport origin in document coordinates.
 func (e *textView) ScrollOff() image.Point {
 	return e.scrollOff
 }
 
 func (e *textView) scrollAbs(x, y int) {
-	e.scrollOff.X = x
-	e.scrollOff.Y = y
-	b := e.ScrollBounds()
-	if e.scrollOff.X > b.Max.X {
-		e.scrollOff.X = b.Max.X
-	}
-	if e.scrollOff.X < b.Min.X {
-		e.scrollOff.X = b.Min.X
-	}
-	if e.scrollOff.Y > b.Max.Y {
-		e.scrollOff.Y = b.Max.Y
-	}
-	if e.scrollOff.Y < b.Min.Y {
-		e.scrollOff.Y = b.Min.Y
-	}
+	bounds := e.ScrollBounds()
+	e.scrollOff = image.Pt(
+		max(bounds.Min.X, min(x, bounds.Max.X)),
+		max(bounds.Min.Y, min(y, bounds.Max.Y)),
+	)
 }
 
-// MoveCoord moves the caret to the position closest to the provided
-// point that is aligned to a grapheme cluster boundary.
+// MoveCoord maps a viewport pixel to the nearest grapheme boundary.
 func (e *textView) MoveCoord(pos image.Point) {
-	x := fixed.I(pos.X + e.scrollOff.X)
-	y := pos.Y + e.scrollOff.Y
-	p, _ := e.closestToXYGraphemes(x, y)
-	e.caret.start = p.runes
+	documentPoint := pos.Add(e.scrollOff)
+	caret, _ := e.closestToXYGraphemes(fixed.I(documentPoint.X), documentPoint.Y)
+	e.caret.start = caret.runes
 	e.caret.xoff = 0
 }
 
-// Truncated returns whether the text in the textView is currently
-// truncated due to a restriction on the number of lines.
+// Truncated reports whether line limiting caused the shaper to add a truncator.
 func (e *textView) Truncated() bool {
 	return e.index.truncated
 }
 
-func (e *textView) layoutText(lt *text.Shaper) {
-	e.Seek(0, io.SeekStart)
+func (e *textView) readerForShaping() io.Reader {
+	_, _ = e.Seek(0, io.SeekStart)
 	var r io.Reader = e
 	if e.Mask != 0 {
 		e.maskReader.Reset(e, e.Mask)
 		r = &e.maskReader
 	}
-	e.index.reset()
-	it := textIterator{viewport: image.Rectangle{Max: image.Point{X: math.MaxInt, Y: math.MaxInt}}}
-	if lt != nil {
-		lt.Layout(e.params, r)
-		for {
-			g, ok := lt.NextGlyph()
-			if !it.processGlyph(g, ok) {
-				break
-			}
-			e.index.Glyph(g)
-		}
-	} else {
-		// Make a fake glyph for every rune in the reader.
-		b := bufio.NewReader(r)
-		for _, _, err := b.ReadRune(); err != io.EOF; _, _, err = b.ReadRune() {
-			g := text.Glyph{Runes: 1, Flags: text.FlagClusterBreak}
-			_ = it.processGlyph(g, true)
-			e.index.Glyph(g)
-		}
-	}
-	e.paragraphReader.SetSource(e.rr)
-	e.graphemes = e.graphemes[:0]
-	for g := e.paragraphReader.Graphemes(); len(g) > 0; g = e.paragraphReader.Graphemes() {
-		if len(e.graphemes) > 0 && g[0] == e.graphemes[len(e.graphemes)-1] {
-			g = g[1:]
-		}
-		e.graphemes = append(e.graphemes, g...)
-	}
-	dims := layout.Dimensions{Size: it.bounds.Size()}
-	dims.Baseline = dims.Size.Y - it.baseline
-	e.dims = dims
+	return r
 }
 
-// CaretPos returns the line & column numbers of the caret.
+func (e *textView) indexShapedText(lt *text.Shaper, source io.Reader, it *textIterator) {
+	if lt != nil {
+		lt.Layout(e.params, source)
+		for {
+			glyph, ok := lt.NextGlyph()
+			if !it.processGlyph(glyph, ok) {
+				break
+			}
+			e.index.Glyph(glyph)
+		}
+		return
+	}
+
+	// A nil shaper is useful to callers that only need logical indexing.
+	runes := bufio.NewReader(source)
+	for {
+		_, _, err := runes.ReadRune()
+		if err == io.EOF {
+			break
+		}
+		glyph := text.Glyph{Runes: 1, Flags: text.FlagClusterBreak}
+		_ = it.processGlyph(glyph, true)
+		e.index.Glyph(glyph)
+	}
+}
+
+func (e *textView) indexGraphemes() {
+	e.paragraphReader.SetSource(e.rr)
+	e.graphemes = e.graphemes[:0]
+	for boundaries := e.paragraphReader.Graphemes(); len(boundaries) > 0; boundaries = e.paragraphReader.Graphemes() {
+		if len(e.graphemes) > 0 && boundaries[0] == e.graphemes[len(e.graphemes)-1] {
+			boundaries = boundaries[1:]
+		}
+		e.graphemes = append(e.graphemes, boundaries...)
+	}
+}
+
+func (e *textView) layoutText(lt *text.Shaper) {
+	e.index.reset()
+	it := textIterator{viewport: image.Rectangle{Max: image.Pt(math.MaxInt, math.MaxInt)}}
+	e.indexShapedText(lt, e.readerForShaping(), &it)
+	e.indexGraphemes()
+
+	e.dims.Size = it.bounds.Size()
+	e.dims.Baseline = e.dims.Size.Y - it.baseline
+}
+
+// CaretPos returns zero-based logical line and rune-column coordinates.
 func (e *textView) CaretPos() (line, col int) {
 	pos := e.closestToRune(e.caret.start)
 	return pos.lineCol.line, pos.lineCol.col
 }
 
-// CaretCoords returns the coordinates of the caret, relative to the
-// editor itself.
+// CaretCoords maps the logical caret to viewport pixels.
 func (e *textView) CaretCoords() f32.Point {
 	pos := e.closestToRune(e.caret.start)
 	return f32.Pt(float32(pos.x)/64-float32(e.scrollOff.X), float32(pos.y-e.scrollOff.Y))
 }
 
-// indexRune returns the latest rune index and byte offset no later than r.
+// indexRune finds the nearest cached byte conversion at or before r.
 func (e *textView) indexRune(r int) offEntry {
-	// Initialize index.
 	if len(e.offIndex) == 0 {
 		e.offIndex = append(e.offIndex, offEntry{})
 	}
 	i := sort.Search(len(e.offIndex), func(i int) bool {
-		entry := e.offIndex[i]
-		return entry.runes >= r
+		return e.offIndex[i].runes >= r
 	})
-	// Return the entry guaranteed to be less than or equal to r.
 	if i > 0 {
 		i--
 	}
 	return e.offIndex[i]
 }
 
-// runeOffset returns the byte offset into e.rr of the r'th rune.
-// r must be a valid rune index, usually returned by closestPosition.
+// runeOffset walks UTF-8 from a sparse checkpoint to the requested rune.
 func (e *textView) runeOffset(r int) int {
 	const runesPerIndexEntry = 50
 	entry := e.indexRune(r)
-	lastEntry := e.offIndex[len(e.offIndex)-1].runes
+	indexedThrough := e.offIndex[len(e.offIndex)-1].runes
 	for entry.runes < r {
-		if entry.runes > lastEntry && entry.runes%runesPerIndexEntry == runesPerIndexEntry-1 {
+		if entry.runes > indexedThrough && entry.runes%runesPerIndexEntry == runesPerIndexEntry-1 {
 			e.offIndex = append(e.offIndex, entry)
 		}
-		_, s, _ := e.ReadRuneAt(int64(entry.bytes))
-		entry.bytes += s
+		_, size, _ := e.ReadRuneAt(int64(entry.bytes))
+		entry.bytes += size
 		entry.runes++
 	}
 	return entry.bytes
 }
 
 func (e *textView) invalidate() {
-	e.offIndex = e.offIndex[:0]
 	e.valid = false
+	e.offIndex = e.offIndex[:0]
 	e.version++
 }
 
-// Replace the text between start and end with s. Indices are in runes.
-// It returns the number of runes inserted.
+func positionAfterReplace(position, oldStart, oldEnd, newEnd int) int {
+	switch {
+	case newEnd < position && position <= oldEnd:
+		return newEnd
+	case oldEnd < position:
+		return position + newEnd - oldEnd
+	default:
+		return position
+	}
+}
+
+// Replace substitutes the rune range [start,end) and keeps both selection
+// endpoints attached to the surrounding logical text. It returns the number of
+// inserted runes.
 func (e *textView) Replace(start, end int, s string) int {
 	if start > end {
 		start, end = end, start
 	}
-	startPos := e.closestToRune(start)
-	endPos := e.closestToRune(end)
-	startOff := e.runeOffset(startPos.runes)
-	replaceSize := endPos.runes - startPos.runes
-	sc := utf8.RuneCountInString(s)
-	newEnd := startPos.runes + sc
+	oldStart := e.closestToRune(start).runes
+	oldEnd := e.closestToRune(end).runes
+	byteStart := e.runeOffset(oldStart)
+	inserted := utf8.RuneCountInString(s)
+	newEnd := oldStart + inserted
 
-	e.rr.ReplaceRunes(int64(startOff), int64(replaceSize), s)
-	adjust := func(pos int) int {
-		switch {
-		case newEnd < pos && pos <= endPos.runes:
-			pos = newEnd
-		case endPos.runes < pos:
-			diff := newEnd - endPos.runes
-			pos = pos + diff
-		}
-		return pos
-	}
-	e.caret.start = adjust(e.caret.start)
-	e.caret.end = adjust(e.caret.end)
+	e.rr.ReplaceRunes(int64(byteStart), int64(oldEnd-oldStart), s)
+	e.caret.start = positionAfterReplace(e.caret.start, oldStart, oldEnd, newEnd)
+	e.caret.end = positionAfterReplace(e.caret.end, oldStart, oldEnd, newEnd)
 	e.invalidate()
-	return sc
+	return inserted
 }
 
-// MovePages moves the caret position by vertical pages of text, ensuring that
-// the final position is aligned to a grapheme cluster boundary.
+// MovePages moves vertically by viewport heights and preserves the desired x.
 func (e *textView) MovePages(pages int, selAct selectionAction) {
 	caret := e.closestToRune(e.caret.start)
 	x := caret.x + e.caret.xoff
@@ -619,117 +551,97 @@ func (e *textView) MovePages(pages int, selAct selectionAction) {
 	e.updateSelection(selAct)
 }
 
-// moveByGraphemes returns the rune index resulting from moving the
-// specified number of grapheme clusters from startRuneidx.
-func (e *textView) moveByGraphemes(startRuneidx, graphemes int) int {
+// moveByGraphemes advances from a rune position through user-perceived
+// characters rather than through individual code points.
+func (e *textView) moveByGraphemes(startRune, distance int) int {
 	if len(e.graphemes) == 0 {
-		return startRuneidx
+		return startRune
 	}
-	startGraphemeIdx, _ := slices.BinarySearch(e.graphemes, startRuneidx)
-	startGraphemeIdx = max(startGraphemeIdx+graphemes, 0)
-	startGraphemeIdx = min(startGraphemeIdx, len(e.graphemes)-1)
-	startRuneIdx := e.graphemes[startGraphemeIdx]
-	return e.closestToRune(startRuneIdx).runes
+	boundary, _ := slices.BinarySearch(e.graphemes, startRune)
+	boundary = max(0, min(boundary+distance, len(e.graphemes)-1))
+	return e.closestToRune(e.graphemes[boundary]).runes
 }
 
-// clampCursorToGraphemes ensures that the final start/end positions of
-// the cursor are on grapheme cluster boundaries.
 func (e *textView) clampCursorToGraphemes() {
 	e.caret.start = e.moveByGraphemes(e.caret.start, 0)
 	e.caret.end = e.moveByGraphemes(e.caret.end, 0)
 }
 
-// MoveCaret moves the caret (aka selection start) and the selection end
-// relative to their current positions. Positive distances moves forward,
-// negative distances moves backward. Distances are in grapheme clusters which
-// better match the expectations of users than runes.
+// MoveCaret moves both selection endpoints by grapheme cluster counts.
 func (e *textView) MoveCaret(startDelta, endDelta int) {
 	e.caret.xoff = 0
 	e.caret.start = e.moveByGraphemes(e.caret.start, startDelta)
 	e.caret.end = e.moveByGraphemes(e.caret.end, endDelta)
 }
 
-// MoveTextStart moves the caret to the start of the text.
 func (e *textView) MoveTextStart(selAct selectionAction) {
-	caret := e.closestToRune(e.caret.end)
+	selectionEnd := e.closestToRune(e.caret.end)
 	e.caret.start = 0
-	e.caret.end = caret.runes
-	e.caret.xoff = -caret.x
+	e.caret.end = selectionEnd.runes
+	e.caret.xoff = -selectionEnd.x
 	e.updateSelection(selAct)
 	e.clampCursorToGraphemes()
 }
 
-// MoveTextEnd moves the caret to the end of the text.
 func (e *textView) MoveTextEnd(selAct selectionAction) {
-	caret := e.closestToRune(math.MaxInt)
-	e.caret.start = caret.runes
-	e.caret.xoff = fixed.I(e.params.MaxWidth) - caret.x
+	end := e.closestToRune(math.MaxInt)
+	e.caret.start = end.runes
+	e.caret.xoff = fixed.I(e.params.MaxWidth) - end.x
 	e.updateSelection(selAct)
 	e.clampCursorToGraphemes()
 }
 
-// MoveLineStart moves the caret to the start of the current line, ensuring that the resulting
-// cursor position is on a grapheme cluster boundary.
 func (e *textView) MoveLineStart(selAct selectionAction) {
 	caret := e.closestToRune(e.caret.start)
-	caret = e.closestToLineCol(caret.lineCol.line, 0)
-	e.caret.start = caret.runes
-	e.caret.xoff = -caret.x
+	start := e.closestToLineCol(caret.lineCol.line, 0)
+	e.caret.start = start.runes
+	e.caret.xoff = -start.x
 	e.updateSelection(selAct)
 	e.clampCursorToGraphemes()
 }
 
-// MoveLineEnd moves the caret to the end of the current line, ensuring that the resulting
-// cursor position is on a grapheme cluster boundary.
 func (e *textView) MoveLineEnd(selAct selectionAction) {
 	caret := e.closestToRune(e.caret.start)
-	caret = e.closestToLineCol(caret.lineCol.line, math.MaxInt)
-	e.caret.start = caret.runes
-	e.caret.xoff = fixed.I(e.params.MaxWidth) - caret.x
+	end := e.closestToLineCol(caret.lineCol.line, math.MaxInt)
+	e.caret.start = end.runes
+	e.caret.xoff = fixed.I(e.params.MaxWidth) - end.x
 	e.updateSelection(selAct)
 	e.clampCursorToGraphemes()
 }
 
-// MoveWord moves the caret to the next word in the specified direction.
-// Positive is forward, negative is backward.
-// Absolute values greater than one will skip that many words.
-// The final caret position will be aligned to a grapheme cluster boundary.
-// BUG(whereswaldon): this method's definition of a "word" is currently
-// whitespace-delimited. Languages that do not use whitespace to delimit
-// words will experience counter-intuitive behavior when navigating by
-// word.
-func (e *textView) MoveWord(distance int, selAct selectionAction) {
-	// split the distance information into constituent parts to be
-	// used independently.
-	words, direction := distance, 1
+func wordMotion(distance int) (count, direction int) {
 	if distance < 0 {
-		words, direction = distance*-1, -1
+		return -distance, -1
 	}
-	// atEnd if caret is at either side of the buffer.
-	caret := e.closestToRune(e.caret.start)
-	atEnd := func() bool {
-		return caret.runes == 0 || caret.runes == e.Len()
-	}
-	// next returns the appropriate rune given the direction.
-	next := func() (r rune) {
-		off := e.runeOffset(caret.runes)
-		if direction < 0 {
-			r, _, _ = e.ReadRuneBefore(int64(off))
-		} else {
-			r, _, _ = e.ReadRuneAt(int64(off))
-		}
+	return distance, 1
+}
+
+func (e *textView) runeBeside(caret combinedPos, direction int) rune {
+	byteOffset := e.runeOffset(caret.runes)
+	if direction < 0 {
+		r, _, _ := e.ReadRuneBefore(int64(byteOffset))
 		return r
 	}
+	r, _, _ := e.ReadRuneAt(int64(byteOffset))
+	return r
+}
+
+// MoveWord crosses whitespace-delimited words in either direction. This is a
+// deliberately simple boundary rule; scripts without separating whitespace
+// need a richer word segmenter in a future change.
+func (e *textView) MoveWord(distance int, selAct selectionAction) {
+	words, direction := wordMotion(distance)
+	caret := e.closestToRune(e.caret.start)
+	atBoundary := func() bool { return caret.runes == 0 || caret.runes == e.Len() }
+	advance := func() { e.MoveCaret(direction, 0); caret = e.closestToRune(e.caret.start) }
+
 	for range words {
-		for r := next(); unicode.IsSpace(r) && !atEnd(); r = next() {
-			e.MoveCaret(direction, 0)
-			caret = e.closestToRune(e.caret.start)
+		for unicode.IsSpace(e.runeBeside(caret, direction)) && !atBoundary() {
+			advance()
 		}
-		e.MoveCaret(direction, 0)
-		caret = e.closestToRune(e.caret.start)
-		for r := next(); !unicode.IsSpace(r) && !atEnd(); r = next() {
-			e.MoveCaret(direction, 0)
-			caret = e.closestToRune(e.caret.start)
+		advance()
+		for !unicode.IsSpace(e.runeBeside(caret, direction)) && !atBoundary() {
+			advance()
 		}
 	}
 	e.updateSelection(selAct)
@@ -739,66 +651,55 @@ func (e *textView) MoveWord(distance int, selAct selectionAction) {
 func (e *textView) ScrollToCaret() {
 	caret := e.closestToRune(e.caret.start)
 	if e.SingleLine {
-		var dist int
-		if d := caret.x.Floor() - e.scrollOff.X; d < 0 {
-			dist = d
-		} else if d := caret.x.Ceil() - (e.scrollOff.X + e.viewSize.X); d > 0 {
-			dist = d
+		delta := 0
+		if before := caret.x.Floor() - e.scrollOff.X; before < 0 {
+			delta = before
+		} else if after := caret.x.Ceil() - e.scrollOff.X - e.viewSize.X; after > 0 {
+			delta = after
 		}
-		e.ScrollRel(dist, 0)
-	} else {
-		miny := caret.y - caret.ascent.Ceil()
-		maxy := caret.y + caret.descent.Ceil()
-		var dist int
-		if d := miny - e.scrollOff.Y; d < 0 {
-			dist = d
-		} else if d := maxy - (e.scrollOff.Y + e.viewSize.Y); d > 0 {
-			dist = d
-		}
-		e.ScrollRel(0, dist)
+		e.ScrollRel(delta, 0)
+		return
 	}
+
+	top := caret.y - caret.ascent.Ceil()
+	bottom := caret.y + caret.descent.Ceil()
+	delta := 0
+	if before := top - e.scrollOff.Y; before < 0 {
+		delta = before
+	} else if after := bottom - e.scrollOff.Y - e.viewSize.Y; after > 0 {
+		delta = after
+	}
+	e.ScrollRel(0, delta)
 }
 
-// SelectionLen returns the length of the selection, in runes; it is
-// equivalent to utf8.RuneCountInString(e.SelectedText()).
+// SelectionLen returns the absolute selection length in runes.
 func (e *textView) SelectionLen() int {
 	return abs(e.caret.start - e.caret.end)
 }
 
-// Selection returns the start and end of the selection, as rune offsets.
-// start can be > end.
+// Selection returns the directed selection endpoints as rune offsets.
 func (e *textView) Selection() (start, end int) {
 	return e.caret.start, e.caret.end
 }
 
-// SetCaret moves the caret to start, and sets the selection end to end. Then
-// the two ends are clamped to the nearest grapheme cluster boundary. start
-// and end are in runes, and represent offsets into the editor text.
+// SetCaret sets rune offsets for both ends, clamped to shaped grapheme bounds.
 func (e *textView) SetCaret(start, end int) {
 	e.caret.start = e.closestToRune(start).runes
 	e.caret.end = e.closestToRune(end).runes
 	e.clampCursorToGraphemes()
 }
 
-// SelectedText returns the currently selected text (if any) from the editor,
-// filling the provided byte slice if it is large enough or allocating and
-// returning a new byte slice if the provided one is insufficient.
-// Callers can guarantee that the buf is large enough by providing a buffer
-// with capacity e.SelectionLen()*utf8.UTFMax.
+// SelectedText copies the source bytes covered by the rune selection.
 func (e *textView) SelectedText(buf []byte) []byte {
-	startOff := e.runeOffset(e.caret.start)
-	endOff := e.runeOffset(e.caret.end)
-	start := min(startOff, endOff)
-	end := max(startOff, endOff)
-	if cap(buf) < end-start {
-		buf = make([]byte, end-start)
+	a := e.runeOffset(e.caret.start)
+	b := e.runeOffset(e.caret.end)
+	start, end := min(a, b), max(a, b)
+	size := end - start
+	if cap(buf) < size {
+		buf = make([]byte, size)
 	}
-	buf = buf[:end-start]
+	buf = buf[:size]
 	n, _ := e.rr.ReadAt(buf, int64(start))
-	// There is no way to reasonably handle a read error here. We rely upon
-	// implementations of textSource to provide other ways to signal errors
-	// if the user cares about that, and here we use whatever data we were
-	// able to read.
 	return buf[:n]
 }
 
@@ -808,28 +709,29 @@ func (e *textView) updateSelection(selAct selectionAction) {
 	}
 }
 
-// ClearSelection clears the selection, by setting the selection end equal to
-// the selection start.
+// ClearSelection collapses the selection onto the insertion point.
 func (e *textView) ClearSelection() {
 	e.caret.end = e.caret.start
 }
 
 // WriteTo implements io.WriterTo.
 func (e *textView) WriteTo(w io.Writer) (int64, error) {
-	e.Seek(0, io.SeekStart)
+	_, _ = e.Seek(0, io.SeekStart)
 	return io.Copy(w, struct{ io.Reader }{e})
 }
 
 // Seek implements io.Seeker.
 func (e *textView) Seek(offset int64, whence int) (int64, error) {
+	next := e.seekCursor
 	switch whence {
 	case io.SeekStart:
-		e.seekCursor = offset
+		next = offset
 	case io.SeekCurrent:
-		e.seekCursor += offset
+		next += offset
 	case io.SeekEnd:
-		e.seekCursor = e.rr.Size() + offset
+		next = e.rr.Size() + offset
 	}
+	e.seekCursor = next
 	return e.seekCursor, nil
 }
 
@@ -847,9 +749,5 @@ func (e *textView) ReadAt(p []byte, offset int64) (int, error) {
 
 // Regions returns visible regions covering the rune range [start,end).
 func (e *textView) Regions(start, end int, regions []Region) []Region {
-	viewport := image.Rectangle{
-		Min: e.scrollOff,
-		Max: e.viewSize.Add(e.scrollOff),
-	}
-	return e.index.locate(viewport, start, end, regions)
+	return e.index.locate(e.documentViewport(), start, end, regions)
 }

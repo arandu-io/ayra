@@ -23,7 +23,6 @@ var allowed = []string{
 	"eliasnaur.com/font",
 	"github.com/go-text/typesetting",
 	"golang.org/x/exp",
-	"golang.org/x/exp/shiny",
 	"golang.org/x/image",
 	"golang.org/x/net",
 	"golang.org/x/sys",
@@ -106,7 +105,6 @@ func TestNothingIsPinnedToAPseudoVersion(t *testing.T) {
 		// These publish no releases; a commit is all a require can name.
 		"eliasnaur.com/font",
 		"golang.org/x/exp",
-		"golang.org/x/exp/shiny",
 	}
 
 	for _, dir := range []string{".", "module"} {

@@ -28,54 +28,45 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// Editor implements an editable and scrollable text area.
+// Editor is the persistent state of an editable, scrollable text area.
 type Editor struct {
-	// text manages the text buffer and provides shaping and cursor positioning
-	// services.
+	// text owns shaping, cursor placement and the view onto the buffer.
 	text textView
-	// Alignment controls the alignment of text within the editor.
+
+	// Alignment places text within the available width.
 	Alignment text.Alignment
-	// LineHeight determines the gap between baselines of text. If zero, a sensible
-	// default will be used.
+	// LineHeight is the distance between baselines. Zero uses the shaper's
+	// default.
 	LineHeight unit.Sp
-	// LineHeightScale is multiplied by LineHeight to determine the final gap
-	// between baselines. If zero, a sensible default will be used.
+	// LineHeightScale multiplies LineHeight. Zero uses the default scale.
 	LineHeightScale float32
-	// SingleLine force the text to stay on a single line.
-	// SingleLine also sets the scrolling direction to
-	// horizontal.
+	// SingleLine replaces incoming line breaks with spaces and scrolls
+	// horizontally.
 	SingleLine bool
-	// ReadOnly controls whether the contents of the editor can be altered by
-	// user interaction. If set to true, the editor will allow selecting text
-	// and copying it interactively, but not modifying it.
+	// ReadOnly permits navigation and copying but refuses user edits.
 	ReadOnly bool
-	// Submit enabled translation of carriage return keys to SubmitEvents.
-	// If not enabled, carriage returns are inserted as newlines in the text.
+	// Submit turns an unmodified return key into a [SubmitEvent].
 	Submit bool
-	// Mask replaces the visual display of each rune in the contents with the given rune.
-	// Newline characters are not masked. When non-zero, the unmasked contents
-	// are accessed by Len, Text, and SetText.
+	// Mask draws every non-newline rune as this rune while retaining the
+	// original text.
 	Mask rune
-	// InputHint specifies the type of on-screen keyboard to be displayed.
+	// InputHint selects the on-screen keyboard requested while focused.
 	InputHint key.InputHint
-	// MaxLen limits the editor content to a maximum length. Zero means no limit.
+	// MaxLen limits content in runes. Zero means unlimited.
 	MaxLen int
-	// Filter is the list of characters allowed in the Editor. If Filter is empty,
-	// all characters are allowed.
+	// Filter contains every rune accepted as input. Empty accepts all runes.
 	Filter string
-	// WrapPolicy configures how displayed text will be broken into lines.
+	// WrapPolicy controls line breaking.
 	WrapPolicy text.WrapPolicy
 
-	buffer *editBuffer
-	// scratch is a byte buffer that is reused to efficiently read portions of text
-	// from the textView.
+	buffer     *editBuffer
 	scratch    []byte
 	blinkStart time.Time
 
-	// ime tracks the state relevant to input methods.
 	ime struct {
 		imeState
-		scratch []byte
+		scratch    []byte
+		historyIdx int
 	}
 
 	dragging    bool
@@ -86,11 +77,9 @@ type Editor struct {
 
 	clicker gesture.Click
 
-	// history contains undo history.
 	history []modification
-	// nextHistoryIdx is the index within the history of the next modification. This
-	// is only not len(history) immediately after undo operations occur. It is framed as the "next" value
-	// to make the zero value consistent.
+	// nextHistoryIdx points after the last applied modification. Undo moves it
+	// left; redo moves it right.
 	nextHistoryIdx int
 
 	pending []EditorEvent
@@ -116,12 +105,11 @@ type imeState struct {
 }
 
 type maskReader struct {
-	// rr is the underlying reader.
 	rr      io.RuneReader
 	maskBuf [utf8.UTFMax]byte
-	// mask is the utf-8 encoded mask rune.
-	mask []byte
-	// overflow contains excess mask bytes left over after the last Read call.
+	mask    []byte
+	// overflow is the part of an encoded mask that did not fit in the previous
+	// destination.
 	overflow []byte
 }
 
@@ -132,58 +120,53 @@ const (
 	selectionClear
 )
 
-func (m *maskReader) Reset(r io.Reader, mr rune) {
-	m.rr = bufio.NewReader(r)
-	n := utf8.EncodeRune(m.maskBuf[:], mr)
+func (m *maskReader) Reset(source io.Reader, mask rune) {
+	m.rr = bufio.NewReader(source)
+	m.overflow = nil
+	n := utf8.EncodeRune(m.maskBuf[:], mask)
 	m.mask = m.maskBuf[:n]
 }
 
-// Read reads from the underlying reader and replaces every
-// rune with the mask rune.
-func (m *maskReader) Read(b []byte) (n int, err error) {
-	for len(b) > 0 {
-		var replacement []byte
+// Read preserves newlines and substitutes the configured mask for other runes.
+func (m *maskReader) Read(dst []byte) (written int, err error) {
+	for len(dst) > 0 {
+		replacement := m.overflow
 		if len(m.overflow) > 0 {
-			replacement = m.overflow
+			m.overflow = nil
 		} else {
-			var r rune
-			r, _, err = m.rr.ReadRune()
+			var current rune
+			current, _, err = m.rr.ReadRune()
 			if err != nil {
 				break
 			}
-			if r == '\n' {
+			if current == '\n' {
 				replacement = []byte{'\n'}
 			} else {
 				replacement = m.mask
 			}
 		}
-		nn := copy(b, replacement)
-		m.overflow = replacement[nn:]
-		n += nn
-		b = b[nn:]
+		n := copy(dst, replacement)
+		m.overflow = replacement[n:]
+		dst = dst[n:]
+		written += n
 	}
-	return n, err
+	return written, err
 }
 
+// EditorEvent is an event emitted by an [Editor].
 type EditorEvent interface {
 	isEditorEvent()
 }
 
-// A ChangeEvent is generated for every user change to the text.
+// ChangeEvent reports a user-initiated text change.
 type ChangeEvent struct{}
 
-// A SubmitEvent is generated when Submit is set
-// and a carriage return key is pressed.
+// SubmitEvent reports an unmodified return while [Editor.Submit] is enabled.
 type SubmitEvent struct {
 	Text string
 }
 
-// A SelectEvent is generated when the user selects some text, or changes the
-// selection (e.g. with a shift-click), including if they remove the
-// selection. The selected text is not part of the event, on the theory that
-// it could be a relatively expensive operation (for a large editor), most
-// applications won't actually care about it, and those that do can call
-// Editor.SelectedText() (which can be empty).
+// SelectEvent reports that either end of the selection moved.
 type SelectEvent struct{}
 
 const (
@@ -191,106 +174,111 @@ const (
 	maxBlinkDuration = 10 * time.Second
 )
 
-func (e *Editor) processEvents(gtx layout.Context) (ev EditorEvent, ok bool) {
-	if len(e.pending) > 0 {
-		out := e.pending[0]
-		e.pending = e.pending[:copy(e.pending, e.pending[1:])]
-		return out, true
+func (e *Editor) processEvents(gtx layout.Context) (EditorEvent, bool) {
+	if pending, ok := e.popPending(); ok {
+		return pending, true
 	}
-	selStart, selEnd := e.Selection()
-	defer func() {
-		afterSelStart, afterSelEnd := e.Selection()
-		if selStart != afterSelStart || selEnd != afterSelEnd {
-			if ok {
-				e.pending = append(e.pending, SelectEvent{})
-			} else {
-				ev = SelectEvent{}
-				ok = true
-			}
-		}
-	}()
 
-	ev, ok = e.processPointer(gtx)
-	if ok {
-		return ev, ok
+	beforeStart, beforeEnd := e.Selection()
+	reported, ok := e.processPointer(gtx)
+	if !ok {
+		reported, ok = e.processKey(gtx)
 	}
-	ev, ok = e.processKey(gtx)
-	if ok {
-		return ev, ok
+
+	afterStart, afterEnd := e.Selection()
+	selectionMoved := beforeStart != afterStart || beforeEnd != afterEnd
+	if !selectionMoved {
+		return reported, ok
 	}
-	return nil, false
+	if ok {
+		e.pending = append(e.pending, SelectEvent{})
+		return reported, true
+	}
+	return SelectEvent{}, true
+}
+
+func (e *Editor) popPending() (EditorEvent, bool) {
+	if len(e.pending) == 0 {
+		return nil, false
+	}
+	first := e.pending[0]
+	copy(e.pending, e.pending[1:])
+	e.pending = e.pending[:len(e.pending)-1]
+	return first, true
 }
 
 func (e *Editor) processPointer(gtx layout.Context) (EditorEvent, bool) {
-	sbounds := e.text.ScrollBounds()
-	var smin, smax int
-	var axis gesture.Axis
+	bounds := e.text.ScrollBounds()
+	axis := gesture.Vertical
+	minimum, maximum := bounds.Min.Y, bounds.Max.Y
 	if e.SingleLine {
 		axis = gesture.Horizontal
-		smin, smax = sbounds.Min.X, sbounds.Max.X
+		minimum, maximum = bounds.Min.X, bounds.Max.X
 	} else {
 		axis = gesture.Vertical
-		smin, smax = sbounds.Min.Y, sbounds.Max.Y
 	}
-	var scrollX, scrollY pointer.ScrollRange
-	textDims := e.text.FullDimensions()
-	visibleDims := e.text.Dimensions()
+
+	var horizontal, vertical pointer.ScrollRange
+	full := e.text.FullDimensions()
+	visible := e.text.Dimensions()
 	if e.SingleLine {
-		scrollOffX := e.text.ScrollOff().X
-		scrollX.Min = min(-scrollOffX, 0)
-		scrollX.Max = max(0, textDims.Size.X-(scrollOffX+visibleDims.Size.X))
+		offset := e.text.ScrollOff().X
+		horizontal.Min = min(-offset, 0)
+		horizontal.Max = max(0, full.Size.X-offset-visible.Size.X)
 	} else {
-		scrollOffY := e.text.ScrollOff().Y
-		scrollY.Min = -scrollOffY
-		scrollY.Max = max(0, textDims.Size.Y-(scrollOffY+visibleDims.Size.Y))
+		offset := e.text.ScrollOff().Y
+		vertical.Min = -offset
+		vertical.Max = max(0, full.Size.Y-offset-visible.Size.Y)
 	}
-	sdist := e.scroller.Update(gtx.Metric, gtx.Source, gtx.Now, axis, scrollX, scrollY)
-	var soff int
+
+	distance := e.scroller.Update(gtx.Metric, gtx.Source, gtx.Now, axis, horizontal, vertical)
+	current := 0
 	if e.SingleLine {
-		e.text.ScrollRel(sdist, 0)
-		soff = e.text.ScrollOff().X
+		e.text.ScrollRel(distance, 0)
+		current = e.text.ScrollOff().X
 	} else {
-		e.text.ScrollRel(0, sdist)
-		soff = e.text.ScrollOff().Y
+		e.text.ScrollRel(0, distance)
+		current = e.text.ScrollOff().Y
 	}
+
 	for {
-		evt, ok := e.clicker.Update(gtx.Source)
+		clicked, ok := e.clicker.Update(gtx.Source)
 		if !ok {
 			break
 		}
-		ev, ok := e.processPointerEvent(gtx, evt)
+		ev, ok := e.processPointerEvent(gtx, clicked)
 		if ok {
 			return ev, ok
 		}
 	}
 	for {
-		evt, ok := e.dragger.Update(gtx.Metric, gtx.Source, gesture.Both)
+		dragged, ok := e.dragger.Update(gtx.Metric, gtx.Source, gesture.Both)
 		if !ok {
 			break
 		}
-		ev, ok := e.processPointerEvent(gtx, evt)
+		ev, ok := e.processPointerEvent(gtx, dragged)
 		if ok {
 			return ev, ok
 		}
 	}
 
-	if (sdist > 0 && soff >= smax) || (sdist < 0 && soff <= smin) {
+	if distance > 0 && current >= maximum || distance < 0 && current <= minimum {
 		e.scroller.Stop()
 	}
 	return nil, false
 }
 
-func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (EditorEvent, bool) {
-	switch evt := ev.(type) {
+func (e *Editor) processPointerEvent(gtx layout.Context, incoming event.Event) (EditorEvent, bool) {
+	switch incoming := incoming.(type) {
 	case gesture.ClickEvent:
 		switch {
-		case evt.Kind == gesture.KindPress && evt.Source == pointer.Mouse,
-			evt.Kind == gesture.KindClick && evt.Source != pointer.Mouse:
+		case incoming.Kind == gesture.KindPress && incoming.Source == pointer.Mouse,
+			incoming.Kind == gesture.KindClick && incoming.Source != pointer.Mouse:
 			prevCaretPos, _ := e.text.Selection()
 			e.blinkStart = gtx.Now
 			e.text.MoveCoord(image.Point{
-				X: int(math.Round(float64(evt.Position.X))),
-				Y: int(math.Round(float64(evt.Position.Y))),
+				X: int(math.Round(float64(incoming.Position.X))),
+				Y: int(math.Round(float64(incoming.Position.Y))),
 			})
 			gtx.Execute(key.FocusCmd{Tag: e})
 			if !e.ReadOnly {
@@ -300,10 +288,8 @@ func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (Editor
 				e.scrollCaret = true
 			}
 
-			if evt.Modifiers == key.ModShift {
+			if incoming.Modifiers == key.ModShift {
 				start, end := e.text.Selection()
-				// If they clicked closer to the end, then change the end to
-				// where the caret used to be (effectively swapping start & end).
 				if abs(end-start) < abs(start-prevCaretPos) {
 					e.text.SetCaret(start, prevCaretPos)
 				}
@@ -312,13 +298,12 @@ func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (Editor
 			}
 			e.dragging = true
 
-			// Process multi-clicks.
 			switch {
-			case evt.NumClicks == 2:
+			case incoming.NumClicks == 2:
 				e.text.MoveWord(-1, selectionClear)
 				e.text.MoveWord(1, selectionExtend)
 				e.dragging = false
-			case evt.NumClicks >= 3:
+			case incoming.NumClicks >= 3:
 				e.text.MoveLineStart(selectionClear)
 				e.text.MoveLineEnd(selectionExtend)
 				e.dragging = false
@@ -327,15 +312,15 @@ func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (Editor
 	case pointer.Event:
 		release := false
 		switch {
-		case evt.Kind == pointer.Release && evt.Source == pointer.Mouse:
+		case incoming.Kind == pointer.Release && incoming.Source == pointer.Mouse:
 			release = true
 			fallthrough
-		case evt.Kind == pointer.Drag && evt.Source == pointer.Mouse:
+		case incoming.Kind == pointer.Drag && incoming.Source == pointer.Mouse:
 			if e.dragging {
 				e.blinkStart = gtx.Now
 				e.text.MoveCoord(image.Point{
-					X: int(math.Round(float64(evt.Position.X))),
-					Y: int(math.Round(float64(evt.Position.Y))),
+					X: int(math.Round(float64(incoming.Position.X))),
+					Y: int(math.Round(float64(incoming.Position.Y))),
 				})
 				e.scrollCaret = true
 
@@ -348,25 +333,19 @@ func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (Editor
 	return nil, false
 }
 
-func condFilter(pred bool, f key.Filter) event.Filter {
-	if pred {
-		return f
-	} else {
+func optionalKeyFilter(enabled bool, filter key.Filter) event.Filter {
+	if !enabled {
 		return nil
 	}
+	return filter
 }
 
 func (e *Editor) processKey(gtx layout.Context) (EditorEvent, bool) {
 	if e.text.Changed() {
 		return ChangeEvent{}, true
 	}
-	caret, _ := e.text.Selection()
-	atBeginning := caret == 0
-	atEnd := caret == e.text.Len()
-	if gtx.Locale.Direction.Progression() != system.FromOrigin {
-		atEnd, atBeginning = atBeginning, atEnd
-	}
-	filters := []event.Filter{
+	atBeginning, atEnd := e.keyFilterBounds(gtx)
+	filters := [...]event.Filter{
 		key.FocusFilter{Target: e},
 		transfer.TargetFilter{Target: e, Type: "application/text"},
 		key.Filter{Focus: e, Name: key.NameEnter, Optional: key.ModShift},
@@ -385,100 +364,75 @@ func (e *Editor) processKey(gtx layout.Context) (EditorEvent, bool) {
 		key.Filter{Focus: e, Name: key.NameEnd, Optional: key.ModShortcut | key.ModShift},
 		key.Filter{Focus: e, Name: key.NamePageDown, Optional: key.ModShift},
 		key.Filter{Focus: e, Name: key.NamePageUp, Optional: key.ModShift},
-		condFilter(!atBeginning, key.Filter{Focus: e, Name: key.NameLeftArrow, Optional: key.ModShortcutAlt | key.ModShift}),
-		condFilter(!atBeginning, key.Filter{Focus: e, Name: key.NameUpArrow, Optional: key.ModShortcutAlt | key.ModShift}),
-		condFilter(!atEnd, key.Filter{Focus: e, Name: key.NameRightArrow, Optional: key.ModShortcutAlt | key.ModShift}),
-		condFilter(!atEnd, key.Filter{Focus: e, Name: key.NameDownArrow, Optional: key.ModShortcutAlt | key.ModShift}),
+		optionalKeyFilter(!atBeginning, key.Filter{Focus: e, Name: key.NameLeftArrow, Optional: key.ModShortcutAlt | key.ModShift}),
+		optionalKeyFilter(!atBeginning, key.Filter{Focus: e, Name: key.NameUpArrow, Optional: key.ModShortcutAlt | key.ModShift}),
+		optionalKeyFilter(!atEnd, key.Filter{Focus: e, Name: key.NameRightArrow, Optional: key.ModShortcutAlt | key.ModShift}),
+		optionalKeyFilter(!atEnd, key.Filter{Focus: e, Name: key.NameDownArrow, Optional: key.ModShortcutAlt | key.ModShift}),
 	}
-	// adjust keeps track of runes dropped because of MaxLen.
-	var adjust int
+	// selectionAdjustment accounts for runes refused by MaxLen or Filter
+	// before a following input-method selection is applied.
+	selectionAdjustment := 0
 	for {
-		ke, ok := gtx.Event(filters...)
+		incoming, ok := gtx.Event(filters[:]...)
 		if !ok {
 			break
 		}
 		e.blinkStart = gtx.Now
-		switch ke := ke.(type) {
+
+		switch incoming := incoming.(type) {
 		case key.FocusEvent:
-			// Reset IME state.
-			e.ime.imeState = imeState{}
-			e.ime.composition = key.Range{Start: -1, End: -1}
-			if ke.Focus && !e.ReadOnly {
+			e.resetInputMethod()
+			if incoming.Focus && !e.ReadOnly {
 				gtx.Execute(key.SoftKeyboardCmd{Show: true})
 			}
 		case key.CompositionEvent:
-			e.ime.composition = key.Range(ke)
+			e.ime.composition = key.Range(incoming)
 		case key.Event:
-			if !gtx.Focused(e) || ke.State != key.Press {
-				break
+			if !gtx.Focused(e) || incoming.State != key.Press {
+				continue
 			}
-			if !e.ReadOnly && e.Submit && (ke.Name == key.NameReturn || ke.Name == key.NameEnter) {
-				if !ke.Modifiers.Contain(key.ModShift) {
-					e.scratch = e.text.Text(e.scratch)
-					return SubmitEvent{
-						Text: string(e.scratch),
-					}, true
-				}
+			if event, ok := e.submitFromKey(incoming); ok {
+				return event, true
 			}
 			e.scrollCaret = true
 			e.scroller.Stop()
-			ev, ok := e.command(gtx, ke)
-			if ok {
-				return ev, ok
+			if event, ok := e.command(gtx, incoming); ok {
+				return event, true
 			}
 		case key.SnippetEvent:
-			e.updateSnippet(gtx, ke.Start, ke.End)
+			e.updateSnippet(gtx, incoming.Start, incoming.End)
 		case key.EditEvent:
 			if e.ReadOnly {
-				break
+				continue
 			}
-			e.scrollCaret = true
-			e.scroller.Stop()
-			s := ke.Text
-			moves := 0
-			submit := false
-			switch {
-			case e.Submit:
-				if i := strings.IndexByte(s, '\n'); i != -1 {
-					submit = true
-					moves += len(s) - i
-					s = s[:i]
-				}
-			case e.SingleLine:
-				s = strings.ReplaceAll(s, "\n", " ")
-			}
-			moves += e.replace(ke.Range.Start, ke.Range.End, s, true)
-			adjust += utf8.RuneCountInString(ke.Text) - moves
-			// Reset caret xoff.
-			e.text.MoveCaret(0, 0)
-			if submit {
-				e.scratch = e.text.Text(e.scratch)
-				submitEvent := SubmitEvent{
-					Text: string(e.scratch),
-				}
+			moves, submitted := e.applyInputMethodEdit(incoming)
+			selectionAdjustment += utf8.RuneCountInString(incoming.Text) - moves
+			if submitted {
+				event := e.submitEvent()
 				if e.text.Changed() {
-					e.pending = append(e.pending, submitEvent)
+					e.pending = append(e.pending, event)
 					return ChangeEvent{}, true
 				}
-				return submitEvent, true
+				return event, true
 			}
-		// Complete a paste event, initiated by Shortcut-V in Editor.command().
 		case transfer.DataEvent:
 			e.scrollCaret = true
 			e.scroller.Stop()
-			content, err := io.ReadAll(ke.Open())
-			if err == nil {
-				if e.Insert(string(content)) != 0 {
-					return ChangeEvent{}, true
-				}
+			content, err := io.ReadAll(incoming.Open())
+			if err == nil && e.Insert(string(content)) != 0 {
+				return ChangeEvent{}, true
 			}
 		case key.SelectionEvent:
 			e.scrollCaret = true
 			e.scroller.Stop()
-			ke.Start -= adjust
-			ke.End -= adjust
-			adjust = 0
-			e.text.SetCaret(ke.Start, ke.End)
+			incoming.Start -= selectionAdjustment
+			incoming.End -= selectionAdjustment
+			selectionAdjustment = 0
+			e.text.SetCaret(incoming.Start, incoming.End)
+			if e.ime.historyIdx == e.nextHistoryIdx {
+				e.rememberLastSelection()
+			}
+			e.ime.historyIdx = 0
 		}
 	}
 	if e.text.Changed() {
@@ -487,125 +441,173 @@ func (e *Editor) processKey(gtx layout.Context) (EditorEvent, bool) {
 	return nil, false
 }
 
-func (e *Editor) command(gtx layout.Context, k key.Event) (EditorEvent, bool) {
-	direction := 1
-	if gtx.Locale.Direction.Progression() == system.TowardOrigin {
-		direction = -1
+func (e *Editor) keyFilterBounds(gtx layout.Context) (atBeginning, atEnd bool) {
+	caret, _ := e.text.Selection()
+	atBeginning = caret == 0
+	atEnd = caret == e.text.Len()
+	if gtx.Locale.Direction.Progression() != system.FromOrigin {
+		atEnd, atBeginning = atBeginning, atEnd
 	}
-	moveByWord := k.Modifiers.Contain(key.ModShortcutAlt)
-	selAct := selectionClear
-	if k.Modifiers.Contain(key.ModShift) {
-		selAct = selectionExtend
-	}
-	if k.Modifiers.Contain(key.ModShortcut) {
-		switch k.Name {
-		// Initiate a paste operation, by requesting the clipboard contents; other
-		// half is in Editor.processKey() under clipboard.Event.
-		case "V":
-			if !e.ReadOnly {
-				gtx.Execute(clipboard.ReadCmd{Tag: e})
-			}
-		// Copy or Cut selection -- ignored if nothing selected.
-		case "C", "X":
-			e.scratch = e.text.SelectedText(e.scratch)
-			if text := string(e.scratch); text != "" {
-				gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(text))})
-				if k.Name == "X" && !e.ReadOnly {
-					if e.Delete(1) != 0 {
-						return ChangeEvent{}, true
-					}
-				}
-			}
-		// Select all
-		case "A":
-			e.text.SetCaret(0, e.text.Len())
-		case "Z":
-			if !e.ReadOnly {
-				if k.Modifiers.Contain(key.ModShift) {
-					if ev, ok := e.redo(); ok {
-						return ev, ok
-					}
-				} else {
-					if ev, ok := e.undo(); ok {
-						return ev, ok
-					}
-				}
-			}
-		case key.NameHome:
-			e.text.MoveTextStart(selAct)
-		case key.NameEnd:
-			e.text.MoveTextEnd(selAct)
-		}
+	return atBeginning, atEnd
+}
+
+func (e *Editor) resetInputMethod() {
+	e.ime.imeState = imeState{}
+	e.ime.composition = key.Range{Start: -1, End: -1}
+	e.ime.historyIdx = 0
+}
+
+func (e *Editor) submitFromKey(incoming key.Event) (EditorEvent, bool) {
+	if e.ReadOnly || !e.Submit || incoming.Modifiers.Contain(key.ModShift) {
 		return nil, false
 	}
-	switch k.Name {
-	case key.NameReturn, key.NameEnter:
+	if incoming.Name != key.NameReturn && incoming.Name != key.NameEnter {
+		return nil, false
+	}
+	return e.submitEvent(), true
+}
+
+func (e *Editor) submitEvent() SubmitEvent {
+	e.scratch = e.text.Text(e.scratch)
+	return SubmitEvent{Text: string(e.scratch)}
+}
+
+func (e *Editor) applyInputMethodEdit(incoming key.EditEvent) (moves int, submit bool) {
+	e.scrollCaret = true
+	e.scroller.Stop()
+
+	content := incoming.Text
+	switch {
+	case e.Submit:
+		if newline := strings.IndexByte(content, '\n'); newline >= 0 {
+			submit = true
+			moves += len(content) - newline
+			content = content[:newline]
+		}
+	case e.SingleLine:
+		content = strings.ReplaceAll(content, "\n", " ")
+	}
+	moves += e.replace(incoming.Range.Start, incoming.Range.End, content, true)
+	e.ime.historyIdx = e.nextHistoryIdx
+	e.text.MoveCaret(0, 0)
+	return moves, submit
+}
+
+func (e *Editor) command(gtx layout.Context, pressed key.Event) (EditorEvent, bool) {
+	progression := 1
+	if gtx.Locale.Direction.Progression() == system.TowardOrigin {
+		progression = -1
+	}
+	selection := selectionClear
+	if pressed.Modifiers.Contain(key.ModShift) {
+		selection = selectionExtend
+	}
+	if pressed.Modifiers.Contain(key.ModShortcut) {
+		return e.shortcut(gtx, pressed, selection)
+	}
+	return e.directCommand(pressed, progression, selection)
+}
+
+func (e *Editor) shortcut(gtx layout.Context, pressed key.Event, selection selectionAction) (EditorEvent, bool) {
+	switch pressed.Name {
+	case "V":
 		if !e.ReadOnly {
-			if e.Insert("\n") != 0 {
-				return ChangeEvent{}, true
-			}
+			gtx.Execute(clipboard.ReadCmd{Tag: e})
+		}
+	case "C", "X":
+		e.scratch = e.text.SelectedText(e.scratch)
+		selected := string(e.scratch)
+		if selected == "" {
+			return nil, false
+		}
+		gtx.Execute(clipboard.WriteCmd{
+			Type: "application/text",
+			Data: io.NopCloser(strings.NewReader(selected)),
+		})
+		if pressed.Name == "X" && !e.ReadOnly && e.Delete(1) != 0 {
+			return ChangeEvent{}, true
+		}
+	case "A":
+		e.text.SetCaret(0, e.text.Len())
+	case "Z":
+		if e.ReadOnly {
+			return nil, false
+		}
+		if pressed.Modifiers.Contain(key.ModShift) {
+			return e.redo()
+		}
+		return e.undo()
+	case key.NameHome:
+		e.text.MoveTextStart(selection)
+	case key.NameEnd:
+		e.text.MoveTextEnd(selection)
+	}
+	return nil, false
+}
+
+func (e *Editor) directCommand(pressed key.Event, progression int, selection selectionAction) (EditorEvent, bool) {
+	moveByWord := pressed.Modifiers.Contain(key.ModShortcutAlt)
+	changed := false
+	switch pressed.Name {
+	case key.NameReturn, key.NameEnter:
+		if !e.ReadOnly && e.Insert("\n") != 0 {
+			changed = true
 		}
 	case key.NameDeleteBackward:
 		if !e.ReadOnly {
 			if moveByWord {
-				if e.deleteWord(-1) != 0 {
-					return ChangeEvent{}, true
-				}
+				changed = e.deleteWord(-1) != 0
 			} else {
-				if e.Delete(-1) != 0 {
-					return ChangeEvent{}, true
-				}
+				changed = e.Delete(-1) != 0
 			}
 		}
 	case key.NameDeleteForward:
 		if !e.ReadOnly {
 			if moveByWord {
-				if e.deleteWord(1) != 0 {
-					return ChangeEvent{}, true
-				}
+				changed = e.deleteWord(1) != 0
 			} else {
-				if e.Delete(1) != 0 {
-					return ChangeEvent{}, true
-				}
+				changed = e.Delete(1) != 0
 			}
 		}
 	case key.NameUpArrow:
-		e.text.MoveLines(-1, selAct)
+		e.text.MoveLines(-1, selection)
 	case key.NameDownArrow:
-		e.text.MoveLines(+1, selAct)
+		e.text.MoveLines(1, selection)
 	case key.NameLeftArrow:
 		if moveByWord {
-			e.text.MoveWord(-1*direction, selAct)
+			e.text.MoveWord(-progression, selection)
 		} else {
-			if selAct == selectionClear {
+			if selection == selectionClear {
 				e.text.ClearSelection()
 			}
-			e.text.MoveCaret(-1*direction, -1*direction*int(selAct))
+			e.text.MoveCaret(-progression, -progression*int(selection))
 		}
 	case key.NameRightArrow:
 		if moveByWord {
-			e.text.MoveWord(1*direction, selAct)
+			e.text.MoveWord(progression, selection)
 		} else {
-			if selAct == selectionClear {
+			if selection == selectionClear {
 				e.text.ClearSelection()
 			}
-			e.text.MoveCaret(1*direction, int(selAct)*direction)
+			e.text.MoveCaret(progression, int(selection)*progression)
 		}
 	case key.NamePageUp:
-		e.text.MovePages(-1, selAct)
+		e.text.MovePages(-1, selection)
 	case key.NamePageDown:
-		e.text.MovePages(+1, selAct)
+		e.text.MovePages(1, selection)
 	case key.NameHome:
-		e.text.MoveLineStart(selAct)
+		e.text.MoveLineStart(selection)
 	case key.NameEnd:
-		e.text.MoveLineEnd(selAct)
+		e.text.MoveLineEnd(selection)
+	}
+	if changed {
+		return ChangeEvent{}, true
 	}
 	return nil, false
 }
 
-// initBuffer should be invoked first in every exported function that accesses
-// text state. It ensures that the underlying text widget is both ready to use
-// and has its fields synced with the editor.
+// initBuffer makes the zero Editor usable and projects its public options onto
+// the text view.
 func (e *Editor) initBuffer() {
 	if e.buffer == nil {
 		e.buffer = new(editBuffer)
@@ -620,27 +622,21 @@ func (e *Editor) initBuffer() {
 	e.text.DisableSpaceTrim = true
 }
 
-// Update the state of the editor in response to input events. Update consumes editor
-// input events until there are no remaining events or an editor event is generated.
-// To fully update the state of the editor, callers should call Update until it returns
-// false.
+// Update consumes input until it emits one editor event or has nothing left.
+// Callers drain it by calling Update until ok is false.
 func (e *Editor) Update(gtx layout.Context) (EditorEvent, bool) {
 	e.initBuffer()
-	event, ok := e.processEvents(gtx)
+	reported, ok := e.processEvents(gtx)
 	e.updateIMEState(gtx)
-
 	e.updateSnippet(gtx, e.ime.start, e.ime.end)
-	return event, ok
+	return reported, ok
 }
 
 func (e *Editor) updateIMEState(gtx layout.Context) {
 	start, end := e.text.Selection()
-	rng := key.Range{
-		Start: start,
-		End:   end,
-	}
+	selection := key.Range{Start: start, End: end}
 	scrollOff := e.text.ScrollOff()
-	if rng == e.ime.selection.rng &&
+	if selection == e.ime.selection.rng &&
 		e.ime.composition == e.ime.lastCompose &&
 		e.text.version == e.ime.textVersion &&
 		scrollOff == e.ime.scrollOff {
@@ -650,30 +646,29 @@ func (e *Editor) updateIMEState(gtx layout.Context) {
 	e.ime.textVersion = e.text.version
 	e.ime.scrollOff = scrollOff
 
-	newSel := e.ime.selection
-	newSel.rng = rng
-	caretPos, carAsc, carDesc := e.text.CaretInfo()
-	newSel.caret = key.Caret{
-		Pos:     layout.FPt(caretPos),
-		Ascent:  float32(carAsc),
-		Descent: float32(carDesc),
+	next := e.ime.selection
+	next.rng = selection
+	position, ascent, descent := e.text.CaretInfo()
+	next.caret = key.Caret{
+		Pos:     layout.FPt(position),
+		Ascent:  float32(ascent),
+		Descent: float32(descent),
 	}
-	newSel.compositionBounds = e.compositionBounds()
-	if newSel != e.ime.selection {
-		e.ime.selection = newSel
+	next.compositionBounds = e.compositionBounds()
+	if next != e.ime.selection {
+		e.ime.selection = next
 		gtx.Execute(key.SelectionCmd{
 			Tag:               e,
-			Range:             newSel.rng,
-			Caret:             newSel.caret,
-			CompositionBounds: newSel.compositionBounds,
+			Range:             next.rng,
+			Caret:             next.caret,
+			CompositionBounds: next.compositionBounds,
 		})
 	}
 }
 
-// Layout lays out the editor using the provided textMaterial as the paint material
-// for the text glyphs+caret and the selectMaterial as the paint material for the
-// selection rectangle.
-func (e *Editor) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
+// Layout shapes and paints the editor with separate text and selection
+// materials.
+func (e *Editor) Layout(gtx layout.Context, shaper *text.Shaper, face font.Font, size unit.Sp, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
 	for {
 		_, ok := e.Update(gtx)
 		if !ok {
@@ -681,51 +676,39 @@ func (e *Editor) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, siz
 		}
 	}
 
-	e.text.Layout(gtx, lt, font, size)
+	e.text.Layout(gtx, shaper, face, size)
 	return e.layout(gtx, textMaterial, selectMaterial)
 }
 
-// updateSnippet queues a key.SnippetCmd if the snippet content or position
-// have changed. off and len are in runes.
+// updateSnippet publishes the requested rune range when its range or contents
+// changed.
 func (e *Editor) updateSnippet(gtx layout.Context, start, end int) {
-	if start > end {
-		start, end = end, start
-	}
-	length := e.text.Len()
-	if start > length {
-		start = length
-	}
-	if end > length {
-		end = length
-	}
+	start, end = boundedRuneRange(start, end, e.text.Len())
 	e.ime.start = start
 	e.ime.end = end
 	startOff := e.text.ByteOffset(start)
 	endOff := e.text.ByteOffset(end)
-	n := endOff - startOff
-	if n > int64(len(e.ime.scratch)) {
-		e.ime.scratch = make([]byte, n)
+	byteCount := endOff - startOff
+	if byteCount > int64(len(e.ime.scratch)) {
+		e.ime.scratch = make([]byte, byteCount)
 	}
-	scratch := e.ime.scratch[:n]
+	scratch := e.ime.scratch[:byteCount]
 	read, _ := e.text.ReadAt(scratch, startOff)
 	if read != len(scratch) {
-		panic("e.rr.Read truncated data")
+		panic("editor snippet read was truncated")
 	}
-	newSnip := key.Snippet{
-		Range: key.Range{
-			Start: e.ime.start,
-			End:   e.ime.end,
-		},
-		Text: e.ime.snippet.Text,
+	next := key.Snippet{
+		Range: key.Range{Start: start, End: end},
+		Text:  e.ime.snippet.Text,
 	}
-	if string(scratch) != newSnip.Text {
-		newSnip.Text = string(scratch)
+	if content := string(scratch); content != next.Text {
+		next.Text = content
 	}
-	if newSnip == e.ime.snippet {
+	if next == e.ime.snippet {
 		return
 	}
-	e.ime.snippet = newSnip
-	gtx.Execute(key.SnippetCmd{Tag: e, Snippet: newSnip})
+	e.ime.snippet = next
+	gtx.Execute(key.SnippetCmd{Tag: e, Snippet: next})
 }
 
 func (e *Editor) layout(gtx layout.Context, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
@@ -857,6 +840,7 @@ func (e *Editor) Text() string {
 	return string(e.scratch)
 }
 
+// SetText replaces the contents and moves both ends of the selection to zero.
 func (e *Editor) SetText(s string) {
 	e.initBuffer()
 	if e.SingleLine {
@@ -865,176 +849,178 @@ func (e *Editor) SetText(s string) {
 	e.replace(0, e.text.Len(), s, true)
 	// Reset xoff and move the caret to the beginning.
 	e.SetCaret(0, 0)
+	e.rememberLastSelection()
 }
 
-// CaretPos returns the line & column numbers of the caret.
+// CaretPos returns the zero-based line and column of the caret.
 func (e *Editor) CaretPos() (line, col int) {
 	e.initBuffer()
 	return e.text.CaretPos()
 }
 
-// CaretCoords returns the coordinates of the caret, relative to the
-// editor itself.
+// CaretCoords returns the caret position in editor-local coordinates.
 func (e *Editor) CaretCoords() f32.Point {
 	e.initBuffer()
 	return e.text.CaretCoords()
 }
 
-// Delete runes from the caret position. The sign of the argument specifies the
-// direction to delete: positive is forward, negative is backward.
+// Delete removes grapheme clusters beside the caret. Positive values delete
+// forward and negative values delete backward.
 //
-// If there is a selection, it is deleted and counts as a single grapheme
-// cluster.
+// A non-empty selection is removed first and consumes one requested cluster.
+// The returned rune delta can be negative when the selection runs backwards.
 func (e *Editor) Delete(graphemeClusters int) (deletedRunes int) {
 	e.initBuffer()
 	if graphemeClusters == 0 {
-		return 0
+		return
 	}
 
 	start, end := e.text.Selection()
 	if start != end {
 		graphemeClusters -= sign(graphemeClusters)
 	}
-
-	// Move caret by the target quantity of clusters.
 	e.text.MoveCaret(0, graphemeClusters)
-	// Get the new rune offsets of the selection.
 	start, end = e.text.Selection()
 	e.replace(start, end, "", true)
-	// Reset xoff.
 	e.text.MoveCaret(0, 0)
 	e.ClearSelection()
+	e.rememberLastSelection()
 	return end - start
 }
 
+// Insert replaces the selection with s and returns the runes accepted.
 func (e *Editor) Insert(s string) (insertedRunes int) {
 	e.initBuffer()
 	if e.SingleLine {
 		s = strings.ReplaceAll(s, "\n", " ")
 	}
 	start, end := e.text.Selection()
-	moves := e.replace(start, end, s, true)
+	insertedRunes = e.replace(start, end, s, true)
 	if end < start {
 		start = end
 	}
-	// Reset xoff.
 	e.text.MoveCaret(0, 0)
-	e.SetCaret(start+moves, start+moves)
+	e.SetCaret(start+insertedRunes, start+insertedRunes)
+	e.rememberLastSelection()
 	e.scrollCaret = true
-	return moves
+	return insertedRunes
 }
 
-// modification represents a change to the contents of the editor buffer.
-// It contains the necessary information to both apply the change and
-// reverse it, and is useful for implementing undo/redo.
+// modification contains both directions of one replacement and the selection
+// produced when it was first applied.
 type modification struct {
-	// StartRune is the inclusive index of the first rune
-	// modified.
-	StartRune int
-	// ApplyContent is the data inserted at StartRune to
-	// apply this operation. It overwrites len([]rune(ReverseContent)) runes.
-	ApplyContent string
-	// ReverseContent is the data inserted at StartRune to
-	// apply this operation. It overwrites len([]rune(ApplyContent)) runes.
-	ReverseContent string
+	startRune int
+	forward   string
+	reverse   string
+	selection key.Range
 }
 
-// undo applies the modification at e.history[e.historyIdx] and decrements
-// e.historyIdx.
 func (e *Editor) undo() (EditorEvent, bool) {
 	e.initBuffer()
-	if len(e.history) < 1 || e.nextHistoryIdx == 0 {
+	if e.nextHistoryIdx == 0 {
 		return nil, false
 	}
-	mod := e.history[e.nextHistoryIdx-1]
-	replaceEnd := mod.StartRune + utf8.RuneCountInString(mod.ApplyContent)
-	e.replace(mod.StartRune, replaceEnd, mod.ReverseContent, false)
-	caretEnd := mod.StartRune + utf8.RuneCountInString(mod.ReverseContent)
-	e.SetCaret(caretEnd, mod.StartRune)
+	change := e.history[e.nextHistoryIdx-1]
+	end := change.startRune + utf8.RuneCountInString(change.forward)
+	e.replace(change.startRune, end, change.reverse, false)
+	restoredEnd := change.startRune + utf8.RuneCountInString(change.reverse)
+	e.SetCaret(restoredEnd, change.startRune)
 	e.nextHistoryIdx--
 	return ChangeEvent{}, true
 }
 
-// redo applies the modification at e.history[e.historyIdx] and increments
-// e.historyIdx.
 func (e *Editor) redo() (EditorEvent, bool) {
 	e.initBuffer()
-	if len(e.history) < 1 || e.nextHistoryIdx == len(e.history) {
+	if e.nextHistoryIdx >= len(e.history) {
 		return nil, false
 	}
-	mod := e.history[e.nextHistoryIdx]
-	end := mod.StartRune + utf8.RuneCountInString(mod.ReverseContent)
-	e.replace(mod.StartRune, end, mod.ApplyContent, false)
-	caretEnd := mod.StartRune + utf8.RuneCountInString(mod.ApplyContent)
-	e.SetCaret(caretEnd, mod.StartRune)
+	change := e.history[e.nextHistoryIdx]
+	end := change.startRune + utf8.RuneCountInString(change.reverse)
+	e.replace(change.startRune, end, change.forward, false)
+	e.SetCaret(change.selection.Start, change.selection.End)
 	e.nextHistoryIdx++
 	return ChangeEvent{}, true
 }
 
-// replace the text between start and end with s. Indices are in runes.
-// It returns the number of runes inserted.
-// addHistory controls whether this modification is recorded in the undo
-// history. replace can modify text in positions unrelated to the cursor
-// position.
-func (e *Editor) replace(start, end int, s string, addHistory bool) int {
+// replace changes a rune range without assuming it is the current selection.
+func (e *Editor) replace(start, end int, content string, addHistory bool) int {
 	length := e.text.Len()
-	if start > end {
-		start, end = end, start
-	}
-	start = min(start, length)
-	end = min(end, length)
-	replaceSize := end - start
-	el := e.Len()
-	var sc int
-	idx := 0
-	for idx < len(s) {
-		if e.MaxLen > 0 && el-replaceSize+sc >= e.MaxLen {
-			s = s[:idx]
-			break
-		}
-		_, n := utf8.DecodeRuneInString(s[idx:])
-		if e.Filter != "" && !strings.Contains(e.Filter, s[idx:idx+n]) {
-			s = s[:idx] + s[idx+n:]
-			continue
-		}
-		idx += n
-		sc++
-	}
+	start, end = boundedRuneRange(start, end, length)
+	replaced := end - start
+	content, accepted := e.acceptedText(content, length-replaced)
 
 	if addHistory {
-		deleted := make([]rune, 0, replaceSize)
-		readPos := e.text.ByteOffset(start)
-		for range replaceSize {
-			ru, s, _ := e.text.ReadRuneAt(int64(readPos))
-			readPos += int64(s)
-			deleted = append(deleted, ru)
-		}
+		removed := e.runesInRange(start, end)
 		if e.nextHistoryIdx < len(e.history) {
 			e.history = e.history[:e.nextHistoryIdx]
 		}
 		e.history = append(e.history, modification{
-			StartRune:      start,
-			ApplyContent:   s,
-			ReverseContent: string(deleted),
+			startRune: start,
+			forward:   content,
+			reverse:   removed,
+			selection: key.Range{Start: start + accepted, End: start + accepted},
 		})
 		e.nextHistoryIdx++
 	}
 
-	sc = e.text.Replace(start, end, s)
-	newEnd := start + sc
+	accepted = e.text.Replace(start, end, content)
+	newEnd := start + accepted
 	adjust := func(pos int) int {
 		switch {
 		case newEnd < pos && pos <= end:
-			pos = newEnd
+			return newEnd
 		case end < pos:
-			diff := newEnd - end
-			pos = pos + diff
+			return pos + newEnd - end
 		}
 		return pos
 	}
 	e.ime.start = adjust(e.ime.start)
 	e.ime.end = adjust(e.ime.end)
-	return sc
+	return accepted
+}
+
+func (e *Editor) acceptedText(content string, currentLength int) (string, int) {
+	var accepted strings.Builder
+	count := 0
+	for _, r := range content {
+		if e.MaxLen > 0 && currentLength+count >= e.MaxLen {
+			break
+		}
+		if e.Filter != "" && !strings.ContainsRune(e.Filter, r) {
+			continue
+		}
+		accepted.WriteRune(r)
+		count++
+	}
+	return accepted.String(), count
+}
+
+func (e *Editor) runesInRange(start, end int) string {
+	var removed strings.Builder
+	byteOffset := e.text.ByteOffset(start)
+	for runeIndex := start; runeIndex < end; runeIndex++ {
+		r, size, _ := e.text.ReadRuneAt(byteOffset)
+		removed.WriteRune(r)
+		byteOffset += int64(size)
+	}
+	return removed.String()
+}
+
+func (e *Editor) rememberLastSelection() {
+	if e.nextHistoryIdx == 0 || e.nextHistoryIdx > len(e.history) {
+		return
+	}
+	start, end := e.Selection()
+	e.history[e.nextHistoryIdx-1].selection = key.Range{Start: start, End: end}
+}
+
+func boundedRuneRange(start, end, length int) (int, int) {
+	if start > end {
+		start, end = end, start
+	}
+	start = min(max(start, 0), length)
+	end = min(max(end, 0), length)
+	return start, end
 }
 
 // MoveCaret moves the caret (aka selection start) and the selection end
