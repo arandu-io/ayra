@@ -6,156 +6,122 @@ import (
 	"github.com/arandu-io/ayra/engine/op"
 )
 
-// Stack lays out child elements on top of each other,
-// according to an alignment direction.
+// Stack places children in the same bounds, one above the previous child.
 type Stack struct {
-	// Alignment is the direction to align children
-	// smaller than the available space.
+	// Alignment places children that are smaller than the stack bounds.
 	Alignment Direction
 }
 
-// StackChild represents a child for a Stack layout.
+// StackChild is a child and the rule Stack uses to measure it.
 type StackChild struct {
 	expanded bool
 	widget   Widget
 }
 
-// Stacked returns a Stack child that is laid out with no minimum
-// constraints and the maximum constraints passed to Stack.Layout.
-func Stacked(w Widget) StackChild {
-	return StackChild{
-		widget: w,
-	}
+// Stacked makes a child choose its size without a minimum constraint.
+func Stacked(widget Widget) StackChild {
+	return StackChild{widget: widget}
 }
 
-// Expanded returns a Stack child with the minimum constraints set
-// to the largest Stacked child. The maximum constraints are set to
-// the same as passed to Stack.Layout.
-func Expanded(w Widget) StackChild {
-	return StackChild{
-		expanded: true,
-		widget:   w,
-	}
+// Expanded makes a child receive the largest size already established by the
+// stack as its minimum constraint.
+func Expanded(widget Widget) StackChild {
+	return StackChild{expanded: true, widget: widget}
 }
 
-// Layout a stack of children. The position of the children are
-// determined by the specified order, but Stacked children are laid out
-// before Expanded children.
+type stackMeasurement struct {
+	call op.CallOp
+	dims Dimensions
+}
+
+// Layout measures ordinary stacked children before expanded children, then
+// draws every child in argument order. Later children therefore appear above
+// earlier children even when they had to be measured first.
 func (s Stack) Layout(gtx Context, children ...StackChild) Dimensions {
-	var maxSZ image.Point
-	// First lay out Stacked children.
-	cgtx := gtx
-	cgtx.Constraints.Min = image.Point{}
-	// Note: previously the scratch space was inside StackChild.
-	// child.call.Add(gtx.Ops) confused the go escape analysis and caused the
-	// entired children slice to be allocated on the heap, including all widgets
-	// in it. This produced a lot of object allocations. Now the scratch space
-	// is separate from children, and for cases len(children) <= 32, we will
-	// allocate the scratch space on the stack. For cases len(children) > 32,
-	// only the scratch space gets allocated from the heap, during append.
-	type scratchSpace struct {
-		call op.CallOp
-		dims Dimensions
-	}
-	var scratchArray [32]scratchSpace
-	scratch := scratchArray[:0]
-	scratch = append(scratch, make([]scratchSpace, len(children))...)
-	for i, w := range children {
-		if w.expanded {
-			continue
-		}
-		macro := op.Record(gtx.Ops)
-		dims := w.widget(cgtx)
-		call := macro.Stop()
-		if w := dims.Size.X; w > maxSZ.X {
-			maxSZ.X = w
-		}
-		if h := dims.Size.Y; h > maxSZ.Y {
-			maxSZ.Y = h
-		}
-		scratch[i].call = call
-		scratch[i].dims = dims
-	}
-	// Then lay out Expanded children.
-	for i, w := range children {
-		if !w.expanded {
-			continue
-		}
-		macro := op.Record(gtx.Ops)
-		cgtx.Constraints.Min = maxSZ
-		dims := w.widget(cgtx)
-		call := macro.Stop()
-		if w := dims.Size.X; w > maxSZ.X {
-			maxSZ.X = w
-		}
-		if h := dims.Size.Y; h > maxSZ.Y {
-			maxSZ.Y = h
-		}
-		scratch[i].call = call
-		scratch[i].dims = dims
+	var local [32]stackMeasurement
+	measurements := local[:]
+	if len(children) > len(measurements) {
+		measurements = make([]stackMeasurement, len(children))
+	} else {
+		measurements = measurements[:len(children)]
 	}
 
-	maxSZ = gtx.Constraints.Constrain(maxSZ)
-	var baseline int
-	for _, scratchChild := range scratch {
-		sz := scratchChild.dims.Size
-		var p image.Point
-		switch s.Alignment {
-		case N, S, Center:
-			p.X = (maxSZ.X - sz.X) / 2
-		case NE, SE, E:
-			p.X = maxSZ.X - sz.X
+	childContext := gtx
+	childContext.Constraints.Min = image.Point{}
+	bounds := image.Point{}
+	for i, child := range children {
+		if child.expanded {
+			continue
 		}
-		switch s.Alignment {
-		case W, Center, E:
-			p.Y = (maxSZ.Y - sz.Y) / 2
-		case SW, S, SE:
-			p.Y = maxSZ.Y - sz.Y
+		measurements[i] = measureStackChild(gtx, childContext, child.widget)
+		bounds = largestPoint(bounds, measurements[i].dims.Size)
+	}
+
+	for i, child := range children {
+		if !child.expanded {
+			continue
 		}
-		trans := op.Offset(p).Push(gtx.Ops)
-		scratchChild.call.Add(gtx.Ops)
-		trans.Pop()
-		if baseline == 0 {
-			if b := scratchChild.dims.Baseline; b != 0 {
-				baseline = b + maxSZ.Y - sz.Y - p.Y
-			}
+		childContext.Constraints.Min = bounds
+		measurements[i] = measureStackChild(gtx, childContext, child.widget)
+		bounds = largestPoint(bounds, measurements[i].dims.Size)
+	}
+
+	bounds = gtx.Constraints.Constrain(bounds)
+	baseline := 0
+	for _, measured := range measurements {
+		position := s.Alignment.Position(measured.dims.Size, bounds)
+		transform := op.Offset(position).Push(gtx.Ops)
+		measured.call.Add(gtx.Ops)
+		transform.Pop()
+
+		if baseline == 0 && measured.dims.Baseline != 0 {
+			baseline = measured.dims.Baseline + bounds.Y - measured.dims.Size.Y - position.Y
 		}
 	}
-	return Dimensions{
-		Size:     maxSZ,
-		Baseline: baseline,
-	}
+	return Dimensions{Size: bounds, Baseline: baseline}
 }
 
-// Background lays out single child widget on top of a background,
-// centering, if necessary.
+func measureStackChild(parent, child Context, widget Widget) stackMeasurement {
+	recording := op.Record(parent.Ops)
+	dims := widget(child)
+	return stackMeasurement{call: recording.Stop(), dims: dims}
+}
+
+func largestPoint(a, b image.Point) image.Point {
+	if b.X > a.X {
+		a.X = b.X
+	}
+	if b.Y > a.Y {
+		a.Y = b.Y
+	}
+	return a
+}
+
+// Background lays out one widget over a background sized to contain it.
 type Background struct{}
 
-// Layout a widget and then add a background to it.
+// Layout measures widget first, draws background, then centres and draws the
+// widget above it. The returned size is the background size.
 func (Background) Layout(gtx Context, background, widget Widget) Dimensions {
-	macro := op.Record(gtx.Ops)
-	wdims := widget(gtx)
-	baseline := wdims.Baseline
-	call := macro.Stop()
+	recording := op.Record(gtx.Ops)
+	foreground := widget(gtx)
+	foregroundCall := recording.Stop()
 
-	cgtx := gtx
-	cgtx.Constraints.Min = gtx.Constraints.Constrain(wdims.Size)
-	bdims := background(cgtx)
+	backgroundContext := gtx
+	backgroundContext.Constraints.Min = gtx.Constraints.Constrain(foreground.Size)
+	backdrop := background(backgroundContext)
 
-	if bdims.Size != wdims.Size {
-		p := image.Point{
-			X: (bdims.Size.X - wdims.Size.X) / 2,
-			Y: (bdims.Size.Y - wdims.Size.Y) / 2,
-		}
-		baseline += (bdims.Size.Y - wdims.Size.Y) / 2
-		trans := op.Offset(p).Push(gtx.Ops)
-		defer trans.Pop()
+	position := Center.Position(foreground.Size, backdrop.Size)
+	if position == (image.Point{}) {
+		foregroundCall.Add(gtx.Ops)
+	} else {
+		transform := op.Offset(position).Push(gtx.Ops)
+		foregroundCall.Add(gtx.Ops)
+		transform.Pop()
 	}
 
-	call.Add(gtx.Ops)
-
 	return Dimensions{
-		Size:     bdims.Size,
-		Baseline: baseline,
+		Size:     backdrop.Size,
+		Baseline: foreground.Baseline + backdrop.Size.Y - foreground.Size.Y - position.Y,
 	}
 }
