@@ -35,12 +35,32 @@ const original = "gioui.org@v0.10.2"
 // ceiling. It may fall -- that is the work -- and a rise fails, which is what
 // stops the decision from being undone on an afternoon when something does not
 // compile.
-const stillTheirs = 146
+const stillTheirs = 105
 
-// comparable is how many files of the copy have a counterpart to compare
-// against. It is asserted so that a walk which stopped matching reports a
-// smaller universe instead of a smaller count, which would read as progress.
-const comparable = 154
+// comparable is how many files of the copy carry code and have a counterpart to
+// compare against. It is asserted so that a walk which stopped matching reports
+// a smaller universe instead of a smaller count, which would read as progress.
+const comparable = 137
+
+// A file with no code in it is not counted, and leaving it in was a fault in
+// this measurement rather than a detail of it.
+//
+// Seventeen files under engine/ are a package clause and nothing else: the
+// documentation of a package, or a declaration that exists only to carry a
+// build constraint. Normalising strips comments, so both sides of such a file
+// reduce to the same few characters no matter what is written in it -- one of
+// them had every one of its two hundred lines replaced and still counted as
+// untouched, and would have counted that way if it were rewritten ten times.
+//
+// Counting them made the number say that work nobody can do is work not yet
+// done. They are left out, and the number that remains is one that reaching
+// zero is possible for.
+func hasCode(source string) bool {
+	stripped := strings.TrimSpace(normalise(source))
+	return !packageOnly.MatchString(stripped)
+}
+
+var packageOnly = regexp.MustCompile(`^package[A-Za-z_][A-Za-z0-9_]*$`)
 
 // TestHowMuchOfThisIsStillSomebodyElses is the number, and the ratchet.
 func TestHowMuchOfThisIsStillSomebodyElses(t *testing.T) {
@@ -75,7 +95,6 @@ func TestHowMuchOfThisIsStillSomebodyElses(t *testing.T) {
 			// counts as ours by construction rather than by assertion.
 			return nil
 		}
-		seen++
 
 		ours, err := os.ReadFile(path)
 		if err != nil {
@@ -85,6 +104,12 @@ func TestHowMuchOfThisIsStillSomebodyElses(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		if !hasCode(string(ours)) && !hasCode(string(original)) {
+			// Nothing to measure on either side. See hasCode.
+			return nil
+		}
+		seen++
+
 		if normalise(string(ours)) == normalise(string(original)) {
 			same++
 			theirs = append(theirs, relative)
