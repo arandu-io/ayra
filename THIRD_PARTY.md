@@ -7,29 +7,23 @@
     upstream   gioui.org
     version    v0.10.2
     shaders    gioui.org/shader v1.0.9
-    offered    UNLICENSE or MIT, at the recipient's choice
-    taken      UNLICENSE
+    terms      UNLICENSE or MIT, at the recipient's choice, reproduced in
+               engine/LICENSE and engine/shader/LICENSE
 
-### Which of the two was taken, and what follows from it
+### Where the terms live, and where they do not
 
-The upstream offered two sets of terms and let the recipient pick. **This
-repository takes the Unlicense.** Its grant is unconditional in its own words —
-*"Anyone is free to copy, modify, publish, use, compile, sell, or distribute
-this software, either in source code form or as a compiled binary, for any
-purpose, commercial or non-commercial, and by any means"* — so there is no
-notice to carry, and the upstream's licence files were removed rather than
-reproduced. That is the option working as written, not a gap.
+**In two files, and nowhere else.** `engine/LICENSE` and
+`engine/shader/LICENSE` carry both sets of terms as they were offered, and a
+recipient picks whichever they want to use — which is what the offer means and
+why reproducing it whole is the honest way to pass it on.
 
-The choice binds nobody else: anyone receiving this code may still take MIT
-against the original source instead, and this section is what tells them the
-offer existed.
-
-Recorded honestly rather than left flattering: the Unlicense is a public-domain
-dedication, and a dedication is not recognised in every jurisdiction. Where it
-is not, the unconditional permission above stands on its own as a permissive
-grant. The origin stays written down here — not because a licence demands it,
-but because a repository that cannot answer where its code came from is one
-nobody can audit.
+They are **not** repeated at the top of every source file. Two hundred and three
+files used to carry a one-line tag naming the terms, inherited with the copy;
+those are gone. A licence is a fact about a body of code and belongs in one
+place, which is also what Go itself does. A tag repeated two hundred times is a
+claim made two hundred times and checked nowhere, and the failure it invites is
+quiet: whoever edits a file writes what they believe, and nothing measures
+whether it is still true.
 
 ### The notices that are not the upstream's, and stay
 
@@ -50,12 +44,6 @@ this tree entirely — the cleanest end, and the one that removes the obligation
 removing the copy.
 
 ### What is being rewritten, and how far it has got
-
-**No source file carries a licence header.** The terms of this repository live
-in `LICENSE.md` at the root, and what travels with the code lives in this file —
-which is where this project keeps them, and what Go itself does. A tag repeated
-at the top of two hundred files is a claim made two hundred times and checked
-nowhere.
 
 Provenance is **measured rather than declared**. A file is still the original
 when its content still is, and that is a comparison anybody can run — not a line
