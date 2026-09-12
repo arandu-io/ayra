@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package byteslice provides byte slice views of other Go values such as
 // slices and structs.
 package byteslice

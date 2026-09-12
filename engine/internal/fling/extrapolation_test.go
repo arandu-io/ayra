@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package fling
 
 import "testing"

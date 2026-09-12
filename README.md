@@ -72,9 +72,20 @@ session, and a process on a device does not mint one.
 **Screen readers reach one platform.** Of the nine platform backends beneath
 this library, one walks a semantic tree; the other eight do not. On macOS,
 Windows, iOS, Linux and in a browser, an application built here is one surface
-with no accessible children. That is a boundary of the drawing model, it is
-declared rather than discovered, and a test guards the count so a regression
-cannot pass quietly.
+with no accessible children. It is declared rather than discovered, and a test
+guards the count so a regression cannot pass quietly.
+
+Eight of those nine are unwritten rather than unreachable, and saying otherwise
+would be claiming a limit the platforms do not impose: a browser can carry the
+tree as elements beneath the canvas, Windows and the Linux desktops expose it
+over interfaces this library can already speak, and the two Apple platforms
+need code in a language this library already compiles. What is a real limit is
+narrower and outlives all of that — a node here carries a label, a description,
+a class from a set of five, and two flags. It cannot say that one control
+describes another, that a region changed and should be read out now, or that a
+box is half-checked. Those are missing from the model, not from the backends,
+and a platform written before the node grows would be nine implementations of a
+field that does not exist.
 
 **The browser target is a preview.** The same native application, opened
 without installing — a demonstration and a component catalogue. It is not a way

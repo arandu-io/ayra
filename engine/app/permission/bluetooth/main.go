@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package bluetooth implements permissions to access Bluetooth and Bluetooth
 Low Energy hardware, including the ability to discover and pair devices.

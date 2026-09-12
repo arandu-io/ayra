@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package clip provides operations for defining areas that applies to operations
 such as paints and pointer handlers.

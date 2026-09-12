@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 // Package semantic provides operations for semantic descriptions of a user
 // interface, to facilitate presentation and interaction in external software
 // such as screen readers.

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 package key
 
 // ModShortcut is the platform's shortcut modifier, usually the ctrl

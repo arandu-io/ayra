@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package gpu implements the rendering of Gio drawing operations. It
 is used by package app and package gpu/headless and is otherwise not

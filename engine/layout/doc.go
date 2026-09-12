@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package layout implements layouts common to GUI programs.
 

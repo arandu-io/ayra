@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Unlicense OR MIT
-
 /*
 Package wakelock implements permission to acquire locks that keep the system
 from suspending.

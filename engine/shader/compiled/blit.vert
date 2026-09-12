@@ -1,7 +1,5 @@
 #version 310 es
 
-// SPDX-License-Identifier: Unlicense OR MIT
-
 #extension GL_GOOGLE_include_directive : enable
 
 precision highp float;
