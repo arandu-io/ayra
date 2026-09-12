@@ -6,6 +6,7 @@ import (
 
 	nsareg "eliasnaur.com/font/noto/sans/arabic/regular"
 	"github.com/arandu-io/ayra/engine/font/opentype"
+	"github.com/arandu-io/ayra/engine/io/system"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/math/fixed"
 )
@@ -254,5 +255,65 @@ func TestShapingClustersCombiningMarks(t *testing.T) {
 	}
 	if clusters != 1 {
 		t.Errorf("the base and its marks came out as %d clusters, want 1", clusters)
+	}
+}
+
+// TestShapingAlignmentMovesTheGlyphs verifies that alignment changes only
+// placement, and that start and end follow the paragraph direction.
+func TestShapingAlignmentMovesTheGlyphs(t *testing.T) {
+	positions := func(locale system.Locale) [3]fixed.Int26_6 {
+		var out [3]fixed.Int26_6
+		for i, alignment := range []Alignment{Start, Middle, End} {
+			s := newTestShaper(t)
+			params := testParams()
+			params.Alignment = alignment
+			params.MinWidth = 300
+			params.Locale = locale
+			s.LayoutString(params, "word")
+			glyphs := drain(s)
+			if len(glyphs) == 0 {
+				t.Fatal("aligned text produced no glyphs")
+			}
+			out[i] = glyphs[0].X
+		}
+		return out
+	}
+	ltr := positions(system.Locale{Language: "EN", Direction: system.LTR})
+	rtl := positions(system.Locale{Language: "AR", Direction: system.RTL})
+	if !(ltr[0] < ltr[1] && ltr[1] < ltr[2]) {
+		t.Errorf("LTR alignment positions are %v, want start < middle < end", ltr)
+	}
+	if !(rtl[0] > rtl[1] && rtl[1] > rtl[2]) {
+		t.Errorf("RTL alignment positions are %v, want start > middle > end", rtl)
+	}
+}
+
+// TestShapingAccountsForNewlinesUnderLineLimits checks the public glyph stream
+// rather than the lower layout representation. Every source rune remains
+// reachable even when several later paragraphs are represented by one
+// truncator.
+func TestShapingAccountsForNewlinesUnderLineLimits(t *testing.T) {
+	for _, input := range []string{"", "\n", "a\n", "\n\n", "a\n\nb", "a\n\n\n"} {
+		for _, limit := range []int{0, 1, 2} {
+			s := newTestShaper(t)
+			params := testParams()
+			params.MaxLines = limit
+			s.LayoutString(params, input)
+			glyphs := drain(s)
+			total := 0
+			lines := 0
+			for _, glyph := range glyphs {
+				total += int(glyph.Runes)
+				if glyph.Flags&FlagLineBreak != 0 {
+					lines++
+				}
+			}
+			if total != len([]rune(input)) {
+				t.Errorf("input %q limit %d: glyphs account for %d runes, want %d", input, limit, total, len([]rune(input)))
+			}
+			if limit > 0 && lines > limit {
+				t.Errorf("input %q limit %d: produced %d line breaks", input, limit, lines)
+			}
+		}
 	}
 }
