@@ -8,12 +8,14 @@ import (
 	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/font/gofont"
+	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/input"
 	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/io/pointer"
 	"github.com/arandu-io/ayra/engine/io/system"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
+	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 )
@@ -76,6 +78,36 @@ func (f *selectableFixture) frame() {
 	f.gtx.Source = f.router.Source()
 	f.s.Layout(f.gtx, f.shaper, font.Font{}, unit.Sp(10), op.CallOp{}, op.CallOp{})
 	f.router.Frame(f.gtx.Ops)
+}
+
+// frameWithPointerObserver draws an enclosing pointer handler around the
+// selectable and returns everything that reached it during this frame. A touch
+// gesture must remain visible here: the selectable does not implement touch
+// dragging and therefore has no reason to take the pointer away.
+func (f *selectableFixture) frameWithPointerObserver(tag event.Tag) []pointer.Event {
+	f.t.Helper()
+	f.gtx.Ops.Reset()
+	f.gtx.Source = f.router.Source()
+	outer := clip.Rect(image.Rectangle{Max: image.Pt(400, 200)}).Push(f.gtx.Ops)
+	event.Op(f.gtx.Ops, tag)
+	f.s.Layout(f.gtx, f.shaper, font.Font{}, unit.Sp(10), op.CallOp{}, op.CallOp{})
+	outer.Pop()
+
+	var events []pointer.Event
+	for {
+		raw, ok := f.gtx.Event(pointer.Filter{
+			Target: tag,
+			Kinds:  pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel,
+		})
+		if !ok {
+			break
+		}
+		if evt, ok := raw.(pointer.Event); ok {
+			events = append(events, evt)
+		}
+	}
+	f.router.Frame(f.gtx.Ops)
+	return events
 }
 
 // focus gives the selectable the keyboard, which the copy shortcut needs and
@@ -187,6 +219,120 @@ func TestSelectableDragIsTheSameBothWays(t *testing.T) {
 	if got := forward.s.SelectedText(); got == "" {
 		t.Error("dragging across the text selected nothing")
 	}
+}
+
+// More than one complete gesture can arrive between two frames. Their meaning
+// follows their wire order: a click after a drag is the final action, even when
+// it happened soon enough that two ordinary clicks would form a double click.
+func TestSelectableKeepsPointerGesturesInArrivalOrder(t *testing.T) {
+	f := newSelectableFixture(t, "alpha beta gamma delta")
+	f.press(f.at(2))
+	f.drag(f.at(8))
+	f.release(f.at(8))
+	f.now += 10 * time.Millisecond
+	f.press(f.at(14))
+	f.release(f.at(14))
+	f.frame()
+
+	if start, end := f.s.Selection(); start != 14 || end != 14 {
+		t.Errorf("a drag followed by a click ended at [%d,%d), want [14,14)", start, end)
+	}
+	if got := f.s.SelectedText(); got != "" {
+		t.Errorf("the final click left %q selected", got)
+	}
+}
+
+func TestSelectableTouchTapMovesTheCaret(t *testing.T) {
+	f := newSelectableFixture(t, "alpha beta gamma")
+	f.s.SetCaret(0, 5)
+	target := f.at(12)
+	f.router.Queue(
+		pointer.Event{Kind: pointer.Press, Source: pointer.Touch, PointerID: 7, Time: f.now, Position: target},
+		pointer.Event{Kind: pointer.Release, Source: pointer.Touch, PointerID: 7, Time: f.now, Position: target},
+	)
+	f.frame()
+
+	if start, end := f.s.Selection(); start != 12 || end != 12 {
+		t.Errorf("a touch tap ended at [%d,%d), want [12,12)", start, end)
+	}
+	if !f.s.Focused() {
+		t.Error("a touch tap did not focus the selectable")
+	}
+}
+
+// A touch that moves belongs to the enclosing scroller, not to a read-only
+// selector that only implements mouse dragging. It must neither change the
+// selection nor grab the pointer and cancel the enclosing handler.
+func TestSelectableLeavesTouchDragShared(t *testing.T) {
+	f := newSelectableFixture(t, "alpha beta gamma")
+	f.s.SetCaret(0, 5)
+	container := new(int)
+	f.frameWithPointerObserver(container)
+
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Press, Source: pointer.Touch, PointerID: 7,
+		Time: f.now, Position: f.at(2),
+	})
+	f.frameWithPointerObserver(container)
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Move, Source: pointer.Touch, PointerID: 7,
+		Time: f.now + 10*time.Millisecond, Position: f.at(14),
+	})
+	events := f.frameWithPointerObserver(container)
+	// A deferred grab reports its cancellation on the following frame.
+	events = append(events, f.frameWithPointerObserver(container)...)
+	f.router.Queue(pointer.Event{
+		Kind: pointer.Release, Source: pointer.Touch, PointerID: 7,
+		Time: f.now + 20*time.Millisecond, Position: f.at(14),
+	})
+	events = append(events, f.frameWithPointerObserver(container)...)
+
+	sawSharedDrag := false
+	for _, evt := range events {
+		if evt.Kind == pointer.Cancel {
+			t.Fatal("the selectable grabbed touch and cancelled its container")
+		}
+		if evt.Kind == pointer.Drag && evt.Priority == pointer.Shared {
+			sawSharedDrag = true
+		}
+	}
+	if !sawSharedDrag {
+		t.Error("the enclosing handler did not receive the shared touch drag")
+	}
+	if got := f.s.SelectedText(); got != "alpha" {
+		t.Errorf("a touch drag changed the selection to %q", got)
+	}
+	if f.s.Focused() {
+		t.Error("a touch drag focused the selectable as though it were a tap")
+	}
+}
+
+func TestSelectableMouseDragStillClaimsItsPointer(t *testing.T) {
+	f := newSelectableFixture(t, "alpha beta gamma")
+	container := new(int)
+	f.frameWithPointerObserver(container)
+
+	f.press(f.at(2))
+	f.frameWithPointerObserver(container)
+	f.drag(f.at(14))
+	events := f.frameWithPointerObserver(container)
+	events = append(events, f.frameWithPointerObserver(container)...)
+
+	sawCancel := false
+	for _, evt := range events {
+		if evt.Kind == pointer.Cancel {
+			sawCancel = true
+		}
+	}
+	if !sawCancel {
+		t.Error("a mouse drag did not claim the pointer from its container")
+	}
+	if got := f.s.SelectedText(); got == "" {
+		t.Error("the mouse drag claimed the pointer without selecting text")
+	}
+
+	f.release(f.at(14))
+	f.frameWithPointerObserver(container)
 }
 
 // A double click takes the word under the pointer, and a word ends where the
@@ -310,14 +456,27 @@ func TestSelectableSelectionStaysInsideTheContent(t *testing.T) {
 	f.s.SetCaret(-100, 100)
 	inside("SetCaret past both ends")
 
-	f.dragBetween(f32.Pt(-500, -500), f32.Pt(5000, 5000))
-	inside("a drag beginning and ending off the text")
+	f.press(f.at(2))
+	f.release(f32.Pt(5000, 5000))
+	f.frame()
+	f.now += time.Second
+	inside("a selection ending outside the widget")
+	if lo, hi := f.span(); lo != 2 || hi != length {
+		t.Errorf("a release outside selected [%d,%d), want [2,%d)", lo, hi, length)
+	}
 
-	f.clicks(2, f32.Pt(5000, 5000))
+	afterText := f32.Pt(399, f.at(length).Y)
+	f.clicks(2, afterText)
 	inside("a double click past the end")
+	if got := f.s.SelectedText(); got != "gamma" {
+		t.Errorf("a double click after the text selected %q, want %q", got, "gamma")
+	}
 
-	f.clicks(3, f32.Pt(-500, -500))
-	inside("a triple click before the start")
+	f.clicks(3, afterText)
+	inside("a triple click after the text")
+	if got := f.s.SelectedText(); got != content {
+		t.Errorf("a triple click after the text selected %q, want %q", got, content)
+	}
 
 	f.focus()
 	f.router.Queue(key.Event{State: key.Press, Name: "A", Modifiers: key.ModShortcut})

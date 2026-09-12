@@ -5,11 +5,11 @@ import (
 	"io"
 	"math"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/font"
-	"github.com/arandu-io/ayra/engine/gesture"
 	"github.com/arandu-io/ayra/engine/io/clipboard"
 	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/key"
@@ -72,10 +72,19 @@ type Selectable struct {
 	value           string
 	scratch         []byte
 
-	focused  bool
-	dragging bool
-	click    gesture.Click
-	drag     gesture.Drag
+	focused       bool
+	pointerDown   bool
+	dragging      bool
+	pointerGrab   bool
+	pointerID     pointer.ID
+	pointerStart  f32.Point
+	mouseClicks   int
+	lastMouseTime time.Duration
+	touchDown     bool
+	touchMoved    bool
+	touchID       pointer.ID
+	touchClicks   int
+	lastTouchTime time.Duration
 }
 
 // initialize gives the zero value an empty source on first use.
@@ -186,8 +195,6 @@ func (s *Selectable) Layout(gtx layout.Context, shaper *text.Shaper, font font.F
 	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops).Pop()
 	pointer.CursorText.Add(gtx.Ops)
 	event.Op(gtx.Ops, s)
-	s.click.Add(gtx.Ops)
-	s.drag.Add(gtx.Ops)
 	s.paintSelection(gtx, selectionMaterial)
 	s.paintText(gtx, textMaterial)
 	return dims
@@ -227,25 +234,78 @@ func pointerPoint(position f32.Point) image.Point {
 }
 
 func (s *Selectable) processPointer(gtx layout.Context) {
-	for _, evt := range s.pointerEvents(gtx) {
-		switch evt := evt.(type) {
-		case gesture.ClickEvent:
-			if evt.Kind == gesture.KindPress && evt.Source == pointer.Mouse ||
-				evt.Kind == gesture.KindClick && evt.Source != pointer.Mouse {
-				s.handleClick(gtx, evt)
+	focus := false
+	for {
+		raw, ok := gtx.Event(pointer.Filter{
+			Target: s,
+			Kinds:  pointer.Press | pointer.Drag | pointer.Release | pointer.Cancel,
+		})
+		if !ok {
+			if focus {
+				gtx.Execute(key.FocusCmd{Tag: s})
 			}
-		case pointer.Event:
-			s.handleDrag(evt)
+			return
+		}
+		evt, ok := raw.(pointer.Event)
+		if !ok {
+			continue
+		}
+		if evt.Kind == pointer.Cancel {
+			s.cancelPointer()
+			continue
+		}
+		if evt.Source == pointer.Touch {
+			focus = s.handleTouch(evt) || focus
+			continue
+		}
+		if evt.Source != pointer.Mouse {
+			continue
+		}
+		switch evt.Kind {
+		case pointer.Press:
+			focus = s.handlePress(evt) || focus
+		case pointer.Drag:
+			s.handleDrag(gtx, evt)
+		case pointer.Release:
+			s.handleRelease(evt)
 		}
 	}
 }
 
-func (s *Selectable) handleClick(gtx layout.Context, evt gesture.ClickEvent) {
-	previousCaret, _ := s.text.Selection()
-	s.text.MoveCoord(evt.Position)
-	gtx.Execute(key.FocusCmd{Tag: s})
+const (
+	multiClickInterval = 200 * time.Millisecond
+	mouseDragSlop      = unit.Dp(3)
+)
 
-	if evt.Modifiers == key.ModShift {
+func nextClick(count *int, last *time.Duration, now time.Duration) int {
+	if now-*last < multiClickInterval {
+		*count = *count + 1
+	} else {
+		*count = 1
+	}
+	*last = now
+	return *count
+}
+
+func (s *Selectable) handlePress(evt pointer.Event) bool {
+	if s.pointerDown || evt.Buttons != pointer.ButtonPrimary {
+		return false
+	}
+	s.pointerDown = true
+	s.pointerGrab = false
+	s.pointerID = evt.PointerID
+	s.pointerStart = evt.Position
+	clicks := nextClick(&s.mouseClicks, &s.lastMouseTime, evt.Time)
+	s.selectAt(pointerPoint(evt.Position), evt.Modifiers, clicks)
+	s.dragging = clicks < 2
+	return true
+}
+
+func (s *Selectable) selectAt(position image.Point, modifiers key.Modifiers, clicks int) {
+	previousCaret, _ := s.text.Selection()
+	s.text.MoveCoord(position)
+
+	if modifiers == key.ModShift {
 		start, end := s.text.Selection()
 		if abs(end-start) < abs(start-previousCaret) {
 			s.text.SetCaret(start, previousCaret)
@@ -254,27 +314,89 @@ func (s *Selectable) handleClick(gtx layout.Context, evt gesture.ClickEvent) {
 		s.text.ClearSelection()
 	}
 
-	s.dragging = evt.NumClicks < 2
 	switch {
-	case evt.NumClicks == 2:
+	case clicks == 2:
 		s.selectToken()
-	case evt.NumClicks >= 3:
+	case clicks >= 3:
 		s.text.MoveLineStart(selectionClear)
 		s.text.MoveLineEnd(selectionExtend)
 	}
 }
 
-func (s *Selectable) handleDrag(evt pointer.Event) {
-	if evt.Source != pointer.Mouse || !s.dragging {
+func (s *Selectable) handleDrag(gtx layout.Context, evt pointer.Event) {
+	if !s.pointerDown || evt.PointerID != s.pointerID {
 		return
 	}
-	if evt.Kind != pointer.Drag && evt.Kind != pointer.Release {
+	// A drag is not the first half of a double click. Resetting the run here
+	// makes the next press a single click even when it follows immediately.
+	s.mouseClicks = 0
+	if !s.dragging {
 		return
+	}
+	if !s.pointerGrab && evt.Priority < pointer.Grabbed {
+		delta := evt.Position.Sub(s.pointerStart)
+		slop := gtx.Metric.Dp(mouseDragSlop)
+		if delta.X*delta.X+delta.Y*delta.Y > float32(slop*slop) {
+			gtx.Execute(pointer.GrabCmd{Tag: s, ID: evt.PointerID})
+			s.pointerGrab = true
+		}
 	}
 	s.text.MoveCoord(pointerPoint(evt.Position))
-	if evt.Kind == pointer.Release {
-		s.dragging = false
+}
+
+func (s *Selectable) handleRelease(evt pointer.Event) {
+	if !s.pointerDown || evt.PointerID != s.pointerID {
+		return
 	}
+	s.pointerDown = false
+	s.pointerGrab = false
+	if s.dragging {
+		s.text.MoveCoord(pointerPoint(evt.Position))
+	}
+	s.dragging = false
+}
+
+func (s *Selectable) handleTouch(evt pointer.Event) bool {
+	switch evt.Kind {
+	case pointer.Press:
+		if s.touchDown {
+			return false
+		}
+		s.touchDown = true
+		s.touchMoved = false
+		s.touchID = evt.PointerID
+		nextClick(&s.touchClicks, &s.lastTouchTime, evt.Time)
+	case pointer.Drag:
+		if !s.touchDown || evt.PointerID != s.touchID {
+			return false
+		}
+		s.touchMoved = true
+		s.touchClicks = 0
+	case pointer.Release:
+		if !s.touchDown || evt.PointerID != s.touchID {
+			return false
+		}
+		s.touchDown = false
+		if s.touchMoved {
+			s.touchMoved = false
+			return false
+		}
+		s.selectAt(pointerPoint(evt.Position), evt.Modifiers, s.touchClicks)
+		return true
+	}
+	return false
+}
+
+func (s *Selectable) cancelPointer() {
+	s.pointerDown = false
+	s.dragging = false
+	s.pointerGrab = false
+	s.mouseClicks = 0
+	s.lastMouseTime = 0
+	s.touchDown = false
+	s.touchMoved = false
+	s.touchClicks = 0
+	s.lastTouchTime = 0
 }
 
 type tokenKind uint8
@@ -316,25 +438,6 @@ func (s *Selectable) selectToken() {
 		end++
 	}
 	s.text.SetCaret(start, end)
-}
-
-func (s *Selectable) pointerEvents(gtx layout.Context) []event.Event {
-	var events []event.Event
-	for {
-		evt, ok := s.click.Update(gtx.Source)
-		if !ok {
-			break
-		}
-		events = append(events, evt)
-	}
-	for {
-		evt, ok := s.drag.Update(gtx.Metric, gtx.Source, gesture.Both)
-		if !ok {
-			break
-		}
-		events = append(events, evt)
-	}
-	return events
 }
 
 func (s *Selectable) processKey(gtx layout.Context) {
