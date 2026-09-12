@@ -164,10 +164,11 @@ func (b *Clickable) finishLastPress(now time.Time) {
 
 func (b *Clickable) cancelPresses(now time.Time) {
 	for i := range b.history {
-		b.history[i].Cancelled = true
-		if b.history[i].End.IsZero() {
-			b.history[i].End = now
+		if !b.history[i].End.IsZero() {
+			continue
 		}
+		b.history[i].Cancelled = true
+		b.history[i].End = now
 	}
 }
 

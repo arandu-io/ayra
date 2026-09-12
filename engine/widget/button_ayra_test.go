@@ -165,6 +165,41 @@ func TestClickableCancelClearsTheHeldState(t *testing.T) {
 	}
 }
 
+// TestClickableCancelLeavesCompletedHistoryAlone fixes that cancelling the
+// current press cannot rewrite the outcome of an earlier click. Consumers use
+// the history to animate each press independently, including when one
+// Clickable is drawn in more than one place.
+func TestClickableCancelLeavesCompletedHistoryAlone(t *testing.T) {
+	var b widget.Clickable
+	s := newClickStage(t, func(gtx layout.Context) { b.Layout(gtx, fill) })
+
+	s.queue(at(pointer.Press, centre), at(pointer.Release, centre))
+	if !b.Clicked(s.gtx) {
+		t.Fatal("the completed press was not reported as a click")
+	}
+	s.frame()
+	s.queue(at(pointer.Press, centre))
+	if b.Clicked(s.gtx) {
+		t.Fatal("the second press completed before it was cancelled")
+	}
+	s.frame()
+	s.queue(pointer.Event{Kind: pointer.Cancel})
+	if b.Clicked(s.gtx) {
+		t.Fatal("the cancelled press was reported as a click")
+	}
+
+	history := b.History()
+	if len(history) != 2 {
+		t.Fatalf("history has %d presses, want 2: %#v", len(history), history)
+	}
+	if history[0].Cancelled {
+		t.Error("cancelling the current press retroactively cancelled the completed click")
+	}
+	if !history[1].Cancelled {
+		t.Error("the current press was not marked cancelled")
+	}
+}
+
 // TestClickableDrawnTwiceIsOneControlInTwoPlaces fixes the consequence of the
 // state being the caller's.
 //
