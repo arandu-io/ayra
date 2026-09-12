@@ -66,6 +66,25 @@ jobs:
       - name: vet
         run: go vet ./...
 
+      # The engine is being rewritten, and how far along that is gets counted
+      # rather than claimed: the suite compares every file under engine/ against
+      # the version it was copied from and reports how many are still the same
+      # work. That comparison needs the original in the module cache, and this
+      # module does not require it -- so it is fetched here, in a throwaway
+      # module, which leaves go.mod and go.sum untouched.
+      #
+      # Without this step the count would skip, and a gate that skips is a gate
+      # that does not exist. That is why the test fails rather than skips when
+      # CI is set and the tree is missing.
+      - name: the version the engine was copied from
+        run: |
+          set -euo pipefail
+          scratch="$(mktemp -d)"
+          cd "$scratch"
+          go mod init provenance >/dev/null
+          go mod download gioui.org@v0.10.2
+          echo "fetched into $(go env GOMODCACHE)"
+
       - name: test
         run: go test -race ./...
 

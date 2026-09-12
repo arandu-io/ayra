@@ -1,189 +1,48 @@
-// Package key implements key and text events and operations.
+// Package key is the vocabulary of the keyboard, and of the input methods that
+// stand in for one.
+//
+// Almost nothing here does anything. What is here is the words the two halves
+// of a running application use to talk about a keystroke without ever meeting:
+// the platform layer turns whatever the operating system handed it into these
+// values, a control says which of them it wants with a [Filter], and neither
+// side names the other. That is what lets one control work against a desktop
+// keyboard, an on-screen one, and an input method that builds a character out
+// of several keystrokes and hands over the finished character.
+//
+// A press and typed text are deliberately not the same event. An [Event] is a
+// key going down or coming back up, which is what a shortcut is made of; an
+// [EditEvent] is text arriving, which is what a field is made of. Reading text
+// off presses works for one keyboard layout and fails for every other: a dead
+// key, a composed character and a paste all produce text with no press behind
+// them, and a press on a layout that is not US produces a character nobody
+// spelled out.
 package key
 
 import (
-	"image"
+	"strconv"
 	"strings"
 
-	"github.com/arandu-io/ayra/engine/f32"
-	"github.com/arandu-io/ayra/engine/internal/ops"
 	"github.com/arandu-io/ayra/engine/io/event"
-	"github.com/arandu-io/ayra/engine/op"
 )
 
-// Filter matches any [Event] that matches the parameters.
-type Filter struct {
-	// Focus is the tag that must be focused for the filter to match. It has no effect
-	// if it is nil.
-	Focus event.Tag
-	// Required is the set of modifiers that must be included in events matched.
-	Required Modifiers
-	// Optional is the set of modifiers that may be included in events matched.
-	Optional Modifiers
-	// Name of the key to be matched. As a special case, the empty
-	// Name matches every key not matched by any other filter.
-	//
-	// However, keys with platform specific side-effects, such as Tab
-	// and Shift-Tab for changing focus, are only matched by filters
-	// that specify their Name explicitly. See [github.com/arandu-io/ayra/engine/io/input.SystemEvent].
-	Name Name
-}
-
-// InputHintOp describes the type of text expected by a tag.
-type InputHintOp struct {
-	Tag  event.Tag
-	Hint InputHint
-}
-
-// SoftKeyboardCmd shows or hides the on-screen keyboard, if available.
-type SoftKeyboardCmd struct {
-	Show bool
-}
-
-// SelectionCmd updates the selection for an input handler.
-type SelectionCmd struct {
-	Tag event.Tag
-	Range
-	Caret
-	// CompositionBounds is the visible bounds of the composing text, relative to
-	// the input handler. It is empty when there is no visible composing text.
-	CompositionBounds image.Rectangle
-}
-
-// SnippetCmd updates the content snippet for an input handler.
-type SnippetCmd struct {
-	Tag event.Tag
-	Snippet
-}
-
-// Range represents a range of text, such as an editor's selection.
-// Start and End are in runes.
-type Range struct {
-	Start int
-	End   int
-}
-
-// Snippet represents a snippet of text content used for communicating between
-// an editor and an input method.
-type Snippet struct {
-	Range
-	Text string
-}
-
-// Caret represents the position of a caret.
-type Caret struct {
-	// Pos is the intersection point of the caret and its baseline.
-	Pos f32.Point
-	// Ascent is the length of the caret above its baseline.
-	Ascent float32
-	// Descent is the length of the caret below its baseline.
-	Descent float32
-}
-
-// SelectionEvent is generated when an input method changes the selection.
-type SelectionEvent Range
-
-// CompositionEvent is generated when an input method changes the composing range.
-type CompositionEvent Range
-
-// SnippetEvent is generated when the snippet range is updated by an
-// input method.
-type SnippetEvent Range
-
-// A FocusEvent is generated when a handler gains or loses
-// focus.
-type FocusEvent struct {
-	Focus bool
-}
-
-// An Event is generated when a key is pressed. For text input
-// use EditEvent.
-type Event struct {
-	// Name of the key.
-	Name Name
-	// Modifiers is the set of active modifiers when the key was pressed.
-	Modifiers Modifiers
-	// State is the state of the key when the event was fired.
-	State State
-}
-
-// An EditEvent requests an edit by an input method.
-type EditEvent struct {
-	// Range specifies the range to replace with Text.
-	Range Range
-	Text  string
-}
-
-// FocusFilter matches any [FocusEvent], [EditEvent], [SnippetEvent],
-// or [SelectionEvent] with the specified target.
-type FocusFilter struct {
-	// Target is a tag specified in a previous event.Op.
-	Target event.Tag
-}
-
-// InputHint changes the on-screen-keyboard type. That hints the
-// type of data that might be entered by the user.
-type InputHint uint8
-
-const (
-	// HintAny hints that any input is expected.
-	HintAny InputHint = iota
-	// HintText hints that text input is expected. It may activate auto-correction and suggestions.
-	HintText
-	// HintNumeric hints that numeric input is expected. It may activate shortcuts for 0-9, "." and ",".
-	HintNumeric
-	// HintEmail hints that email input is expected. It may activate shortcuts for common email characters, such as "@" and ".com".
-	HintEmail
-	// HintURL hints that URL input is expected. It may activate shortcuts for common URL fragments such as "/" and ".com".
-	HintURL
-	// HintTelephone hints that telephone number input is expected. It may activate shortcuts for 0-9, "#" and "*".
-	HintTelephone
-	// HintPassword hints that password input is expected. It may disable autocorrection and enable password autofill.
-	HintPassword
-)
-
-// State is the state of a key during an event.
-type State uint8
-
-const (
-	// Press is the state of a pressed key.
-	Press State = iota
-	// Release is the state of a key that has been released.
-	//
-	// Note: release events are only implemented on the following platforms:
-	// macOS, Linux, Windows, WebAssembly.
-	Release
-)
-
-// Modifiers
-type Modifiers uint32
-
-const (
-	// ModCtrl is the ctrl modifier key.
-	ModCtrl Modifiers = 1 << iota
-	// ModCommand is the command modifier key
-	// found on Apple keyboards.
-	ModCommand
-	// ModShift is the shift modifier key.
-	ModShift
-	// ModAlt is the alt modifier key, or the option
-	// key on Apple keyboards.
-	ModAlt
-	// ModSuper is the "logo" modifier key, often
-	// represented by a Windows logo.
-	ModSuper
-)
-
-// Name is the identifier for a keyboard key.
+// Name is what a key is called.
 //
-// For letters, the upper case form is used, via unicode.ToUpper.
-// The shift modifier is taken into account, all other
-// modifiers are ignored. For example, the "shift-1" and "ctrl-shift-1"
-// combinations both give the Name "!" with the US keyboard layout.
+// A letter is its upper case form, so "a" and "A" are both [Name] "A". Shift is
+// the one modifier the layout has already applied by the time a name is made --
+// shift-1 is "!" on a US keyboard -- and every other modifier is reported
+// separately in [Event.Modifiers] rather than folded into the name. So
+// ctrl-shift-1 is also "!", held with ctrl.
+//
+// Keys with no character of their own are named by the constants below.
 type Name string
 
+// The names of the keys that have no character to be called by.
+//
+// The symbols are the ones printed on the hardware, and they are the name
+// rather than a label because a name is compared against, not shown: a control
+// asks for [NameEscape] and the platform layer produces it, with nothing
+// between them but these exact runes.
 const (
-	// Names for special keys.
 	NameLeftArrow      Name = "←"
 	NameRightArrow     Name = "→"
 	NameUpArrow        Name = "↑"
@@ -219,81 +78,145 @@ const (
 	NameBack           Name = "Back"
 )
 
-type FocusDirection int
+// Modifiers is the set of modifier keys held down.
+//
+// It is a set rather than one key because that is what a person's hands do, and
+// because the question asked of it is almost never "which one" but "are these
+// the ones" -- see [Modifiers.Contain].
+type Modifiers uint32
 
+// The modifier keys, one bit each.
+//
+// Ctrl and command are separate entries even though most keyboards only have
+// one of them. Folding them together would make ctrl-C on Apple hardware mean
+// copy, and it does not: the two keys exist side by side there and do different
+// things. What picks the right one for a shortcut is [ModShortcut].
 const (
-	FocusRight FocusDirection = iota
-	FocusLeft
-	FocusUp
-	FocusDown
-	FocusForward
-	FocusBackward
+	// ModCtrl is the ctrl key.
+	ModCtrl Modifiers = 1 << iota
+	// ModCommand is the command key, found on Apple keyboards.
+	ModCommand
+	// ModShift is the shift key.
+	ModShift
+	// ModAlt is the alt key, called option on Apple keyboards.
+	ModAlt
+	// ModSuper is the logo key, usually printed with a Windows logo.
+	ModSuper
 )
 
-// Contain reports whether m contains all modifiers
-// in m2.
-func (m Modifiers) Contain(m2 Modifiers) bool {
-	return m&m2 == m2
+// Contain reports whether every modifier in wanted is held.
+//
+// An empty wanted is held by every set, which is what makes a filter that names
+// no modifier match an unmodified key. Asked the other way round -- whether a
+// set is exactly some combination -- it gives the wrong answer on purpose:
+// ctrl-shift-S contains ctrl-S, and a shortcut that wants only ctrl-S has to
+// say so by leaving shift out of both [Filter.Required] and [Filter.Optional].
+func (m Modifiers) Contain(wanted Modifiers) bool {
+	return m&wanted == wanted
 }
 
-// FocusCmd requests to set or clear the keyboard focus.
-type FocusCmd struct {
-	// Tag is the new focus. The focus is cleared if Tag is nil, or if Tag
-	// has no [event.Op] references.
-	Tag event.Tag
-}
-
-func (h InputHintOp) Add(o *op.Ops) {
-	if h.Tag == nil {
-		panic("Tag must be non-nil")
-	}
-	data := ops.Write1(&o.Internal, ops.TypeKeyInputHintLen, h.Tag)
-	data[0] = byte(ops.TypeKeyInputHint)
-	data[1] = byte(h.Hint)
-}
-
-func (EditEvent) ImplementsEvent()        {}
-func (Event) ImplementsEvent()            {}
-func (FocusEvent) ImplementsEvent()       {}
-func (CompositionEvent) ImplementsEvent() {}
-func (SnippetEvent) ImplementsEvent()     {}
-func (SelectionEvent) ImplementsEvent()   {}
-
-func (FocusCmd) ImplementsCommand()        {}
-func (SoftKeyboardCmd) ImplementsCommand() {}
-func (SelectionCmd) ImplementsCommand()    {}
-func (SnippetCmd) ImplementsCommand()      {}
-
-func (Filter) ImplementsFilter()      {}
-func (FocusFilter) ImplementsFilter() {}
-
+// String is the combination as a person reads it, such as "Ctrl-Shift".
 func (m Modifiers) String() string {
-	var strs []string
-	if m.Contain(ModCtrl) {
-		strs = append(strs, string(NameCtrl))
+	var held []string
+	for _, modifier := range modifierNames {
+		if m.Contain(modifier.bit) {
+			held = append(held, string(modifier.name))
+		}
 	}
-	if m.Contain(ModCommand) {
-		strs = append(strs, string(NameCommand))
-	}
-	if m.Contain(ModShift) {
-		strs = append(strs, string(NameShift))
-	}
-	if m.Contain(ModAlt) {
-		strs = append(strs, string(NameAlt))
-	}
-	if m.Contain(ModSuper) {
-		strs = append(strs, string(NameSuper))
-	}
-	return strings.Join(strs, "-")
+	return strings.Join(held, "-")
 }
 
+// modifierNames is every modifier and the word it is said with, in the order
+// they are said.
+//
+// The order is written down here rather than taken from the bits, because this
+// text is shown to a person -- it is what appears beside a menu entry -- and an
+// order that followed the bit layout would rearrange itself the day a modifier
+// is added in the middle. Two spellings of one combination is a person checking
+// whether they are the same shortcut.
+var modifierNames = []struct {
+	bit  Modifiers
+	name Name
+}{
+	{ModCtrl, NameCtrl},
+	{ModCommand, NameCommand},
+	{ModShift, NameShift},
+	{ModAlt, NameAlt},
+	{ModSuper, NameSuper},
+}
+
+// State is whether a key went down or came back up.
+type State uint8
+
+const (
+	// Press is a key going down.
+	Press State = iota
+	// Release is a key coming back up.
+	//
+	// Not every platform reports one. macOS, Linux, Windows and the browser do;
+	// a control that only works if it is told about the release will therefore
+	// work on those and quietly do nothing on the others, so the release is for
+	// things that improve with it rather than things that need it.
+	Release
+)
+
+// String is the state as a person reads it.
+//
+// A state this package does not know still reads back as its number rather than
+// stopping the program. Printing an unknown value is exactly how anybody finds
+// out what it was, and a String that gave up at that moment would take away the
+// one way of asking.
 func (s State) String() string {
 	switch s {
 	case Press:
 		return "Press"
 	case Release:
 		return "Release"
-	default:
-		panic("invalid State")
 	}
+	return "State(" + strconv.FormatUint(uint64(s), 10) + ")"
 }
+
+// An Event is a key going down or coming back up.
+//
+// It is not how text is received: use [EditEvent] for that. This is what a
+// shortcut, an arrow key and a page key are made of.
+type Event struct {
+	// Name of the key.
+	Name Name
+	// Modifiers is the set held down when the key moved.
+	Modifiers Modifiers
+	// State is whether it went down or came back up.
+	State State
+}
+
+func (Event) ImplementsEvent() {}
+
+// Filter asks for the key events a control wants.
+//
+// The two modifier sets are separate because a shortcut and a movement key need
+// different things from them. Required is the combination that has to be held:
+// leave it empty and the key matches unmodified. Optional is what may also be
+// held without spoiling the match, which is how one filter covers an arrow key
+// pressed alone and the same arrow extending a selection with shift. A modifier
+// in neither set refuses the event, so ctrl-shift-S does not reach a filter
+// that asked for ctrl-S.
+type Filter struct {
+	// Focus is the tag that has to hold the keyboard focus for this filter to
+	// match. A nil Focus matches whatever is focused, including nothing.
+	Focus event.Tag
+	// Required is the set of modifiers that must be held.
+	Required Modifiers
+	// Optional is the set of modifiers that may be held as well.
+	Optional Modifiers
+	// Name of the key. As a special case, an empty Name matches every key no
+	// other filter asked for by name.
+	//
+	// Keys the platform already does something with -- tab and shift-tab move
+	// the focus -- are the exception: they reach only a filter that names them,
+	// because a catch-all taking them would break moving around the screen with
+	// the keyboard in every application at once. See
+	// [github.com/arandu-io/ayra/engine/io/input.SystemEvent].
+	Name Name
+}
+
+func (Filter) ImplementsFilter() {}
