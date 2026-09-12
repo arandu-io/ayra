@@ -4,7 +4,7 @@ import (
 	"image"
 	"sync/atomic"
 
-	giofont "github.com/arandu-io/ayra/engine/font"
+	enginefont "github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/io/system"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
@@ -12,17 +12,19 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// entry holds a single key-value pair for an LRU cache.
+// entry is one value in the recency list.
 type entry[K comparable, V any] struct {
 	next, prev *entry[K, V]
 	key        K
 	v          V
 }
 
-// lru is a generic least-recently-used cache.
+// lru keeps the most recently read or written entries nearest head.
+// Its zero value uses maxSize and is ready to use.
 type lru[K comparable, V any] struct {
 	m          map[K]*entry[K, V]
 	head, tail *entry[K, V]
+	capacity   int
 }
 
 // Get fetches the value associated with the given key, if any.
@@ -46,10 +48,20 @@ func (l *lru[K, V]) Put(k K, v V) {
 		l.head.prev = l.tail
 		l.tail.next = l.head
 	}
+	if current, ok := l.m[k]; ok {
+		current.v = v
+		l.remove(current)
+		l.insert(current)
+		return
+	}
 	val := &entry[K, V]{key: k, v: v}
 	l.m[k] = val
 	l.insert(val)
-	if len(l.m) > maxSize {
+	limit := l.capacity
+	if limit <= 0 {
+		limit = maxSize
+	}
+	if len(l.m) > limit {
 		oldest := l.tail.next
 		l.remove(oldest)
 		delete(l.m, oldest.key)
@@ -154,7 +166,7 @@ type layoutKey struct {
 	str                string
 	truncator          string
 	locale             system.Locale
-	font               giofont.Font
+	font               enginefont.Font
 	forceTruncate      bool
 	wrapPolicy         WrapPolicy
 	lineHeight         fixed.Int26_6
