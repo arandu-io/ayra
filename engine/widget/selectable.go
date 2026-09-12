@@ -5,7 +5,9 @@ import (
 	"io"
 	"math"
 	"strings"
+	"unicode"
 
+	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/gesture"
 	"github.com/arandu-io/ayra/engine/io/clipboard"
@@ -20,18 +22,15 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// stringSource is an immutable textSource with a fixed string
-// value.
+// stringSource adapts an immutable string to textView's random-access source.
 type stringSource struct {
 	reader *strings.Reader
 }
 
 var _ textSource = stringSource{}
 
-func newStringSource(str string) stringSource {
-	return stringSource{
-		reader: strings.NewReader(str),
-	}
+func newStringSource(value string) stringSource {
+	return stringSource{reader: strings.NewReader(value)}
 }
 
 func (s stringSource) Changed() bool {
@@ -46,11 +45,11 @@ func (s stringSource) ReadAt(b []byte, offset int64) (int, error) {
 	return s.reader.ReadAt(b, offset)
 }
 
-// ReplaceRunes is unimplemented, as a stringSource is immutable.
-func (s stringSource) ReplaceRunes(byteOffset, runeCount int64, str string) {
+// ReplaceRunes deliberately does nothing because selectable text is immutable.
+func (stringSource) ReplaceRunes(int64, int64, string) {
 }
 
-// Selectable displays selectable text.
+// Selectable lays out read-only text that can be focused, selected, and copied.
 type Selectable struct {
 	// Alignment controls the alignment of the text.
 	Alignment text.Alignment
@@ -69,264 +68,308 @@ type Selectable struct {
 	LineHeightScale float32
 	initialized     bool
 	source          stringSource
-	// scratch is a buffer reused to efficiently read text out of the
-	// textView.
-	scratch   []byte
-	lastValue string
-	text      textView
-	focused   bool
-	dragging  bool
-	dragger   gesture.Drag
+	text            textView
+	value           string
+	scratch         []byte
 
-	clicker gesture.Click
+	focused  bool
+	dragging bool
+	click    gesture.Click
+	drag     gesture.Drag
 }
 
-// initialize must be called at the beginning of any exported method that
-// manipulates text state. It ensures that the underlying text is safe to
-// access.
-func (l *Selectable) initialize() {
-	if !l.initialized {
-		l.source = newStringSource("")
-		l.text.SetSource(l.source)
-		l.initialized = true
-	}
-}
-
-// Focused returns whether the label is focused or not.
-func (l *Selectable) Focused() bool {
-	return l.focused
-}
-
-// paintSelection paints the contrasting background for selected text.
-func (l *Selectable) paintSelection(gtx layout.Context, material op.CallOp) {
-	l.initialize()
-	if !l.focused {
+// initialize gives the zero value an empty source on first use.
+func (s *Selectable) initialize() {
+	if s.initialized {
 		return
 	}
-	l.text.PaintSelection(gtx, material)
+	s.source = newStringSource("")
+	s.text.SetSource(s.source)
+	s.initialized = true
 }
 
-// paintText paints the text glyphs with the provided material.
-func (l *Selectable) paintText(gtx layout.Context, material op.CallOp) {
-	l.initialize()
-	l.text.PaintText(gtx, material)
+// Focused reports whether the selectable owns keyboard focus.
+func (s *Selectable) Focused() bool {
+	return s.focused
 }
 
-// SelectionLen returns the length of the selection, in runes; it is
-// equivalent to utf8.RuneCountInString(e.SelectedText()).
-func (l *Selectable) SelectionLen() int {
-	l.initialize()
-	return l.text.SelectionLen()
+func (s *Selectable) paintSelection(gtx layout.Context, material op.CallOp) {
+	if !s.focused {
+		return
+	}
+	s.text.PaintSelection(gtx, material)
+}
+
+func (s *Selectable) paintText(gtx layout.Context, material op.CallOp) {
+	s.text.PaintText(gtx, material)
+}
+
+// SelectionLen returns the length of the selection in runes.
+func (s *Selectable) SelectionLen() int {
+	s.initialize()
+	return s.text.SelectionLen()
 }
 
 // Selection returns the start and end of the selection, as rune offsets.
 // start can be > end.
-func (l *Selectable) Selection() (start, end int) {
-	l.initialize()
-	return l.text.Selection()
+func (s *Selectable) Selection() (start, end int) {
+	s.initialize()
+	return s.text.Selection()
 }
 
-// SetCaret moves the caret to start, and sets the selection end to end. start
-// and end are in runes, and represent offsets into the editor text.
-func (l *Selectable) SetCaret(start, end int) {
-	l.initialize()
-	l.text.SetCaret(start, end)
+// SetCaret sets both ends of the selection from rune offsets. Offsets outside
+// the text are clamped to the nearest valid caret position.
+func (s *Selectable) SetCaret(start, end int) {
+	s.initialize()
+	s.text.SetCaret(start, end)
 }
 
-// SelectedText returns the currently selected text (if any) from the editor.
-func (l *Selectable) SelectedText() string {
-	l.initialize()
-	l.scratch = l.text.SelectedText(l.scratch)
-	return string(l.scratch)
+// SelectedText returns the text inside the current selection.
+func (s *Selectable) SelectedText() string {
+	s.initialize()
+	s.scratch = s.text.SelectedText(s.scratch)
+	return string(s.scratch)
 }
 
-// ClearSelection clears the selection, by setting the selection end equal to
-// the selection start.
-func (l *Selectable) ClearSelection() {
-	l.initialize()
-	l.text.ClearSelection()
+// ClearSelection collapses the selection at its active end.
+func (s *Selectable) ClearSelection() {
+	s.initialize()
+	s.text.ClearSelection()
 }
 
-// Text returns the contents of the label.
-func (l *Selectable) Text() string {
-	l.initialize()
-	l.scratch = l.text.Text(l.scratch)
-	return string(l.scratch)
+// Text returns the selectable's complete contents.
+func (s *Selectable) Text() string {
+	s.initialize()
+	s.scratch = s.text.Text(s.scratch)
+	return string(s.scratch)
 }
 
-// SetText updates the text to s if it does not already contain s. Updating the
-// text will clear the selection unless the selectable already contains s.
-func (l *Selectable) SetText(s string) {
-	l.initialize()
-	if l.lastValue != s {
-		l.source = newStringSource(s)
-		l.lastValue = s
-		l.text.SetSource(l.source)
+// SetText replaces the contents. A different value clears the selection;
+// setting the current value preserves it.
+func (s *Selectable) SetText(value string) {
+	s.initialize()
+	if s.value == value {
+		return
 	}
+	s.source = newStringSource(value)
+	s.value = value
+	s.text.SetSource(s.source)
+	// The old offsets name a different document. Reset them directly instead
+	// of asking textView to clamp: a Selectable may receive text before it has
+	// a shaper, so forcing layout here would make SetText depend on Layout.
+	s.text.caret.start = 0
+	s.text.caret.end = 0
+	s.text.caret.xoff = 0
 }
 
 // Truncated returns whether the text has been truncated by the text shaper to
 // fit within available constraints.
-func (l *Selectable) Truncated() bool {
-	return l.text.Truncated()
+func (s *Selectable) Truncated() bool {
+	s.initialize()
+	return s.text.Truncated()
 }
 
-// Update the state of the selectable in response to input events. It returns whether the
-// text selection changed during event processing.
-func (l *Selectable) Update(gtx layout.Context) bool {
-	l.initialize()
-	return l.handleEvents(gtx)
+// Update processes pending input and reports whether the visible selection
+// range changed.
+func (s *Selectable) Update(gtx layout.Context) bool {
+	s.initialize()
+	return s.handleEvents(gtx)
 }
 
-// Layout clips to the dimensions of the selectable, updates the shaped text, configures input handling, and paints
-// the text and selection rectangles. The provided textMaterial and selectionMaterial ops are used to set the
-// paint material for the text and selection rectangles, respectively.
-func (l *Selectable) Layout(gtx layout.Context, lt *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectionMaterial op.CallOp) layout.Dimensions {
-	l.Update(gtx)
-	l.text.LineHeight = l.LineHeight
-	l.text.LineHeightScale = l.LineHeightScale
-	l.text.Alignment = l.Alignment
-	l.text.MaxLines = l.MaxLines
-	l.text.Truncator = l.Truncator
-	l.text.WrapPolicy = l.WrapPolicy
-	l.text.Layout(gtx, lt, font, size)
-	dims := l.text.Dimensions()
+// Layout shapes the text, registers input handlers, and paints the contents and
+// selection within the resulting dimensions.
+func (s *Selectable) Layout(gtx layout.Context, shaper *text.Shaper, font font.Font, size unit.Sp, textMaterial, selectionMaterial op.CallOp) layout.Dimensions {
+	s.Update(gtx)
+	s.configureText()
+	s.text.Layout(gtx, shaper, font, size)
+	dims := s.text.Dimensions()
 	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops).Pop()
 	pointer.CursorText.Add(gtx.Ops)
-	event.Op(gtx.Ops, l)
-
-	l.clicker.Add(gtx.Ops)
-	l.dragger.Add(gtx.Ops)
-
-	l.paintSelection(gtx, selectionMaterial)
-	l.paintText(gtx, textMaterial)
+	event.Op(gtx.Ops, s)
+	s.click.Add(gtx.Ops)
+	s.drag.Add(gtx.Ops)
+	s.paintSelection(gtx, selectionMaterial)
+	s.paintText(gtx, textMaterial)
 	return dims
 }
 
-func (l *Selectable) handleEvents(gtx layout.Context) (selectionChanged bool) {
-	oldStart, oldLen := min(l.text.Selection()), l.text.SelectionLen()
-	defer func() {
-		if newStart, newLen := min(l.text.Selection()), l.text.SelectionLen(); oldStart != newStart || oldLen != newLen {
-			selectionChanged = true
-		}
-	}()
-	l.processPointer(gtx)
-	l.processKey(gtx)
-	return selectionChanged
+func (s *Selectable) configureText() {
+	s.text.Alignment = s.Alignment
+	s.text.MaxLines = s.MaxLines
+	s.text.Truncator = s.Truncator
+	s.text.WrapPolicy = s.WrapPolicy
+	s.text.LineHeight = s.LineHeight
+	s.text.LineHeightScale = s.LineHeightScale
 }
 
-func (e *Selectable) processPointer(gtx layout.Context) {
-	for _, evt := range e.clickDragEvents(gtx) {
+type selectionState struct {
+	start  int
+	length int
+}
+
+func (s *Selectable) selectionState() selectionState {
+	start, end := s.text.Selection()
+	return selectionState{start: min(start, end), length: abs(start - end)}
+}
+
+func (s *Selectable) handleEvents(gtx layout.Context) bool {
+	before := s.selectionState()
+	s.processPointer(gtx)
+	s.processKey(gtx)
+	return before != s.selectionState()
+}
+
+func pointerPoint(position f32.Point) image.Point {
+	return image.Pt(
+		int(math.Round(float64(position.X))),
+		int(math.Round(float64(position.Y))),
+	)
+}
+
+func (s *Selectable) processPointer(gtx layout.Context) {
+	for _, evt := range s.pointerEvents(gtx) {
 		switch evt := evt.(type) {
 		case gesture.ClickEvent:
-			switch {
-			case evt.Kind == gesture.KindPress && evt.Source == pointer.Mouse,
-				evt.Kind == gesture.KindClick && evt.Source != pointer.Mouse:
-				prevCaretPos, _ := e.text.Selection()
-				e.text.MoveCoord(image.Point{
-					X: int(math.Round(float64(evt.Position.X))),
-					Y: int(math.Round(float64(evt.Position.Y))),
-				})
-				gtx.Execute(key.FocusCmd{Tag: e})
-				if evt.Modifiers == key.ModShift {
-					start, end := e.text.Selection()
-					// If they clicked closer to the end, then change the end to
-					// where the caret used to be (effectively swapping start & end).
-					if abs(end-start) < abs(start-prevCaretPos) {
-						e.text.SetCaret(start, prevCaretPos)
-					}
-				} else {
-					e.text.ClearSelection()
-				}
-				e.dragging = true
-
-				// Process multi-clicks.
-				switch {
-				case evt.NumClicks == 2:
-					e.text.MoveWord(-1, selectionClear)
-					e.text.MoveWord(1, selectionExtend)
-					e.dragging = false
-				case evt.NumClicks >= 3:
-					e.text.MoveLineStart(selectionClear)
-					e.text.MoveLineEnd(selectionExtend)
-					e.dragging = false
-				}
+			if evt.Kind == gesture.KindPress && evt.Source == pointer.Mouse ||
+				evt.Kind == gesture.KindClick && evt.Source != pointer.Mouse {
+				s.handleClick(gtx, evt)
 			}
 		case pointer.Event:
-			release := false
-			switch {
-			case evt.Kind == pointer.Release && evt.Source == pointer.Mouse:
-				release = true
-				fallthrough
-			case evt.Kind == pointer.Drag && evt.Source == pointer.Mouse:
-				if e.dragging {
-					e.text.MoveCoord(image.Point{
-						X: int(math.Round(float64(evt.Position.X))),
-						Y: int(math.Round(float64(evt.Position.Y))),
-					})
-
-					if release {
-						e.dragging = false
-					}
-				}
-			}
+			s.handleDrag(evt)
 		}
 	}
 }
 
-func (e *Selectable) clickDragEvents(gtx layout.Context) []event.Event {
-	var combinedEvents []event.Event
-	for {
-		evt, ok := e.clicker.Update(gtx.Source)
-		if !ok {
-			break
+func (s *Selectable) handleClick(gtx layout.Context, evt gesture.ClickEvent) {
+	previousCaret, _ := s.text.Selection()
+	s.text.MoveCoord(evt.Position)
+	gtx.Execute(key.FocusCmd{Tag: s})
+
+	if evt.Modifiers == key.ModShift {
+		start, end := s.text.Selection()
+		if abs(end-start) < abs(start-previousCaret) {
+			s.text.SetCaret(start, previousCaret)
 		}
-		combinedEvents = append(combinedEvents, evt)
+	} else {
+		s.text.ClearSelection()
 	}
-	for {
-		evt, ok := e.dragger.Update(gtx.Metric, gtx.Source, gesture.Both)
-		if !ok {
-			break
-		}
-		combinedEvents = append(combinedEvents, evt)
+
+	s.dragging = evt.NumClicks < 2
+	switch {
+	case evt.NumClicks == 2:
+		s.selectToken()
+	case evt.NumClicks >= 3:
+		s.text.MoveLineStart(selectionClear)
+		s.text.MoveLineEnd(selectionExtend)
 	}
-	return combinedEvents
 }
 
-func (e *Selectable) processKey(gtx layout.Context) {
+func (s *Selectable) handleDrag(evt pointer.Event) {
+	if evt.Source != pointer.Mouse || !s.dragging {
+		return
+	}
+	if evt.Kind != pointer.Drag && evt.Kind != pointer.Release {
+		return
+	}
+	s.text.MoveCoord(pointerPoint(evt.Position))
+	if evt.Kind == pointer.Release {
+		s.dragging = false
+	}
+}
+
+type tokenKind uint8
+
+const (
+	spaceToken tokenKind = iota
+	wordToken
+	punctuationToken
+)
+
+func classifyTokenRune(r rune) tokenKind {
+	switch {
+	case unicode.IsSpace(r):
+		return spaceToken
+	case unicode.IsLetter(r), unicode.IsNumber(r), unicode.IsMark(r), r == '_':
+		return wordToken
+	default:
+		return punctuationToken
+	}
+}
+
+// selectToken selects the lexical unit under the caret. textView's word
+// movement is intentionally whitespace based for keyboard navigation; pointer
+// selection has a narrower contract and must leave adjacent punctuation out.
+func (s *Selectable) selectToken() {
+	runes := []rune(s.value)
+	if len(runes) == 0 {
+		s.text.SetCaret(0, 0)
+		return
+	}
+	start, _ := s.text.Selection()
+	start = min(max(start, 0), len(runes)-1)
+	kind := classifyTokenRune(runes[start])
+	end := start + 1
+	for start > 0 && classifyTokenRune(runes[start-1]) == kind {
+		start--
+	}
+	for end < len(runes) && classifyTokenRune(runes[end]) == kind {
+		end++
+	}
+	s.text.SetCaret(start, end)
+}
+
+func (s *Selectable) pointerEvents(gtx layout.Context) []event.Event {
+	var events []event.Event
+	for {
+		evt, ok := s.click.Update(gtx.Source)
+		if !ok {
+			break
+		}
+		events = append(events, evt)
+	}
+	for {
+		evt, ok := s.drag.Update(gtx.Metric, gtx.Source, gesture.Both)
+		if !ok {
+			break
+		}
+		events = append(events, evt)
+	}
+	return events
+}
+
+func (s *Selectable) processKey(gtx layout.Context) {
 	for {
 		ke, ok := gtx.Event(
-			key.FocusFilter{Target: e},
-			key.Filter{Focus: e, Name: key.NameLeftArrow, Optional: key.ModShortcutAlt | key.ModShift},
-			key.Filter{Focus: e, Name: key.NameRightArrow, Optional: key.ModShortcutAlt | key.ModShift},
-			key.Filter{Focus: e, Name: key.NameUpArrow, Optional: key.ModShortcutAlt | key.ModShift},
-			key.Filter{Focus: e, Name: key.NameDownArrow, Optional: key.ModShortcutAlt | key.ModShift},
+			key.FocusFilter{Target: s},
+			key.Filter{Focus: s, Name: key.NameLeftArrow, Optional: key.ModShortcutAlt | key.ModShift},
+			key.Filter{Focus: s, Name: key.NameRightArrow, Optional: key.ModShortcutAlt | key.ModShift},
+			key.Filter{Focus: s, Name: key.NameUpArrow, Optional: key.ModShortcutAlt | key.ModShift},
+			key.Filter{Focus: s, Name: key.NameDownArrow, Optional: key.ModShortcutAlt | key.ModShift},
 
-			key.Filter{Focus: e, Name: key.NamePageUp, Optional: key.ModShift},
-			key.Filter{Focus: e, Name: key.NamePageDown, Optional: key.ModShift},
-			key.Filter{Focus: e, Name: key.NameEnd, Optional: key.ModShift},
-			key.Filter{Focus: e, Name: key.NameHome, Optional: key.ModShift},
+			key.Filter{Focus: s, Name: key.NamePageUp, Optional: key.ModShift},
+			key.Filter{Focus: s, Name: key.NamePageDown, Optional: key.ModShift},
+			key.Filter{Focus: s, Name: key.NameEnd, Optional: key.ModShift},
+			key.Filter{Focus: s, Name: key.NameHome, Optional: key.ModShift},
 
-			key.Filter{Focus: e, Name: "C", Required: key.ModShortcut},
-			key.Filter{Focus: e, Name: "X", Required: key.ModShortcut},
-			key.Filter{Focus: e, Name: "A", Required: key.ModShortcut},
+			key.Filter{Focus: s, Name: "C", Required: key.ModShortcut},
+			key.Filter{Focus: s, Name: "X", Required: key.ModShortcut},
+			key.Filter{Focus: s, Name: "A", Required: key.ModShortcut},
 		)
 		if !ok {
 			break
 		}
 		switch ke := ke.(type) {
 		case key.FocusEvent:
-			e.focused = ke.Focus
+			s.focused = ke.Focus
 		case key.Event:
-			if !e.focused || ke.State != key.Press {
-				break
+			if s.focused && ke.State == key.Press {
+				s.command(gtx, ke)
 			}
-			e.command(gtx, ke)
 		}
 	}
 }
 
-func (e *Selectable) command(gtx layout.Context, k key.Event) {
+func (s *Selectable) command(gtx layout.Context, k key.Event) {
 	direction := 1
 	if gtx.Locale.Direction.Progression() == system.TowardOrigin {
 		direction = -1
@@ -338,54 +381,65 @@ func (e *Selectable) command(gtx layout.Context, k key.Event) {
 	}
 	if k.Modifiers == key.ModShortcut {
 		switch k.Name {
-		// Copy or Cut selection -- ignored if nothing selected.
 		case "C", "X":
-			e.scratch = e.text.SelectedText(e.scratch)
-			if text := string(e.scratch); text != "" {
-				gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(text))})
-			}
-		// Select all
+			s.copySelection(gtx)
 		case "A":
-			e.text.SetCaret(0, e.text.Len())
+			s.text.SetCaret(0, s.text.Len())
 		}
 		return
 	}
 	switch k.Name {
 	case key.NameUpArrow:
-		e.text.MoveLines(-1, selAct)
+		s.text.MoveLines(-1, selAct)
 	case key.NameDownArrow:
-		e.text.MoveLines(+1, selAct)
+		s.text.MoveLines(+1, selAct)
 	case key.NameLeftArrow:
 		if moveByWord {
-			e.text.MoveWord(-1*direction, selAct)
+			s.text.MoveWord(-direction, selAct)
 		} else {
-			if selAct == selectionClear {
-				e.text.ClearSelection()
-			}
-			e.text.MoveCaret(-1*direction, -1*direction*int(selAct))
+			s.moveCaret(-direction, selAct)
 		}
 	case key.NameRightArrow:
 		if moveByWord {
-			e.text.MoveWord(1*direction, selAct)
+			s.text.MoveWord(direction, selAct)
 		} else {
-			if selAct == selectionClear {
-				e.text.ClearSelection()
-			}
-			e.text.MoveCaret(1*direction, int(selAct)*direction)
+			s.moveCaret(direction, selAct)
 		}
 	case key.NamePageUp:
-		e.text.MovePages(-1, selAct)
+		s.text.MovePages(-1, selAct)
 	case key.NamePageDown:
-		e.text.MovePages(+1, selAct)
+		s.text.MovePages(+1, selAct)
 	case key.NameHome:
-		e.text.MoveLineStart(selAct)
+		s.text.MoveLineStart(selAct)
 	case key.NameEnd:
-		e.text.MoveLineEnd(selAct)
+		s.text.MoveLineEnd(selAct)
 	}
 }
 
+func (s *Selectable) copySelection(gtx layout.Context) {
+	if s.text.SelectionLen() == 0 {
+		return
+	}
+	s.scratch = s.text.SelectedText(s.scratch)
+	selected := string(s.scratch)
+	gtx.Execute(clipboard.WriteCmd{
+		Type: "application/text",
+		Data: io.NopCloser(strings.NewReader(selected)),
+	})
+}
+
+func (s *Selectable) moveCaret(distance int, action selectionAction) {
+	if action == selectionClear {
+		s.text.ClearSelection()
+	}
+	s.text.MoveCaret(distance, distance*int(action))
+}
+
 // Regions returns visible regions covering the rune range [start,end).
-func (l *Selectable) Regions(start, end int, regions []Region) []Region {
-	l.initialize()
-	return l.text.Regions(start, end, regions)
+func (s *Selectable) Regions(start, end int, regions []Region) []Region {
+	s.initialize()
+	if start == end {
+		return regions[:0]
+	}
+	return s.text.Regions(start, end, regions)
 }
