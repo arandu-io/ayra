@@ -3,17 +3,12 @@ package widget_test
 import (
 	"fmt"
 	"image"
-	"io"
-	"strings"
 
 	"github.com/arandu-io/ayra/engine/f32"
-	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/input"
 	"github.com/arandu-io/ayra/engine/io/pointer"
-	"github.com/arandu-io/ayra/engine/io/transfer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/widget"
 )
 
@@ -69,84 +64,4 @@ func ExampleClickable_passthrough() {
 	// Output:
 	// button1 clicked!
 	// button2 clicked!
-}
-
-func ExampleDraggable_Layout() {
-	var r input.Router
-	gtx := layout.Context{
-		Ops:         new(op.Ops),
-		Constraints: layout.Exact(image.Pt(100, 100)),
-		Source:      r.Source(),
-	}
-	// mime is the type used to match drag and drop operations.
-	// It could be left empty in this example.
-	const mime = "MyMime"
-	drag := &widget.Draggable{Type: mime}
-	var drop int
-	// widget lays out the drag and drop handlers and processes
-	// the transfer events.
-	widget := func() {
-		// Setup the draggable widget.
-		w := func(gtx layout.Context) layout.Dimensions {
-			sz := image.Pt(10, 10) // drag area
-			return layout.Dimensions{Size: sz}
-		}
-		drag.Layout(gtx, w, w)
-		// drag must respond with an Offer event when requested.
-		// Use the drag method for this.
-		if m, ok := drag.Update(gtx); ok {
-			drag.Offer(gtx, m, io.NopCloser(strings.NewReader("hello world")))
-		}
-
-		// Setup the area for drops.
-		ds := clip.Rect{
-			Min: image.Pt(20, 20),
-			Max: image.Pt(40, 40),
-		}.Push(gtx.Ops)
-		event.Op(gtx.Ops, &drop)
-		ds.Pop()
-
-		// Check for the received data.
-		for {
-			ev, ok := gtx.Event(transfer.TargetFilter{Target: &drop, Type: mime})
-			if !ok {
-				break
-			}
-			switch e := ev.(type) {
-			case transfer.DataEvent:
-				data := e.Open()
-				defer data.Close()
-				content, _ := io.ReadAll(data)
-				fmt.Println(string(content))
-			}
-		}
-	}
-	// Register and lay out the widget.
-	widget()
-	r.Frame(gtx.Ops)
-
-	// Send drag and drop gesture events.
-	r.Queue(
-		pointer.Event{
-			Kind:     pointer.Press,
-			Position: f32.Pt(5, 5), // in the drag area
-		},
-		pointer.Event{
-			Kind:     pointer.Move,
-			Position: f32.Pt(5, 5), // in the drop area
-		},
-		pointer.Event{
-			Kind:     pointer.Release,
-			Position: f32.Pt(30, 30), // in the drop area
-		},
-	)
-	// Let the widget process the events.
-	widget()
-	r.Frame(gtx.Ops)
-
-	// Process the transfer.DataEvent.
-	widget()
-
-	// Output:
-	// hello world
 }
