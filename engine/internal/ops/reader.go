@@ -51,6 +51,14 @@ type opMacroDef struct {
 	endpc PC
 }
 
+func validPC(o *Ops, pc PC) bool {
+	return o != nil && pc.data <= uint32(len(o.data)) && pc.refs <= uint32(len(o.refs))
+}
+
+func validRange(o *Ops, start, end PC) bool {
+	return validPC(o, start) && validPC(o, end) && start.data <= end.data && start.refs <= end.refs
+}
+
 func (pc PC) Add(op OpType) PC {
 	size, numRefs := op.props()
 	return PC{
@@ -88,9 +96,10 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 				continue
 			}
 		}
-		data := r.ops.data
-		data = data[r.pc.data:]
-		refs := r.ops.refs
+		if !validPC(r.ops, r.pc) {
+			return EncodedOp{}, false
+		}
+		data := r.ops.data[r.pc.data:]
 		if len(data) == 0 {
 			if r.deferDone {
 				return EncodedOp{}, false
@@ -104,8 +113,11 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 		key := Key{ops: r.ops, pc: r.pc.data, version: r.ops.version}
 		t := OpType(data[0])
 		n, nrefs := t.props()
+		if n == 0 || n > uint32(len(data)) || r.pc.refs+nrefs > uint32(len(r.ops.refs)) {
+			return EncodedOp{}, false
+		}
 		data = data[:n]
-		refs = refs[r.pc.refs:]
+		refs := r.ops.refs[r.pc.refs:]
 		refs = refs[:nrefs]
 		switch t {
 		case TypeDefer:
@@ -116,8 +128,14 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 		case TypeAux:
 			// An Aux operations is always wrapped in a macro, and
 			// its length is the remaining space.
+			if len(r.stack) == 0 {
+				return EncodedOp{}, false
+			}
 			block := r.stack[len(r.stack)-1]
-			n += block.endPC.data - r.pc.data - TypeAuxLen
+			if block.endPC.data < r.pc.data+TypeAuxLen || block.endPC.data > uint32(len(r.ops.data)) {
+				return EncodedOp{}, false
+			}
+			n = block.endPC.data - r.pc.data
 			data = data[:n]
 		case TypeCall:
 			if deferring {
@@ -132,8 +150,10 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 				r.pc.refs += nrefs
 				continue
 			}
-			var op macroOp
-			op.decode(data, refs)
+			op, ok := decodeMacroCall(data, refs)
+			if !ok || !validRange(op.ops, op.start, op.end) {
+				return EncodedOp{}, false
+			}
 			retPC := r.pc
 			retPC.data += n
 			retPC.refs += nrefs
@@ -146,9 +166,14 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 			r.pc = op.start
 			continue
 		case TypeMacro:
-			var op opMacroDef
-			op.decode(data)
+			op, ok := decodeMacroDefinition(data)
+			if !ok {
+				return EncodedOp{}, false
+			}
 			if op.endpc != (PC{}) {
+				if !validPC(r.ops, op.endpc) {
+					return EncodedOp{}, false
+				}
 				r.pc = op.endpc
 			} else {
 				// Treat an incomplete macro as containing all remaining ops.
@@ -163,26 +188,37 @@ func (r *Reader) Decode() (EncodedOp, bool) {
 	}
 }
 
-func (op *opMacroDef) decode(data []byte) {
+func decodeMacroDefinition(data []byte) (opMacroDef, bool) {
 	if len(data) < TypeMacroLen || OpType(data[0]) != TypeMacro {
-		panic("invalid op")
+		return opMacroDef{}, false
 	}
 	bo := binary.LittleEndian
 	data = data[:TypeMacroLen]
-	op.endpc.data = bo.Uint32(data[1:])
-	op.endpc.refs = bo.Uint32(data[5:])
+	return opMacroDef{endpc: PC{
+		data: bo.Uint32(data[1:]),
+		refs: bo.Uint32(data[5:]),
+	}}, true
 }
 
-func (m *macroOp) decode(data []byte, refs []any) {
+func decodeMacroCall(data []byte, refs []any) (macroOp, bool) {
 	if len(data) < TypeCallLen || len(refs) < 1 || OpType(data[0]) != TypeCall {
-		panic("invalid op")
+		return macroOp{}, false
+	}
+	called, ok := refs[0].(*Ops)
+	if !ok || called == nil {
+		return macroOp{}, false
 	}
 	bo := binary.LittleEndian
 	data = data[:TypeCallLen]
-
-	m.ops = refs[0].(*Ops)
-	m.start.data = bo.Uint32(data[1:])
-	m.start.refs = bo.Uint32(data[5:])
-	m.end.data = bo.Uint32(data[9:])
-	m.end.refs = bo.Uint32(data[13:])
+	return macroOp{
+		ops: called,
+		start: PC{
+			data: bo.Uint32(data[1:]),
+			refs: bo.Uint32(data[5:]),
+		},
+		end: PC{
+			data: bo.Uint32(data[9:]),
+			refs: bo.Uint32(data[13:]),
+		},
+	}, true
 }

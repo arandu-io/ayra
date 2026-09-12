@@ -2,6 +2,7 @@ package ops
 
 import (
 	"encoding/binary"
+	"fmt"
 	"image"
 	"math"
 
@@ -154,9 +155,7 @@ const (
 )
 
 func (op *ClipOp) Decode(data []byte) {
-	if len(data) < TypeClipLen || OpType(data[0]) != TypeClip {
-		panic("invalid op")
-	}
+	requireOperation(data, TypeClip, TypeClipLen)
 	data = data[:TypeClipLen]
 	bo := binary.LittleEndian
 	op.Bounds.Min.X = int(int32(bo.Uint32(data[1:])))
@@ -181,15 +180,24 @@ func Reset(o *Ops) {
 	o.refs = o.refs[:0]
 	o.stringRefs = o.stringRefs[:0]
 	o.nextStateID = 0
+	o.multipOp = false
 	o.version++
+}
+
+func reserve(o *Ops, n int) []byte {
+	if n < 0 {
+		panic("negative operation size")
+	}
+	start := len(o.data)
+	o.data = append(o.data, make([]byte, n)...)
+	return o.data[start:]
 }
 
 func Write(o *Ops, n int) []byte {
 	if o.multipOp {
 		panic("cannot mix multi ops with single ones")
 	}
-	o.data = append(o.data, make([]byte, n)...)
-	return o.data[len(o.data)-n:]
+	return reserve(o, n)
 }
 
 func BeginMulti(o *Ops) {
@@ -210,8 +218,7 @@ func WriteMulti(o *Ops, n int) []byte {
 	if !o.multipOp {
 		panic("cannot use multi ops in single ops")
 	}
-	o.data = append(o.data, make([]byte, n)...)
-	return o.data[len(o.data)-n:]
+	return reserve(o, n)
 }
 
 func PushMacro(o *Ops) StackID {
@@ -255,35 +262,35 @@ func PopOp(o *Ops, kind StackKind, sid StackID, macroID uint32) {
 }
 
 func Write1(o *Ops, n int, ref1 any) []byte {
-	o.data = append(o.data, make([]byte, n)...)
+	data := Write(o, n)
 	o.refs = append(o.refs, ref1)
-	return o.data[len(o.data)-n:]
+	return data
 }
 
 func Write1String(o *Ops, n int, ref1 string) []byte {
-	o.data = append(o.data, make([]byte, n)...)
+	data := Write(o, n)
 	o.stringRefs = append(o.stringRefs, ref1)
 	o.refs = append(o.refs, &o.stringRefs[len(o.stringRefs)-1])
-	return o.data[len(o.data)-n:]
+	return data
 }
 
 func Write2(o *Ops, n int, ref1, ref2 any) []byte {
-	o.data = append(o.data, make([]byte, n)...)
+	data := Write(o, n)
 	o.refs = append(o.refs, ref1, ref2)
-	return o.data[len(o.data)-n:]
+	return data
 }
 
 func Write2String(o *Ops, n int, ref1 any, ref2 string) []byte {
-	o.data = append(o.data, make([]byte, n)...)
+	data := Write(o, n)
 	o.stringRefs = append(o.stringRefs, ref2)
 	o.refs = append(o.refs, ref1, &o.stringRefs[len(o.stringRefs)-1])
-	return o.data[len(o.data)-n:]
+	return data
 }
 
 func Write3(o *Ops, n int, ref1, ref2, ref3 any) []byte {
-	o.data = append(o.data, make([]byte, n)...)
+	data := Write(o, n)
 	o.refs = append(o.refs, ref1, ref2, ref3)
-	return o.data[len(o.data)-n:]
+	return data
 }
 
 func PCFor(o *Ops) PC {
@@ -346,9 +353,7 @@ func EncodeCommand(out []byte, cmd scene.Command) {
 }
 
 func DecodeTransform(data []byte) (t f32.Affine2D, push bool) {
-	if OpType(data[0]) != TypeTransform {
-		panic("invalid op")
-	}
+	requireOperation(data, TypeTransform, TypeTransformLen)
 	push = data[1] != 0
 	data = data[2:]
 	data = data[:4*6]
@@ -364,27 +369,21 @@ func DecodeTransform(data []byte) (t f32.Affine2D, push bool) {
 }
 
 func DecodeOpacity(data []byte) float32 {
-	if OpType(data[0]) != TypePushOpacity {
-		panic("invalid op")
-	}
+	requireOperation(data, TypePushOpacity, TypePushOpacityLen)
 	bo := binary.LittleEndian
 	return math.Float32frombits(bo.Uint32(data[1:]))
 }
 
 // DecodeSave decodes the state id of a save op.
 func DecodeSave(data []byte) int {
-	if OpType(data[0]) != TypeSave {
-		panic("invalid op")
-	}
+	requireOperation(data, TypeSave, TypeSaveLen)
 	bo := binary.LittleEndian
 	return int(bo.Uint32(data[1:]))
 }
 
 // DecodeLoad decodes the state id of a load op.
 func DecodeLoad(data []byte) int {
-	if OpType(data[0]) != TypeLoad {
-		panic("invalid op")
-	}
+	requireOperation(data, TypeLoad, TypeLoadLen)
 	bo := binary.LittleEndian
 	return int(bo.Uint32(data[1:]))
 }
@@ -392,38 +391,45 @@ func DecodeLoad(data []byte) int {
 type opProp struct {
 	Size    byte
 	NumRefs byte
+	Name    string
 }
 
 var opProps = [0x100]opProp{
-	TypeMacro:            {Size: TypeMacroLen, NumRefs: 0},
-	TypeCall:             {Size: TypeCallLen, NumRefs: 1},
-	TypeDefer:            {Size: TypeDeferLen, NumRefs: 0},
-	TypeTransform:        {Size: TypeTransformLen, NumRefs: 0},
-	TypePopTransform:     {Size: TypePopTransformLen, NumRefs: 0},
-	TypePushOpacity:      {Size: TypePushOpacityLen, NumRefs: 0},
-	TypePopOpacity:       {Size: TypePopOpacityLen, NumRefs: 0},
-	TypeImage:            {Size: TypeImageLen, NumRefs: 2},
-	TypePaint:            {Size: TypePaintLen, NumRefs: 0},
-	TypeColor:            {Size: TypeColorLen, NumRefs: 0},
-	TypeLinearGradient:   {Size: TypeLinearGradientLen, NumRefs: 0},
-	TypePass:             {Size: TypePassLen, NumRefs: 0},
-	TypePopPass:          {Size: TypePopPassLen, NumRefs: 0},
-	TypeInput:            {Size: TypeInputLen, NumRefs: 1},
-	TypeKeyInputHint:     {Size: TypeKeyInputHintLen, NumRefs: 1},
-	TypeSave:             {Size: TypeSaveLen, NumRefs: 0},
-	TypeLoad:             {Size: TypeLoadLen, NumRefs: 0},
-	TypeAux:              {Size: TypeAuxLen, NumRefs: 0},
-	TypeClip:             {Size: TypeClipLen, NumRefs: 0},
-	TypePopClip:          {Size: TypePopClipLen, NumRefs: 0},
-	TypeCursor:           {Size: TypeCursorLen, NumRefs: 0},
-	TypePath:             {Size: TypePathLen, NumRefs: 0},
-	TypeStroke:           {Size: TypeStrokeLen, NumRefs: 0},
-	TypeSemanticLabel:    {Size: TypeSemanticLabelLen, NumRefs: 1},
-	TypeSemanticDesc:     {Size: TypeSemanticDescLen, NumRefs: 1},
-	TypeSemanticClass:    {Size: TypeSemanticClassLen, NumRefs: 0},
-	TypeSemanticSelected: {Size: TypeSemanticSelectedLen, NumRefs: 0},
-	TypeSemanticEnabled:  {Size: TypeSemanticEnabledLen, NumRefs: 0},
-	TypeActionInput:      {Size: TypeActionInputLen, NumRefs: 0},
+	TypeMacro:            {Size: TypeMacroLen, Name: "Macro"},
+	TypeCall:             {Size: TypeCallLen, NumRefs: 1, Name: "Call"},
+	TypeDefer:            {Size: TypeDeferLen, Name: "Defer"},
+	TypeTransform:        {Size: TypeTransformLen, Name: "Transform"},
+	TypePopTransform:     {Size: TypePopTransformLen, Name: "PopTransform"},
+	TypePushOpacity:      {Size: TypePushOpacityLen, Name: "PushOpacity"},
+	TypePopOpacity:       {Size: TypePopOpacityLen, Name: "PopOpacity"},
+	TypeImage:            {Size: TypeImageLen, NumRefs: 2, Name: "Image"},
+	TypePaint:            {Size: TypePaintLen, Name: "Paint"},
+	TypeColor:            {Size: TypeColorLen, Name: "Color"},
+	TypeLinearGradient:   {Size: TypeLinearGradientLen, Name: "LinearGradient"},
+	TypePass:             {Size: TypePassLen, Name: "Pass"},
+	TypePopPass:          {Size: TypePopPassLen, Name: "PopPass"},
+	TypeInput:            {Size: TypeInputLen, NumRefs: 1, Name: "Input"},
+	TypeKeyInputHint:     {Size: TypeKeyInputHintLen, NumRefs: 1, Name: "KeyInputHint"},
+	TypeSave:             {Size: TypeSaveLen, Name: "Save"},
+	TypeLoad:             {Size: TypeLoadLen, Name: "Load"},
+	TypeAux:              {Size: TypeAuxLen, Name: "Aux"},
+	TypeClip:             {Size: TypeClipLen, Name: "Clip"},
+	TypePopClip:          {Size: TypePopClipLen, Name: "PopClip"},
+	TypeCursor:           {Size: TypeCursorLen, Name: "Cursor"},
+	TypePath:             {Size: TypePathLen, Name: "Path"},
+	TypeStroke:           {Size: TypeStrokeLen, Name: "Stroke"},
+	TypeSemanticLabel:    {Size: TypeSemanticLabelLen, NumRefs: 1, Name: "SemanticLabel"},
+	TypeSemanticDesc:     {Size: TypeSemanticDescLen, NumRefs: 1, Name: "SemanticDesc"},
+	TypeSemanticClass:    {Size: TypeSemanticClassLen, Name: "SemanticClass"},
+	TypeSemanticSelected: {Size: TypeSemanticSelectedLen, Name: "SemanticSelected"},
+	TypeSemanticEnabled:  {Size: TypeSemanticEnabledLen, Name: "SemanticEnabled"},
+	TypeActionInput:      {Size: TypeActionInputLen, Name: "ActionInput"},
+}
+
+func requireOperation(data []byte, typ OpType, size int) {
+	if len(data) < size || OpType(data[0]) != typ {
+		panic("invalid op")
+	}
 }
 
 func (t OpType) props() (size, numRefs uint32) {
@@ -440,56 +446,8 @@ func (t OpType) NumRefs() uint32 {
 }
 
 func (t OpType) String() string {
-	switch t {
-	case TypeMacro:
-		return "Macro"
-	case TypeCall:
-		return "Call"
-	case TypeDefer:
-		return "Defer"
-	case TypeTransform:
-		return "Transform"
-	case TypePopTransform:
-		return "PopTransform"
-	case TypePushOpacity:
-		return "PushOpacity"
-	case TypePopOpacity:
-		return "PopOpacity"
-	case TypeImage:
-		return "Image"
-	case TypePaint:
-		return "Paint"
-	case TypeColor:
-		return "Color"
-	case TypeLinearGradient:
-		return "LinearGradient"
-	case TypePass:
-		return "Pass"
-	case TypePopPass:
-		return "PopPass"
-	case TypeInput:
-		return "Input"
-	case TypeKeyInputHint:
-		return "KeyInputHint"
-	case TypeSave:
-		return "Save"
-	case TypeLoad:
-		return "Load"
-	case TypeAux:
-		return "Aux"
-	case TypeClip:
-		return "Clip"
-	case TypePopClip:
-		return "PopClip"
-	case TypeCursor:
-		return "Cursor"
-	case TypePath:
-		return "Path"
-	case TypeStroke:
-		return "Stroke"
-	case TypeSemanticLabel:
-		return "SemanticDescription"
-	default:
-		panic("unknown OpType")
+	if name := opProps[t].Name; name != "" {
+		return name
 	}
+	return fmt.Sprintf("OpType(%d)", byte(t))
 }
