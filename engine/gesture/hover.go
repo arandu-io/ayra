@@ -53,13 +53,20 @@ func (h *Hover) Update(q input.Source) bool {
 		case pointer.Enter:
 			h.pid = e.PointerID
 			h.entered = true
-		case pointer.Leave, pointer.Cancel:
+		case pointer.Leave:
 			// Only the pointer that is inside can leave. With two fingers on
 			// the screen, one of them crossing out says nothing about where
 			// the other one is.
 			if h.entered && h.pid == e.PointerID {
 				h.entered = false
 			}
+		case pointer.Cancel:
+			// A cancellation names no pointer, because it takes them all: it
+			// is the window losing the input, not a hand being lifted. Matched
+			// against the pointer being followed the way a crossing is, it
+			// would only ever clear a hover under the pointer numbered zero,
+			// and every other one would stay lit with nothing over it.
+			h.entered = false
 		}
 	}
 }

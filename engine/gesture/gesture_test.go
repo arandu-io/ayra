@@ -294,6 +294,27 @@ func TestHoverEndsOnCancel(t *testing.T) {
 	}
 }
 
+// The cancellation carries no pointer number, and the hover has to end anyway.
+// A finger is rarely the pointer numbered zero, and matching the number the way
+// a crossing is matched would leave every control a second finger touched lit
+// with nothing over it.
+func TestHoverEndsOnCancelOfANumberedPointer(t *testing.T) {
+	var h hoverer
+	s := newStage(t, h.player())
+
+	arrive := mouse(pointer.Move, centre)
+	arrive.PointerID = 1
+	s.queue(arrive)
+	if !h.hovered {
+		t.Fatal("not hovered with the pointer inside the area")
+	}
+
+	s.queue(pointer.Event{Kind: pointer.Cancel})
+	if h.hovered {
+		t.Fatal("still hovered after the pointer was cancelled")
+	}
+}
+
 // The press is reported as it happens and the click when the pointer comes back
 // up, which is the whole shape of the gesture: a control draws itself held down
 // on the first and acts on the second.
