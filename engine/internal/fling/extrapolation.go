@@ -1,330 +1,201 @@
+// Package fling carries a released drag on, and brings it to rest.
+//
+// A finger that leaves the glass is still moving, and what was under it has to
+// keep moving or the list stops dead under the hand. Two halves answer that.
+// [Extrapolation] reads the positions reported while the finger was down and
+// says how fast it was going at the instant it left; [Animation] takes that
+// speed and hands out the distance travelled since the last frame, slowing
+// until there is nothing left to hand out.
+//
+// Both are one-dimensional, so a gesture that moves in two directions keeps one
+// of each per axis. Both are held by the caller and both are ready to use as
+// their zero value, which is also how a caller throws one away: a new gesture
+// assigns a fresh value rather than calling anything to reset.
 package fling
 
 import (
-	"math"
-	"strconv"
-	"strings"
 	"time"
 )
 
-// Extrapolation computes a 1-dimensional velocity estimate
-// for a set of timestamped points using the least squares
-// fit of a 2nd order polynomial. The same method is used
-// by Android.
+// Extrapolation estimates how fast a drag was moving when it was let go.
+//
+// Positions are added with [Extrapolation.Sample] or [Extrapolation.SampleDelta]
+// while the finger is down, and [Extrapolation.Estimate] is asked once, at the
+// release. Samples arrive at whatever rate the device reports them and are kept
+// in a ring, so a drag that goes on for a minute costs no more than one that
+// lasts a frame.
+//
+// Reset by assigning the zero value rather than by copying a used one: the
+// sample slice is a window onto the array beside it, so a copy would go on
+// writing into the value it was copied from.
 type Extrapolation struct {
-	// Index into points.
-	idx int
-	// Circular buffer of samples.
-	samples   []sample
-	lastValue float32
-	// Pre-allocated cache for samples.
-	cache [historySize]sample
+	// next is where the following sample goes, so the newest is the one before
+	// it and the ring wraps at the end of the buffer.
+	next int
+	// samples is the ring itself, grown into ring until it is full.
+	samples []sample
+	// last is the absolute position the most recent relative sample was added
+	// to.
+	last float32
+	// ring is the storage, held here so that an estimation allocates nothing.
+	ring [historySize]sample
 
-	// Filtered values and times
+	// values and times are the fitted window, kept as fields for the same
+	// reason: they are rebuilt on every estimate and a fresh pair each time
+	// would allocate during a gesture.
 	values [historySize]float32
 	times  [historySize]float32
 }
 
+// sample is one reported position and when it was reported.
 type sample struct {
-	t time.Duration
-	v float32
+	at    time.Duration
+	value float32
 }
 
-type matrix struct {
-	rows, cols int
-	data       []float32
-}
-
+// Estimate is what a release is worth.
 type Estimate struct {
+	// Velocity is the speed at the instant of the newest sample, in the units
+	// the samples were given in per second.
+	//
+	// It carries the opposite sign to the samples themselves, because what a
+	// caller moves is what was under the finger and that travels the other way.
+	// A scroll measures its own distance as the previous position minus the
+	// current one, and this is in the same terms: the two are added together.
 	Velocity float32
+
+	// Distance is how far the gesture travelled across the window that was
+	// used, in the samples' own direction.
+	//
+	// It is what tells a drag that went somewhere from a press that wandered a
+	// pixel, and it is asked for its size: a caller compares it against the
+	// slop of its own gesture, in both directions at once.
 	Distance float32
 }
 
-type coefficients [degree + 1]float32
-
 const (
-	degree       = 2
-	historySize  = 20
-	maxAge       = 100 * time.Millisecond
+	// degree is the order of the curve fitted through the window.
+	//
+	// A parabola, so that the fit has a second derivative to spend: a finger is
+	// almost never at a constant speed as it leaves -- it is still gathering
+	// pace, or already braking -- and a straight line through the same points
+	// answers the average speed across the window instead of the speed at the
+	// end of it. The velocity is then the first order coefficient, which is the
+	// slope at zero, and zero is the newest sample because the window is
+	// measured backwards from it.
+	degree = 2
+
+	// historySize is how many samples the ring holds.
+	//
+	// It is not the window -- maxAge is -- and it is deliberately larger than
+	// the window can use at the rates a touch screen reports at, so that the
+	// answer is decided by how old a sample is and never by how many arrived.
+	// A device that reports faster than expected loses the oldest samples,
+	// which are the ones the window would have dropped anyway.
+	historySize = 20
+
+	// maxAge is how far back the window reaches.
+	//
+	// What the finger was doing a tenth of a second before it left is not what
+	// it was doing when it left. Reaching further back averages a flick
+	// together with the slow drag that set it up and answers something between
+	// the two, which is a flick that goes nowhere.
+	maxAge = 100 * time.Millisecond
+
+	// maxSampleGap ends the window at a pause.
+	//
+	// Two samples further apart than this did not come from one continuous
+	// movement: the finger rested, or the device stopped reporting. Whatever
+	// happened before the pause belongs to an earlier movement, and fitting a
+	// curve across the gap answers a speed that was never reached -- the
+	// distance is real and the time it was covered in is not.
 	maxSampleGap = 40 * time.Millisecond
 )
 
-// SampleDelta adds a relative sample to the estimation.
-func (e *Extrapolation) SampleDelta(t time.Duration, delta float32) {
-	val := delta + e.lastValue
-	e.Sample(t, val)
+// SampleDelta adds a sample given as a step from the one before it.
+func (e *Extrapolation) SampleDelta(at time.Duration, delta float32) {
+	e.Sample(at, e.last+delta)
 }
 
-// Sample adds an absolute sample to the estimation.
-func (e *Extrapolation) Sample(t time.Duration, val float32) {
-	e.lastValue = val
+// Sample adds a reported position and the time it was reported at.
+func (e *Extrapolation) Sample(at time.Duration, value float32) {
+	e.last = value
 	if e.samples == nil {
-		e.samples = e.cache[:0]
+		e.samples = e.ring[:0]
 	}
-	s := sample{
-		t: t,
-		v: val,
-	}
-	if e.idx == len(e.samples) && e.idx < cap(e.samples) {
+
+	s := sample{at: at, value: value}
+	if e.next == len(e.samples) {
+		// Still filling: the ring has not yet been round once, and appending
+		// stays inside the array because next is wrapped before it reaches the
+		// end of it.
 		e.samples = append(e.samples, s)
 	} else {
-		e.samples[e.idx] = s
+		e.samples[e.next] = s
 	}
-	e.idx++
-	if e.idx == cap(e.samples) {
-		e.idx = 0
+
+	e.next++
+	if e.next == cap(e.samples) {
+		e.next = 0
 	}
 }
 
-// Velocity returns an estimate of the implied velocity and
-// distance for the points sampled, or zero if the estimation method
-// failed.
+// Estimate answers the velocity and the distance implied by the samples, or the
+// zero estimate when they imply nothing.
+//
+// The answer is a least squares fit over the whole recent window rather than
+// the difference between the last two samples, and the difference is not
+// accuracy for its own sake. Two samples are two readings, each carrying the
+// error of the digitiser and the jitter of whenever the frame happened to read
+// it, and dividing a small distance by a small and uncertain interval turns
+// both into a large error in the answer. Worse, it believes whatever the last
+// pair happened to be: a finger that hesitates for a single frame before
+// lifting reports almost no movement across that pair, and the difference calls
+// a fast drag a stop. A curve through every sample in the window lets them all
+// speak, and the second order term absorbs the acceleration rather than
+// smearing it across the answer.
+//
+// The zero estimate is returned when the window has fewer points than the curve
+// needs, or when they do not determine one. It is the honest answer and also
+// the safe one: a caller weighs the distance against its own slop first, and no
+// distance starts nothing.
 func (e *Extrapolation) Estimate() Estimate {
 	if len(e.samples) == 0 {
 		return Estimate{}
 	}
+
 	values := e.values[:0]
 	times := e.times[:0]
-	first := e.get(0)
-	t := first.t
-	// Walk backwards collecting samples.
-	for i := range e.samples {
-		p := e.get(-i)
-		age := first.t - p.t
-		if age >= maxAge || t-p.t >= maxSampleGap {
-			// If the samples are too old or
-			// too much time passed between samples
-			// assume they're not part of the fling.
+
+	newest := e.back(0)
+	previous := newest.at
+	for n := range e.samples {
+		s := e.back(n)
+		age := newest.at - s.at
+		if age >= maxAge || previous-s.at >= maxSampleGap {
 			break
 		}
-		t = p.t
-		values = append(values, first.v-p.v)
-		times = append(times, float32((-age).Seconds()))
+		previous = s.at
+		// Measured backwards from the newest sample, which sits at the origin:
+		// times run into the past and are negative, and the fitted slope at
+		// zero is therefore the speed at the release.
+		times = append(times, float32(-age.Seconds()))
+		values = append(values, newest.value-s.value)
 	}
-	coef, ok := polyFit(times, values)
+
+	curve, ok := polyFit(times, values)
 	if !ok {
 		return Estimate{}
 	}
-	dist := values[len(values)-1] - values[0]
 	return Estimate{
-		Velocity: coef[1],
-		Distance: dist,
+		Velocity: curve[1],
+		// The span of the window. The subtraction says what is meant even
+		// though the first value is zero by construction.
+		Distance: values[len(values)-1] - values[0],
 	}
 }
 
-func (e *Extrapolation) get(i int) sample {
-	idx := (e.idx + i - 1 + len(e.samples)) % len(e.samples)
-	return e.samples[idx]
-}
-
-// fit computes the least squares polynomial fit for
-// the set of points in X, Y. If the fitting fails
-// because of contradicting or insufficient data,
-// fit returns false.
-func polyFit(X, Y []float32) (coefficients, bool) {
-	if len(X) != len(Y) {
-		panic("X and Y lengths differ")
-	}
-	if len(X) <= degree {
-		// Not enough points to fit a curve.
-		return coefficients{}, false
-	}
-
-	// Use a method similar to Android's VelocityTracker.cpp:
-	// https://android.googlesource.com/platform/frameworks/base/+/56a2301/libs/androidfw/VelocityTracker.cpp
-	// where all weights are 1.
-
-	// First, expand the X vector to the matrix A in column-major order.
-	A := newMatrix(degree+1, len(X))
-	for i, x := range X {
-		A.set(0, i, 1)
-		for j := 1; j < A.rows; j++ {
-			A.set(j, i, A.get(j-1, i)*x)
-		}
-	}
-
-	Q, Rt, ok := decomposeQR(A)
-	if !ok {
-		return coefficients{}, false
-	}
-	// Solve R*B = Qt*Y for B, which is then the polynomial coefficients.
-	// Since R is upper triangular, we can proceed from bottom right to
-	// upper left.
-	// https://en.wikipedia.org/wiki/Non-linear_least_squares
-	var B coefficients
-	for i := Q.rows - 1; i >= 0; i-- {
-		B[i] = dot(Q.col(i), Y)
-		for j := Q.rows - 1; j > i; j-- {
-			B[i] -= Rt.get(i, j) * B[j]
-		}
-		B[i] /= Rt.get(i, i)
-	}
-	return B, true
-}
-
-// decomposeQR computes and returns Q, Rt where Q*transpose(Rt) = A, if
-// possible. R is guaranteed to be upper triangular and only the square
-// part of Rt is returned.
-func decomposeQR(A *matrix) (*matrix, *matrix, bool) {
-	// Gram-Schmidt QR decompose A where Q*R = A.
-	// https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process
-	Q := newMatrix(A.rows, A.cols)  // Column-major.
-	Rt := newMatrix(A.rows, A.rows) // R transposed, row-major.
-	for i := range Q.rows {
-		// Copy A column.
-		for j := range Q.cols {
-			Q.set(i, j, A.get(i, j))
-		}
-		// Subtract projections. Note that int the projection
-		//
-		// proju a = <u, a>/<u, u> u
-		//
-		// the normalized column e replaces u, where <e, e> = 1:
-		//
-		// proje a = <e, a>/<e, e> e = <e, a> e
-		for j := range i {
-			d := dot(Q.col(j), Q.col(i))
-			for k := range Q.cols {
-				Q.set(i, k, Q.get(i, k)-d*Q.get(j, k))
-			}
-		}
-		// Normalize Q columns.
-		n := norm(Q.col(i))
-		if n < 0.000001 {
-			// Degenerate data, no solution.
-			return nil, nil, false
-		}
-		invNorm := 1 / n
-		for j := range Q.cols {
-			Q.set(i, j, Q.get(i, j)*invNorm)
-		}
-		// Update Rt.
-		for j := i; j < Rt.cols; j++ {
-			Rt.set(i, j, dot(Q.col(i), A.col(j)))
-		}
-	}
-	return Q, Rt, true
-}
-
-func norm(V []float32) float32 {
-	var n float32
-	for _, v := range V {
-		n += v * v
-	}
-	return float32(math.Sqrt(float64(n)))
-}
-
-func dot(V1, V2 []float32) float32 {
-	var d float32
-	for i, v1 := range V1 {
-		d += v1 * V2[i]
-	}
-	return d
-}
-
-func newMatrix(rows, cols int) *matrix {
-	return &matrix{
-		rows: rows,
-		cols: cols,
-		data: make([]float32, rows*cols),
-	}
-}
-
-func (m *matrix) set(row, col int, v float32) {
-	if row < 0 || row >= m.rows {
-		panic("row out of range")
-	}
-	if col < 0 || col >= m.cols {
-		panic("col out of range")
-	}
-	m.data[row*m.cols+col] = v
-}
-
-func (m *matrix) get(row, col int) float32 {
-	if row < 0 || row >= m.rows {
-		panic("row out of range")
-	}
-	if col < 0 || col >= m.cols {
-		panic("col out of range")
-	}
-	return m.data[row*m.cols+col]
-}
-
-func (m *matrix) col(c int) []float32 {
-	return m.data[c*m.cols : (c+1)*m.cols]
-}
-
-func (m *matrix) approxEqual(m2 *matrix) bool {
-	if m.rows != m2.rows || m.cols != m2.cols {
-		return false
-	}
-	const epsilon = 0.00001
-	for row := range m.rows {
-		for col := range m.cols {
-			d := m2.get(row, col) - m.get(row, col)
-			if d < -epsilon || d > epsilon {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (m *matrix) transpose() *matrix {
-	t := &matrix{
-		rows: m.cols,
-		cols: m.rows,
-		data: make([]float32, len(m.data)),
-	}
-	for i := range m.rows {
-		for j := range m.cols {
-			t.set(j, i, m.get(i, j))
-		}
-	}
-	return t
-}
-
-func (m *matrix) mul(m2 *matrix) *matrix {
-	if m.rows != m2.cols {
-		panic("mismatched matrices")
-	}
-	mm := &matrix{
-		rows: m.rows,
-		cols: m2.cols,
-		data: make([]float32, m.rows*m2.cols),
-	}
-	for i := range mm.rows {
-		for j := range mm.cols {
-			var v float32
-			for k := range m.rows {
-				v += m.get(k, j) * m2.get(i, k)
-			}
-			mm.set(i, j, v)
-		}
-	}
-	return mm
-}
-
-func (m *matrix) String() string {
-	var b strings.Builder
-	for i := range m.rows {
-		for j := range m.cols {
-			v := m.get(i, j)
-			b.WriteString(strconv.FormatFloat(float64(v), 'g', -1, 32))
-			b.WriteString(", ")
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func (c coefficients) approxEqual(c2 coefficients) bool {
-	const epsilon = 0.00001
-	for i, v := range c {
-		d := v - c2[i]
-		if d < -epsilon || d > epsilon {
-			return false
-		}
-	}
-	return true
+// back answers the sample n places before the newest one.
+func (e *Extrapolation) back(n int) sample {
+	return e.samples[(e.next-1-n+len(e.samples))%len(e.samples)]
 }
