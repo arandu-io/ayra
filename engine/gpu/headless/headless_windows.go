@@ -13,10 +13,7 @@ type d3d11Context struct {
 
 func init() {
 	newContextPrimary = func() (context, error) {
-		dev, ctx, _, err := d3d11.CreateDevice(
-			d3d11.DRIVER_TYPE_HARDWARE,
-			0,
-		)
+		dev, ctx, _, err := d3d11.CreateDeviceWithFallback(0)
 		if err != nil {
 			return nil, err
 		}

@@ -630,8 +630,7 @@ var (
 )
 
 const (
-	SDK_VERSION          = 7
-	DRIVER_TYPE_HARDWARE = 1
+	SDK_VERSION = 7
 
 	DXGI_FORMAT_UNKNOWN             = 0
 	DXGI_FORMAT_R16_FLOAT           = 54
@@ -759,6 +758,70 @@ func CreateDevice(driverType uint32, flags uint32) (*Device, *DeviceContext, uin
 		return nil, nil, 0, ErrorCode{Name: "D3D11CreateDevice", Code: uint32(r)}
 	}
 	return dev, ctx, featLvl, nil
+}
+
+type deviceAndContext struct {
+	device       *Device
+	context      *DeviceContext
+	featureLevel uint32
+}
+
+func CreateDeviceWithFallback(flags uint32) (*Device, *DeviceContext, uint32, error) {
+	result, err := withDriverFallback(func(driverType uint32) (deviceAndContext, error) {
+		device, context, featureLevel, err := CreateDevice(driverType, flags)
+		return deviceAndContext{
+			device:       device,
+			context:      context,
+			featureLevel: featureLevel,
+		}, err
+	})
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	return result.device, result.context, result.featureLevel, nil
+}
+
+type deviceContextAndSwapChain struct {
+	device       *Device
+	context      *DeviceContext
+	swapChain    *IDXGISwapChain
+	featureLevel uint32
+}
+
+// CreateDeviceAndSwapChainForWindow owns one complete D3D11 window attempt.
+// A driver that creates a device but cannot create its swap chain has failed;
+// release that partial attempt so the caller can safely try another driver.
+func CreateDeviceAndSwapChainForWindow(driverType, flags uint32, hwnd windows.Handle) (*Device, *DeviceContext, *IDXGISwapChain, uint32, error) {
+	device, context, featureLevel, err := CreateDevice(driverType, flags)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	swapChain, err := CreateSwapChain(device, hwnd)
+	if err != nil {
+		IUnknownRelease(unsafe.Pointer(context), context.Vtbl.Release)
+		IUnknownRelease(unsafe.Pointer(device), device.Vtbl.Release)
+		return nil, nil, nil, 0, err
+	}
+	return device, context, swapChain, featureLevel, nil
+}
+
+// CreateDeviceAndSwapChainWithFallback retries the whole window transaction
+// with WARP. Retrying only device creation misses the common VM/RDP failure in
+// which hardware exists but cannot present a swap chain.
+func CreateDeviceAndSwapChainWithFallback(flags uint32, hwnd windows.Handle) (*Device, *DeviceContext, *IDXGISwapChain, uint32, error) {
+	result, err := withDriverFallback(func(driverType uint32) (deviceContextAndSwapChain, error) {
+		device, context, swapChain, featureLevel, err := CreateDeviceAndSwapChainForWindow(driverType, flags, hwnd)
+		return deviceContextAndSwapChain{
+			device:       device,
+			context:      context,
+			swapChain:    swapChain,
+			featureLevel: featureLevel,
+		}, err
+	})
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return result.device, result.context, result.swapChain, result.featureLevel, nil
 }
 
 func CreateDeviceAndSwapChain(driverType uint32, flags uint32, swapDesc *DXGI_SWAP_CHAIN_DESC) (*Device, *DeviceContext, *IDXGISwapChain, uint32, error) {

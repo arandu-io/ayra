@@ -29,18 +29,9 @@ func init() {
 			if debugDirectX {
 				flags |= d3d11.CREATE_DEVICE_DEBUG
 			}
-			dev, ctx, _, err := d3d11.CreateDevice(
-				d3d11.DRIVER_TYPE_HARDWARE,
-				flags,
-			)
+			dev, ctx, swchain, _, err := createD3D11DeviceAndSwapChain(flags, hwnd)
 			if err != nil {
 				return nil, fmt.Errorf("NewContext: %v", err)
-			}
-			swchain, err := d3d11.CreateSwapChain(dev, hwnd)
-			if err != nil {
-				d3d11.IUnknownRelease(unsafe.Pointer(ctx), ctx.Vtbl.Release)
-				d3d11.IUnknownRelease(unsafe.Pointer(dev), dev.Vtbl.Release)
-				return nil, err
 			}
 			return &d3d11Context{win: w, dev: dev, ctx: ctx, swchain: swchain}, nil
 		},
