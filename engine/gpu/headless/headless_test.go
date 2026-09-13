@@ -12,6 +12,11 @@ import (
 )
 
 func TestHeadless(t *testing.T) {
+	testHeadless(t)
+}
+
+func testHeadless(t *testing.T) {
+	t.Helper()
 	w, release := newTestWindow(t)
 	defer release()
 

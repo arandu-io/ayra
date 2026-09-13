@@ -35,7 +35,7 @@ const original = "gioui.org@v0.10.2"
 // ceiling. It may fall -- that is the work -- and a rise fails, which is what
 // stops the decision from being undone on an afternoon when something does not
 // compile.
-const stillTheirs = 74
+const stillTheirs = 71
 
 // comparable is how many files of the copy carry code and have a counterpart to
 // compare against. It is asserted so that a walk which stopped matching reports

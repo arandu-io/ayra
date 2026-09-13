@@ -40,7 +40,7 @@ jobs:
             libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
             libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev \
             libvulkan-dev wayland-protocols \
-            libegl-mesa0 libgl1-mesa-dri libglx-mesa0 xvfb
+            libegl-mesa0 libgl1-mesa-dri libglx-mesa0 x11-utils xvfb
 
       # A formatting difference is a failure, not a comment on a pull request.
       - name: gofmt
@@ -88,6 +88,19 @@ jobs:
       - name: test
         run: go test -race ./...
 
+      # The checked-in shader bindings are generated elsewhere, but their
+      # Apple target selection is repaired locally and idempotently. Running
+      # that postprocessor here makes a reintroduced GOARCH simulator check a
+      # failing diff instead of a device-only crash discovered after release.
+      - name: generated shaders select the Apple target
+        run: |
+          go generate ./engine/shader/compiled
+          if [ -n "$(git status --porcelain engine/shader/compiled)" ]; then
+            echo "the committed shader bindings are not target-aware:"
+            git --no-pager diff --stat engine/shader/compiled
+            exit 1
+          fi
+
       # Everything above compiles one operating system for one architecture.
       # A target that is offered and never built is found broken by whoever
       # builds it next, and that person is cutting a release or has already
@@ -121,6 +134,15 @@ jobs:
             echo "building for $target"
             GOOS="${target%/*}" GOARCH="${target#*/}" go build ./...
           done
+
+      # Cross-compilation does not touch the X11 and Wayland event loops. Open
+      # the catalogue on a real X server, require its window to appear, and
+      # leave it alive long enough to cross the first GPU frames.
+      - name: the Linux window opens and stays alive
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: xvfb-run -a bash .github/scripts/linux-runtime.sh
 
       # The pictures, which are the only gate that says the controls draw.
       # Everything else here passes on a screen that renders nothing: a build
@@ -200,3 +222,134 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
           (cd module && govulncheck ./...)
+
+  windows-runtime:
+    name: Windows x64 runtime
+    runs-on: windows-2025
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: D3D11 hardware fallback and WARP render pixels
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $output = & go test -count=1 -run '^(TestHeadless|TestWARPHeadless)$' -v ./engine/gpu/headless 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath "$env:RUNNER_TEMP\headless.log"
+          if ($exitCode -ne 0) {
+            throw "The D3D11 headless rendering test failed."
+          }
+          if (($output -join "`n") -match '--- SKIP: Test(Headless|WARPHeadless)') {
+            throw "The D3D11 rendering test skipped; this is not runtime evidence."
+          }
+
+      - name: Catalogue opens a responsive WARP window
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exe = "$env:RUNNER_TEMP\ayra-catalogue.exe"
+          $stdout = "$env:RUNNER_TEMP\catalogue.stdout.log"
+          $stderr = "$env:RUNNER_TEMP\catalogue.stderr.log"
+
+          # noopengl makes this proof fail if WARP device + swap-chain creation
+          # fails; no EGL fallback can turn a D3D11 failure green.
+          & go -C catalogue build -trimpath '-tags=ayra_d3d11_warp noopengl' '-ldflags=-H=windowsgui' -o $exe .
+          if ($LASTEXITCODE -ne 0) {
+            throw "The Windows catalogue build failed."
+          }
+
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+
+          namespace RuntimeProof {
+              public static class Native {
+                  [StructLayout(LayoutKind.Sequential)]
+                  public struct RECT {
+                      public int Left;
+                      public int Top;
+                      public int Right;
+                      public int Bottom;
+                  }
+
+                  [DllImport("user32.dll", SetLastError = true)]
+                  [return: MarshalAs(UnmanagedType.Bool)]
+                  public static extern bool GetClientRect(
+                      IntPtr window,
+                      out RECT rectangle
+                  );
+              }
+          }
+          '@
+
+          $process = Start-Process `
+            -FilePath $exe `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+
+          try {
+            $deadline = (Get-Date).AddSeconds(45)
+            $window = [IntPtr]::Zero
+            while ((Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 250
+              $process.Refresh()
+              if ($process.HasExited) {
+                $details = if (Test-Path $stderr) { Get-Content -Raw $stderr } else { "" }
+                throw "The catalogue exited with code $($process.ExitCode).`n$details"
+              }
+              if (
+                $process.MainWindowHandle -ne [IntPtr]::Zero -and
+                $process.MainWindowTitle -eq "Controls"
+              ) {
+                $window = $process.MainWindowHandle
+                break
+              }
+            }
+
+            if ($window -eq [IntPtr]::Zero) {
+              throw "No visible Controls window appeared within 45 seconds."
+            }
+
+            $client = [RuntimeProof.Native+RECT]::new()
+            if (-not [RuntimeProof.Native]::GetClientRect($window, [ref] $client)) {
+              throw "GetClientRect failed."
+            }
+            $width = $client.Right - $client.Left
+            $height = $client.Bottom - $client.Top
+            if ($width -lt 640 -or $height -lt 480) {
+              throw "Unexpected client area: ${width}x${height}."
+            }
+
+            Start-Sleep -Seconds 15
+            $process.Refresh()
+            if ($process.HasExited) {
+              throw "The catalogue exited after opening its window."
+            }
+            if (-not $process.Responding) {
+              throw "The Controls window stopped responding."
+            }
+            Write-Host "Controls window stayed responsive at ${width}x${height}."
+          }
+          finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+              [void] $process.WaitForExit(5000)
+            }
+          }
+
+      - name: Windows runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayra-windows-runtime
+          path: |
+            ${{ runner.temp }}/headless.log
+            ${{ runner.temp }}/catalogue.stdout.log
+            ${{ runner.temp }}/catalogue.stderr.log
+          if-no-files-found: ignore
