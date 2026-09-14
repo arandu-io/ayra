@@ -142,9 +142,10 @@ control guarantees and, where it matters, the fault the shape prevents.
 needs before it will. `aru native:dev` is the loop to develop in: it watches the
 native sources and rebuilds.
 
-A guide and a website do not exist yet, and that is a decision rather than a
-gap: a guide written against an API that still moves is work done twice, and the
-second time is worse — there is wrong documentation published.
+The complete application guide lives at
+[arandu.io/native](https://arandu.io/native). It follows the public workflow:
+register the module, publish the six-file starter, develop with `native:run` or
+`native:dev`, and build the selected platform artifact with `native:build`.
 
 ## Contributing
 
