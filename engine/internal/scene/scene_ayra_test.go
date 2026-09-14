@@ -1,4 +1,4 @@
-package scene
+package scene_test
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/arandu-io/ayra/engine/internal/byteslice"
 	"github.com/arandu-io/ayra/engine/internal/f32"
+	"github.com/arandu-io/ayra/engine/internal/scene"
 )
 
 // This package packs floats into an array of words and reads them back, and
@@ -32,28 +33,28 @@ var (
 var bbox = f32.Rect(9, 10, 11, 12)
 
 func TestALineDecodesToThePointsItWasGiven(t *testing.T) {
-	from, to := DecodeLine(Line(a, b))
+	from, to := scene.DecodeLine(scene.Line(a, b))
 	if from != a || to != b {
 		t.Errorf("Line(%v, %v) decoded to (%v, %v)", a, b, from, to)
 	}
 }
 
 func TestAGapDecodesToThePointsItWasGiven(t *testing.T) {
-	from, to := DecodeGap(Gap(a, b))
+	from, to := scene.DecodeGap(scene.Gap(a, b))
 	if from != a || to != b {
 		t.Errorf("Gap(%v, %v) decoded to (%v, %v)", a, b, from, to)
 	}
 }
 
 func TestAQuadDecodesToThePointsItWasGiven(t *testing.T) {
-	from, ctrl, to := DecodeQuad(Quad(a, b, c))
+	from, ctrl, to := scene.DecodeQuad(scene.Quad(a, b, c))
 	if from != a || ctrl != b || to != c {
 		t.Errorf("Quad(%v, %v, %v) decoded to (%v, %v, %v)", a, b, c, from, ctrl, to)
 	}
 }
 
 func TestACubicDecodesToThePointsItWasGiven(t *testing.T) {
-	from, ctrl0, ctrl1, to := DecodeCubic(Cubic(a, b, c, d))
+	from, ctrl0, ctrl1, to := scene.DecodeCubic(scene.Cubic(a, b, c, d))
 	if from != a || ctrl0 != b || ctrl1 != c || to != d {
 		t.Errorf("Cubic(%v, %v, %v, %v) decoded to (%v, %v, %v, %v)", a, b, c, d, from, ctrl0, ctrl1, to)
 	}
@@ -64,21 +65,21 @@ func TestACubicDecodesToThePointsItWasGiven(t *testing.T) {
 // the right words as the wrong thing.
 func TestEveryCommandReportsItsOwnOp(t *testing.T) {
 	for _, test := range []struct {
-		command Command
-		want    Op
+		command scene.Command
+		want    scene.Op
 	}{
-		{Command{}, OpNop},
-		{Line(a, b), OpLine},
-		{Quad(a, b, c), OpQuad},
-		{Cubic(a, b, c, d), OpCubic},
-		{FillColor(color.RGBA{R: 1, G: 2, B: 3, A: 4}), OpFillColor},
-		{SetLineWidth(2.5), OpLineWidth},
-		{Transform(f32.NewAffine2D(1, 2, 3, 4, 5, 6)), OpTransform},
-		{BeginClip(bbox), OpBeginClip},
-		{EndClip(bbox), OpEndClip},
-		{FillImage(1, image.Pt(2, 3)), OpFillImage},
-		{SetFillMode(FillModeStroke), OpSetFillMode},
-		{Gap(a, b), OpGap},
+		{scene.Command{}, scene.OpNop},
+		{scene.Line(a, b), scene.OpLine},
+		{scene.Quad(a, b, c), scene.OpQuad},
+		{scene.Cubic(a, b, c, d), scene.OpCubic},
+		{scene.FillColor(color.RGBA{R: 1, G: 2, B: 3, A: 4}), scene.OpFillColor},
+		{scene.SetLineWidth(2.5), scene.OpLineWidth},
+		{scene.Transform(f32.NewAffine2D(1, 2, 3, 4, 5, 6)), scene.OpTransform},
+		{scene.BeginClip(bbox), scene.OpBeginClip},
+		{scene.EndClip(bbox), scene.OpEndClip},
+		{scene.FillImage(1, image.Pt(2, 3)), scene.OpFillImage},
+		{scene.SetFillMode(scene.FillModeStroke), scene.OpSetFillMode},
+		{scene.Gap(a, b), scene.OpGap},
 	} {
 		if got := test.command.Op(); got != test.want {
 			t.Errorf("%v reports op %d, and %d was encoded", test.command, got, test.want)
@@ -93,9 +94,9 @@ func TestEveryCommandReportsItsOwnOp(t *testing.T) {
 // after it, and anything reading a stream written before the change decodes
 // every command as the wrong one.
 func TestTheOpNumbersAreTheOnesTheStreamCarries(t *testing.T) {
-	for want, op := range []Op{
-		OpNop, OpLine, OpQuad, OpCubic, OpFillColor, OpLineWidth,
-		OpTransform, OpBeginClip, OpEndClip, OpFillImage, OpSetFillMode, OpGap,
+	for want, op := range []scene.Op{
+		scene.OpNop, scene.OpLine, scene.OpQuad, scene.OpCubic, scene.OpFillColor, scene.OpLineWidth,
+		scene.OpTransform, scene.OpBeginClip, scene.OpEndClip, scene.OpFillImage, scene.OpSetFillMode, scene.OpGap,
 	} {
 		if int(op) != want {
 			t.Errorf("op %v is %d and the stream carries it as %d", op, op, want)
@@ -115,12 +116,12 @@ func TestADecoderRefusesACommandOfAnotherOp(t *testing.T) {
 		name   string
 		decode func()
 	}{
-		{"a line read as a gap", func() { DecodeGap(Line(a, b)) }},
-		{"a gap read as a line", func() { DecodeLine(Gap(a, b)) }},
-		{"a quad read as a line", func() { DecodeLine(Quad(a, b, c)) }},
-		{"a cubic read as a quad", func() { DecodeQuad(Cubic(a, b, c, d)) }},
-		{"a quad read as a cubic", func() { DecodeCubic(Quad(a, b, c)) }},
-		{"a nop read as a line", func() { DecodeLine(Command{}) }},
+		{"a line read as a gap", func() { scene.DecodeGap(scene.Line(a, b)) }},
+		{"a gap read as a line", func() { scene.DecodeLine(scene.Gap(a, b)) }},
+		{"a quad read as a line", func() { scene.DecodeLine(scene.Quad(a, b, c)) }},
+		{"a cubic read as a quad", func() { scene.DecodeQuad(scene.Cubic(a, b, c, d)) }},
+		{"a quad read as a cubic", func() { scene.DecodeCubic(scene.Quad(a, b, c)) }},
+		{"a nop read as a line", func() { scene.DecodeLine(scene.Command{}) }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			defer func() {
@@ -141,17 +142,17 @@ func TestADecoderRefusesACommandOfAnotherOp(t *testing.T) {
 // joined end to end. Two of them read back the other way round still decode to
 // valid points, and the shape they draw is a different shape.
 func TestASequenceComesBackInTheOrderItWentIn(t *testing.T) {
-	want := []Command{
-		Line(a, b),
-		Quad(b, c, d),
-		Gap(d, a),
-		Cubic(a, b, c, d),
-		Line(c, d),
+	want := []scene.Command{
+		scene.Line(a, b),
+		scene.Quad(b, c, d),
+		scene.Gap(d, a),
+		scene.Cubic(a, b, c, d),
+		scene.Line(c, d),
 	}
 
-	stream := make([]byte, len(want)*CommandSize)
+	stream := make([]byte, len(want)*scene.CommandSize)
 	for at, command := range want {
-		encode(stream[at*CommandSize:], command)
+		encode(stream[at*scene.CommandSize:], command)
 	}
 
 	got := readAll(stream)
@@ -172,7 +173,7 @@ func TestASequenceComesBackInTheOrderItWentIn(t *testing.T) {
 // than one command is not a command, and treating it as one reads whatever
 // follows the buffer.
 func TestAnEmptyStreamYieldsNoCommands(t *testing.T) {
-	for _, stream := range [][]byte{nil, {}, make([]byte, CommandSize-1)} {
+	for _, stream := range [][]byte{nil, {}, make([]byte, scene.CommandSize-1)} {
 		if got := readAll(stream); len(got) != 0 {
 			t.Errorf("%d bytes yielded %d commands, and none was written", len(stream), len(got))
 		}
@@ -185,8 +186,8 @@ func TestAnEmptyStreamYieldsNoCommands(t *testing.T) {
 // safe reading of it is "do nothing". Any other op there would be a draw nobody
 // asked for, taken from words nobody wrote.
 func TestTheZeroCommandIsANop(t *testing.T) {
-	var command Command
-	if got := command.Op(); got != OpNop {
+	var command scene.Command
+	if got := command.Op(); got != scene.OpNop {
 		t.Errorf("the zero command reports op %d, and a command nobody wrote has to be a nop", got)
 	}
 	if got := command.String(); got != "nop" {
@@ -201,19 +202,19 @@ func TestTheZeroCommandIsANop(t *testing.T) {
 // person looking at a stream that draws the wrong thing -- and a printer that
 // gives up on one of the ops takes the diagnosis with it.
 func TestEveryOpPrints(t *testing.T) {
-	for _, command := range []Command{
+	for _, command := range []scene.Command{
 		{},
-		Line(a, b),
-		Gap(a, b),
-		Quad(a, b, c),
-		Cubic(a, b, c, d),
-		FillColor(color.RGBA{R: 1, G: 2, B: 3, A: 4}),
-		SetLineWidth(2.5),
-		Transform(f32.NewAffine2D(1, 2, 3, 4, 5, 6)),
-		BeginClip(bbox),
-		EndClip(bbox),
-		FillImage(1, image.Pt(2, 3)),
-		SetFillMode(FillModeStroke),
+		scene.Line(a, b),
+		scene.Gap(a, b),
+		scene.Quad(a, b, c),
+		scene.Cubic(a, b, c, d),
+		scene.FillColor(color.RGBA{R: 1, G: 2, B: 3, A: 4}),
+		scene.SetLineWidth(2.5),
+		scene.Transform(f32.NewAffine2D(1, 2, 3, 4, 5, 6)),
+		scene.BeginClip(bbox),
+		scene.EndClip(bbox),
+		scene.FillImage(1, image.Pt(2, 3)),
+		scene.SetFillMode(scene.FillModeStroke),
 	} {
 		t.Run(fmt.Sprint(command.Op()), func(t *testing.T) {
 			defer func() {
@@ -233,13 +234,13 @@ func TestEveryOpPrints(t *testing.T) {
 // stream worth reading.
 func TestASegmentPrintsThePointsItWasGiven(t *testing.T) {
 	for _, test := range []struct {
-		command Command
+		command scene.Command
 		want    string
 	}{
-		{Line(a, b), fmt.Sprintf("line(%v, %v)", a, b)},
-		{Gap(a, b), fmt.Sprintf("gap(%v, %v)", a, b)},
-		{Quad(a, b, c), fmt.Sprintf("quad(%v, %v, %v)", a, b, c)},
-		{Cubic(a, b, c, d), fmt.Sprintf("cubic(%v, %v, %v, %v)", a, b, c, d)},
+		{scene.Line(a, b), fmt.Sprintf("line(%v, %v)", a, b)},
+		{scene.Gap(a, b), fmt.Sprintf("gap(%v, %v)", a, b)},
+		{scene.Quad(a, b, c), fmt.Sprintf("quad(%v, %v, %v)", a, b, c)},
+		{scene.Cubic(a, b, c, d), fmt.Sprintf("cubic(%v, %v, %v, %v)", a, b, c, d)},
 	} {
 		if got := test.command.String(); got != test.want {
 			t.Errorf("printed as %q, want %q", got, test.want)
@@ -254,13 +255,13 @@ func TestASegmentPrintsThePointsItWasGiven(t *testing.T) {
 // other half is what it said, and for these it was not there to read.
 func TestACommandPrintsItsArgumentsAndNotOnlyItsName(t *testing.T) {
 	for _, test := range []struct {
-		command Command
+		command scene.Command
 		want    string
 	}{
-		{SetLineWidth(2.5), "linewidth 2.5"},
-		{FillImage(11, image.Pt(3, -5)), "fillimage 11 at (3,-5)"},
-		{SetFillMode(FillModeNonzero), "setfillmode nonzero"},
-		{SetFillMode(FillModeStroke), "setfillmode stroke"},
+		{scene.SetLineWidth(2.5), "linewidth 2.5"},
+		{scene.FillImage(11, image.Pt(3, -5)), "fillimage 11 at (3,-5)"},
+		{scene.SetFillMode(scene.FillModeNonzero), "setfillmode nonzero"},
+		{scene.SetFillMode(scene.FillModeStroke), "setfillmode stroke"},
 	} {
 		if got := test.command.String(); got != test.want {
 			t.Errorf("printed as %q, want %q", got, test.want)
@@ -280,7 +281,7 @@ func TestAnOpThisPackageDoesNotDefineStillPrints(t *testing.T) {
 			t.Fatalf("printing an unknown op stopped the program: %v", state)
 		}
 	}()
-	if got, want := (Command{0: 99}).String(), "op 99"; got != want {
+	if got, want := (scene.Command{0: 99}).String(), "op 99"; got != want {
 		t.Errorf("an unknown op printed as %q, want %q", got, want)
 	}
 }
@@ -296,7 +297,7 @@ func TestAnOpThisPackageDoesNotDefineStillPrints(t *testing.T) {
 func TestATransformPrintsTheMatrixItWasGiven(t *testing.T) {
 	matrix := f32.NewAffine2D(1, 2, 3, 4, 5, 6)
 	want := fmt.Sprintf("transform (%v)", matrix)
-	if got := Transform(matrix).String(); got != want {
+	if got := scene.Transform(matrix).String(); got != want {
 		t.Errorf("printed as %q, want %q", got, want)
 	}
 }
@@ -305,10 +306,10 @@ func TestATransformPrintsTheMatrixItWasGiven(t *testing.T) {
 // commands, whose four words are the near corner of a rectangle and then the
 // far one.
 func TestAClipPrintsTheBoundsItWasGiven(t *testing.T) {
-	if got, want := BeginClip(bbox).String(), fmt.Sprintf("beginclip (%v)", bbox); got != want {
+	if got, want := scene.BeginClip(bbox).String(), fmt.Sprintf("beginclip (%v)", bbox); got != want {
 		t.Errorf("printed as %q, want %q", got, want)
 	}
-	if got, want := EndClip(bbox).String(), fmt.Sprintf("endclip (%v)", bbox); got != want {
+	if got, want := scene.EndClip(bbox).String(), fmt.Sprintf("endclip (%v)", bbox); got != want {
 		t.Errorf("printed as %q, want %q", got, want)
 	}
 }
@@ -320,7 +321,7 @@ func TestAClipPrintsTheBoundsItWasGiven(t *testing.T) {
 // blue exchanged and the usual test colour is a grey, which is the one colour
 // where that mistake is invisible.
 func TestAFillColourKeepsItsChannelsInOrder(t *testing.T) {
-	got := FillColor(color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0x78}).String()
+	got := scene.FillColor(color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0x78}).String()
 	if want := "fillcolor 0x12345678"; got != want {
 		t.Errorf("printed as %q, want %q: red is the top byte and alpha the bottom", got, want)
 	}
@@ -340,7 +341,7 @@ func TestAnImageOffsetSurvivesBeingPackedIntoOneWord(t *testing.T) {
 		{X: -7, Y: 9},
 		{X: -32768, Y: 32767},
 	} {
-		command := FillImage(11, offset)
+		command := scene.FillImage(11, offset)
 		if got := command[1]; got != 11 {
 			t.Errorf("the image index came back as %d, and 11 was encoded", got)
 		}
@@ -354,7 +355,7 @@ func TestAnImageOffsetSurvivesBeingPackedIntoOneWord(t *testing.T) {
 
 // TestSetLineWidthCarriesTheWidth checks the one float the command holds.
 func TestSetLineWidthCarriesTheWidth(t *testing.T) {
-	command := SetLineWidth(2.5)
+	command := scene.SetLineWidth(2.5)
 	if got := math.Float32frombits(command[1]); got != 2.5 {
 		t.Errorf("the width came back as %v, and 2.5 was encoded", got)
 	}
@@ -363,9 +364,9 @@ func TestSetLineWidthCarriesTheWidth(t *testing.T) {
 // TestSetFillModeCarriesTheMode checks the one number the command holds, for
 // both of the modes there are.
 func TestSetFillModeCarriesTheMode(t *testing.T) {
-	for _, mode := range []FillMode{FillModeNonzero, FillModeStroke} {
-		command := SetFillMode(mode)
-		if got := FillMode(command[1]); got != mode {
+	for _, mode := range []scene.FillMode{scene.FillModeNonzero, scene.FillModeStroke} {
+		command := scene.SetFillMode(mode)
+		if got := scene.FillMode(command[1]); got != mode {
 			t.Errorf("mode %d came back as %d", mode, got)
 		}
 	}
@@ -378,12 +379,12 @@ func TestSetFillModeCarriesTheMode(t *testing.T) {
 // difference on every segment: the first shape is right, and the tenth is
 // noise.
 func TestCommandSizeIsTheWholeCommandAndNothingMore(t *testing.T) {
-	var command Command
-	if got, want := CommandSize, len(command)*4; got != want {
+	var command scene.Command
+	if got, want := scene.CommandSize, len(command)*4; got != want {
 		t.Errorf("CommandSize is %d and a command is %d words of four bytes", got, want)
 	}
-	if got := len(byteslice.Slice(command[:])); got != CommandSize {
-		t.Errorf("a command views as %d bytes and CommandSize says %d", got, CommandSize)
+	if got := len(byteslice.Slice(command[:])); got != scene.CommandSize {
+		t.Errorf("a command views as %d bytes and CommandSize says %d", got, scene.CommandSize)
 	}
 }
 
@@ -393,7 +394,7 @@ func TestCommandSizeIsTheWholeCommandAndNothingMore(t *testing.T) {
 // A cubic is the long one, at four points beside its op. One word short and its
 // last coordinate is written past the end of the command, into the next one.
 func TestACommandHoldsTheLongestOp(t *testing.T) {
-	if got, want := len(Command{}), 1+4*2; got < want {
+	if got, want := len(scene.Command{}), 1+4*2; got < want {
 		t.Errorf("a command is %d words and a cubic needs %d", got, want)
 	}
 }
@@ -402,23 +403,23 @@ func TestACommandHoldsTheLongestOp(t *testing.T) {
 // the words into the byte stream and copies them back out. The test does it
 // here rather than through the writer, because what is under test is that a
 // command survives that copy -- not that the writer calls it.
-func encode(out []byte, command Command) {
+func encode(out []byte, command scene.Command) {
 	copy(out, byteslice.Slice(command[:]))
 }
 
-func decode(in []byte) Command {
-	var command Command
+func decode(in []byte) scene.Command {
+	var command scene.Command
 	copy(byteslice.Slice(command[:]), in)
 	return command
 }
 
 // readAll drains a stream the way its readers do: one whole command at a time,
 // stopping when what is left is not one.
-func readAll(stream []byte) []Command {
-	var commands []Command
-	for len(stream) >= CommandSize {
-		commands = append(commands, decode(stream[:CommandSize]))
-		stream = stream[CommandSize:]
+func readAll(stream []byte) []scene.Command {
+	var commands []scene.Command
+	for len(stream) >= scene.CommandSize {
+		commands = append(commands, decode(stream[:scene.CommandSize]))
+		stream = stream[scene.CommandSize:]
 	}
 	return commands
 }

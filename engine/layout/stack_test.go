@@ -1,16 +1,17 @@
-package layout
+package layout_test
 
 import (
 	"image"
 	"testing"
 
+	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 )
 
 func BenchmarkStack(b *testing.B) {
-	gtx := Context{
+	gtx := layout.Context{
 		Ops: new(op.Ops),
-		Constraints: Constraints{
+		Constraints: layout.Constraints{
 			Max: image.Point{X: 100, Y: 100},
 		},
 	}
@@ -19,11 +20,11 @@ func BenchmarkStack(b *testing.B) {
 	for b.Loop() {
 		gtx.Ops.Reset()
 
-		Stack{}.Layout(gtx,
-			Expanded(emptyWidget{
+		layout.Stack{}.Layout(gtx,
+			layout.Expanded(emptyWidget{
 				Size: image.Point{X: 60, Y: 60},
 			}.Layout),
-			Stacked(emptyWidget{
+			layout.Stacked(emptyWidget{
 				Size: image.Point{X: 30, Y: 30},
 			}.Layout),
 		)
@@ -31,9 +32,9 @@ func BenchmarkStack(b *testing.B) {
 }
 
 func BenchmarkBackground(b *testing.B) {
-	gtx := Context{
+	gtx := layout.Context{
 		Ops: new(op.Ops),
-		Constraints: Constraints{
+		Constraints: layout.Constraints{
 			Max: image.Point{X: 100, Y: 100},
 		},
 	}
@@ -42,7 +43,7 @@ func BenchmarkBackground(b *testing.B) {
 	for b.Loop() {
 		gtx.Ops.Reset()
 
-		Background{}.Layout(gtx,
+		layout.Background{}.Layout(gtx,
 			emptyWidget{
 				Size: image.Point{X: 60, Y: 60},
 			}.Layout,
@@ -57,6 +58,6 @@ type emptyWidget struct {
 	Size image.Point
 }
 
-func (w emptyWidget) Layout(gtx Context) Dimensions {
-	return Dimensions{Size: w.Size}
+func (w emptyWidget) Layout(gtx layout.Context) layout.Dimensions {
+	return layout.Dimensions{Size: w.Size}
 }
