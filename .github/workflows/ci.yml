@@ -165,7 +165,7 @@ jobs:
       # softened from a control that moved.
       - name: the pictures that did not match
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pictures
           path: frame/testdata/*.failed.png
@@ -345,7 +345,7 @@ jobs:
 
       - name: Windows runtime evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ayra-windows-runtime
           path: |
