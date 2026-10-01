@@ -13,6 +13,10 @@
   value placed in a path can no longer move the request to another route or add
   query fields. `Get` and `Post` take a `client.Path` built with `client.At`;
   see UPGRADE.md.
+- `widget`: a control drawn disabled -- by its own flag or inside a disabled
+  context -- no longer reports a press or a key, and a checkbox, radio or switch
+  drawn disabled no longer changes its value. The clickable beneath every
+  control registers no target while it is disabled.
 
 ## v0.1.0 - 2026-09-14
 

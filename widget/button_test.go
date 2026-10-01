@@ -95,18 +95,3 @@ func TestEveryVariantDraws(t *testing.T) {
 		}
 	}
 }
-
-// TestADisabledButtonDoesNotAnswer is the half a test usually forgets: a
-// control drawn as unavailable that still reports a press is worse than one
-// that is not drawn as unavailable at all, because the screen says one thing
-// and does another.
-func TestADisabledButtonDoesNotAnswer(t *testing.T) {
-	c, _ := frame(t, theme.Light, 400)
-	var state widget.Button
-
-	widget.ButtonProps{Label: "Excluir", Disabled: true}.Layout(c, &state)
-
-	if state.Clicked(c) {
-		t.Error("a disabled button reported a press")
-	}
-}

@@ -31,6 +31,10 @@ type Button struct {
 // It is asked before the control is drawn, so that what the press changes is
 // on the screen in the same frame. Asking afterwards costs a frame, and a
 // frame of lag on a button is what reads as an unresponsive application.
+//
+// A button drawn disabled, or inside a disabled context, is no target for the
+// pointer or the keyboard, so nothing done to it while it was drawn that way
+// is reported here.
 func (b *Button) Clicked(c ayra.Context) bool { return b.click.Clicked(c.Context) }
 
 // Pressed reports whether the control is held down right now.

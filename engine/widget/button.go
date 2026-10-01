@@ -90,8 +90,17 @@ func (b *Clickable) layout(target event.Tag, gtx layout.Context, widget layout.W
 	drawing := recording.Stop()
 	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(gtx.Ops).Pop()
 	semantic.EnabledOp(gtx.Enabled()).Add(gtx.Ops)
-	b.click.Add(gtx.Ops)
-	event.Op(gtx.Ops, target)
+	if gtx.Enabled() {
+		b.click.Add(gtx.Ops)
+		event.Op(gtx.Ops, target)
+	} else {
+		// A control drawn as unavailable registers no target. A target
+		// registered here would still be routed presses and the keyboard
+		// focus, and they would wait for the next update -- which a caller
+		// makes before it draws, on a context that is enabled, so the press
+		// on the unavailable control is reported as a click.
+		b.pressedKey = ""
+	}
 	drawing.Add(gtx.Ops)
 	return dims
 }
