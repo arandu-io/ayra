@@ -17,6 +17,10 @@
   context -- no longer reports a press or a key, and a checkbox, radio or switch
   drawn disabled no longer changes its value. The clickable beneath every
   control registers no target while it is disabled.
+- `engine/widget`: a masked editor -- the password kind of `widget.Input` --
+  ignores copy and cut, and the snippet it hands the platform input method (the
+  hidden text area in the browser, the keyboard application on a phone) carries
+  the mask rather than the text.
 
 ## v0.1.0 - 2026-09-14
 

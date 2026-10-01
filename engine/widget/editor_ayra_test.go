@@ -725,3 +725,59 @@ func TestAyraEditorReadOnlyRefusesEveryWayIn(t *testing.T) {
 		t.Errorf("a read only field refused a selection: %q", got)
 	}
 }
+
+// TestAyraEditorMaskedTextNeverReachesTheClipboard states that a field drawn as
+// a mask cannot be read back through copy or cut.
+//
+// A password field that draws dots and then writes its plaintext to the system
+// clipboard has shown it to every application that reads the clipboard, and
+// to the clipboard history some platforms keep.
+func TestAyraEditorMaskedTextNeverReachesTheClipboard(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.Mask = '•'
+	f.editor.SetText("hunter2-secret")
+	f.frame()
+
+	f.send(key.Event{Name: "A", Modifiers: key.ModShortcut, State: key.Press})
+	f.send(key.Event{Name: "C", Modifiers: key.ModShortcut, State: key.Press})
+	if _, content, ok := f.router.WriteClipboard(); ok {
+		t.Errorf("copying a masked field wrote %q to the clipboard", content)
+	}
+
+	f.send(key.Event{Name: "X", Modifiers: key.ModShortcut, State: key.Press})
+	if _, content, ok := f.router.WriteClipboard(); ok {
+		t.Errorf("cutting a masked field wrote %q to the clipboard", content)
+	}
+	if got := f.editor.Text(); got != "hunter2-secret" {
+		t.Errorf("a cut that wrote nothing still removed the text: %q", got)
+	}
+}
+
+// TestAyraEditorMaskedTextIsMaskedForTheInputMethod states that what a masked
+// field tells the platform's input method is the mask, rune for rune.
+//
+// The snippet is what the platform is handed to edit against: the browser puts
+// it in a text area of its own, where the browser's own copy reads it, and a
+// phone hands it to the keyboard application. Rune for rune, so the ranges the
+// input method sends back still land on the right characters.
+func TestAyraEditorMaskedTextIsMaskedForTheInputMethod(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.Mask = '•'
+	f.editor.SetText("hunter2")
+	f.frame()
+
+	f.send(key.SnippetEvent(key.Range{Start: 0, End: 7}))
+	snippet := f.state().Snippet
+	if snippet.Text != "•••••••" {
+		t.Errorf("the input method was told %q", snippet.Text)
+	}
+	if snippet.Range != (key.Range{Start: 0, End: 7}) {
+		t.Errorf("the masked snippet covers %+v", snippet.Range)
+	}
+
+	// Typing still lands where the input method says, against the mask.
+	f.send(key.EditEvent{Range: key.Range{Start: 7, End: 7}, Text: "!"})
+	if got := f.editor.Text(); got != "hunter2!" {
+		t.Errorf("an edit against the masked snippet produced %q", got)
+	}
+}

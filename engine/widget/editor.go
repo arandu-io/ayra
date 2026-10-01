@@ -49,6 +49,10 @@ type Editor struct {
 	Submit bool
 	// Mask draws every non-newline rune as this rune while retaining the
 	// original text.
+	//
+	// A masked editor does not give its text away by other means either:
+	// copy and cut are ignored, and the snippet handed to the platform's
+	// input method carries the mask rather than the text.
 	Mask rune
 	// InputHint selects the on-screen keyboard requested while focused.
 	InputHint key.InputHint
@@ -515,6 +519,13 @@ func (e *Editor) shortcut(gtx layout.Context, pressed key.Event, selection selec
 			gtx.Execute(clipboard.ReadCmd{Tag: e})
 		}
 	case "C", "X":
+		if e.Mask != 0 {
+			// What is drawn as a mask is not readable through the
+			// clipboard. A cut would otherwise be the one way to take the
+			// text out whole, and a cut that wrote nothing and still
+			// deleted would lose it instead.
+			return nil, false
+		}
 		e.scratch = e.text.SelectedText(e.scratch)
 		selected := string(e.scratch)
 		if selected == "" {
@@ -701,7 +712,11 @@ func (e *Editor) updateSnippet(gtx layout.Context, start, end int) {
 		Range: key.Range{Start: start, End: end},
 		Text:  e.ime.snippet.Text,
 	}
-	if content := string(scratch); content != next.Text {
+	content := string(scratch)
+	if e.Mask != 0 {
+		content = masked(content, e.Mask)
+	}
+	if content != next.Text {
 		next.Text = content
 	}
 	if next == e.ime.snippet {
@@ -709,6 +724,22 @@ func (e *Editor) updateSnippet(gtx layout.Context, start, end int) {
 	}
 	e.ime.snippet = next
 	gtx.Execute(key.SnippetCmd{Tag: e, Snippet: next})
+}
+
+// masked answers s with every rune but a newline replaced by mask.
+//
+// Rune for rune, because the ranges an input method sends back are counted in
+// runes against the snippet it was handed.
+func masked(s string, mask rune) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '\n' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune(mask)
+	}
+	return b.String()
 }
 
 func (e *Editor) layout(gtx layout.Context, textMaterial, selectMaterial op.CallOp) layout.Dimensions {
