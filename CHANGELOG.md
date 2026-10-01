@@ -28,6 +28,9 @@
 - `widget`: a pager and a carousel hold a button only for each page or position
   they show, and compute the row from the window, so a total sent by the server
   no longer costs an allocation of that size on every frame.
+- `client`: a session cookie limited by `Max-Age` is kept with the expiry that
+  age means, in the file store and in memory, so it ends when the server said it
+  would instead of living on disk with no end; an age below zero deletes it.
 
 ## v0.1.0 - 2026-09-14
 

@@ -162,7 +162,8 @@ type storedCookie struct {
 // installed. That is the whole point of this store and it is also a departure
 // from what the server asked for, so it is written where somebody reading the
 // code will find it: if the server wants a shorter life it says so with an
-// expiry, and that is honoured.
+// expiry or an age, and either is honoured -- an age is written down as the
+// expiry it means before it reaches here.
 func (s storedCookie) alive(now time.Time) bool {
 	return s.Expires.IsZero() || s.Expires.After(now)
 }
@@ -207,6 +208,14 @@ func (s *fileStore) Save(base string, cookies []*http.Cookie) error {
 	now := time.Now()
 	kept := make([]storedCookie, 0, len(cookies))
 	for _, c := range cookies {
+		if c == nil || c.MaxAge < 0 {
+			// An age below zero is a deletion, as an expiry in the past is.
+			continue
+		}
+		// The file keeps expiries and not ages, so an age is written as the
+		// expiry it means rather than dropped -- dropped, it was a session
+		// with no end.
+		c = expiring(c, now)
 		stored := storedCookie{
 			Name:     c.Name,
 			Value:    c.Value,
