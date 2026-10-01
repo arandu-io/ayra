@@ -2,6 +2,7 @@ package widget
 
 import (
 	"image"
+	"io"
 	"strings"
 	"testing"
 	"unicode"
@@ -13,6 +14,7 @@ import (
 	"github.com/arandu-io/ayra/engine/io/input"
 	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/io/system"
+	"github.com/arandu-io/ayra/engine/io/transfer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
@@ -779,5 +781,34 @@ func TestAyraEditorMaskedTextIsMaskedForTheInputMethod(t *testing.T) {
 	f.send(key.EditEvent{Range: key.Range{Start: 7, End: 7}, Text: "!"})
 	if got := f.editor.Text(); got != "hunter2!" {
 		t.Errorf("an edit against the masked snippet produced %q", got)
+	}
+}
+
+// TestAyraEditorReadOnlyRefusesAPasteThatArrivesLate states that text handed
+// over after the field stopped being editable is not inserted.
+//
+// A paste is asked for while the field is editable and answered later, by the
+// platform. A form that is submitted in between draws its fields read only
+// while the request runs, and the answer used to be typed into one anyway.
+// Text dropped onto the field arrives the same way, as data rather than as
+// keys, and is refused for the same reason.
+func TestAyraEditorReadOnlyRefusesAPasteThatArrivesLate(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.SetText("locked")
+	f.frame()
+
+	f.send(key.Event{Name: "V", Modifiers: key.ModShortcut, State: key.Press})
+	if !f.router.ClipboardRequested() {
+		t.Fatal("an editable field did not ask for the clipboard on a paste")
+	}
+
+	f.editor.ReadOnly = true
+	f.frame()
+	f.send(transfer.DataEvent{
+		Type: "application/text",
+		Open: func() io.ReadCloser { return io.NopCloser(strings.NewReader(" and opened")) },
+	})
+	if got := f.editor.Text(); got != "locked" {
+		t.Errorf("a read only field took a paste that arrived late: %q", got)
 	}
 }

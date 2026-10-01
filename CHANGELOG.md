@@ -31,6 +31,11 @@
 - `client`: a session cookie limited by `Max-Age` is kept with the expiry that
   age means, in the file store and in memory, so it ends when the server said it
   would instead of living on disk with no end; an age below zero deletes it.
+- `widget`: a select whose choice is past the end of its options answers no
+  choice, as it draws; a file picker does not draw, and so never reports, an
+  entry whose name is empty, `.`, `..` or holds a separator or a NUL.
+- `engine/widget`: a read-only editor refuses text that arrives as data -- a
+  paste answered after it became read-only, or text dropped onto it.
 
 ## v0.1.0 - 2026-09-14
 

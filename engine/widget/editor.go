@@ -420,6 +420,12 @@ func (e *Editor) processKey(gtx layout.Context) (EditorEvent, bool) {
 				return event, true
 			}
 		case transfer.DataEvent:
+			if e.ReadOnly {
+				// A paste asked for while the field was editable, or text
+				// dropped onto it, arrives as data rather than as keys and
+				// is refused like any other edit.
+				continue
+			}
 			e.scrollCaret = true
 			e.scroller.Stop()
 			content, err := io.ReadAll(incoming.Open())

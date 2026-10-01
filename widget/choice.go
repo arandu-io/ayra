@@ -28,6 +28,9 @@ type Select struct {
 }
 
 // Selected is the index chosen, and -1 when nothing has been.
+//
+// A choice past the end of the options it was last drawn with is no choice,
+// and answers -1 from that frame on.
 func (s *Select) Selected() int {
 	if !s.chosen {
 		return -1
@@ -61,6 +64,13 @@ type SelectProps struct {
 func (p SelectProps) Layout(c ayra.Context, state *Select) ayra.Dimensions {
 	for len(state.options) < len(p.Options) {
 		state.options = append(state.options, Button{})
+	}
+	if state.chosen && (state.selected < 0 || state.selected >= len(p.Options)) {
+		// A choice the options no longer reach -- the list got shorter under
+		// it -- is no choice. The control draws the placeholder for it, and
+		// Selected answering the old index would submit a value the screen
+		// says nobody picked.
+		state.selected, state.chosen = 0, false
 	}
 
 	if !p.Disabled {
