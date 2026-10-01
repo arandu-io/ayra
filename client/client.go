@@ -133,6 +133,11 @@ func New(base string, opts ...Option) (*Client, error) {
 		}
 		c.http.Jar = jar
 	}
+	// Set on the transport in place, like the timeout and the jar, because the
+	// transport is what follows a redirect and a request has no policy of its
+	// own. Whatever the caller's policy decided still applies, after this has
+	// refused anything that leaves the server.
+	c.http.CheckRedirect = stayOnServer(c.http.CheckRedirect)
 	return c, nil
 }
 
@@ -181,8 +186,13 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 	if err != nil {
 		return Page{}, fmt.Errorf("ayra/client: %q is not a path: %w", path, err)
 	}
+	if ref.IsAbs() || ref.Host != "" || ref.Opaque != "" || ref.User != nil {
+		// An address rather than a path, which resolving would follow to
+		// wherever it names.
+		return Page{}, fmt.Errorf("%w: %q is an address, not a path", ErrOffServer, path)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.base.ResolveReference(ref).String(), body)
+	req, err := http.NewRequestWithContext(onServer(ctx, c.base), method, c.base.ResolveReference(ref).String(), body)
 	if err != nil {
 		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
 	}
@@ -190,13 +200,21 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	c.csrf.carry(req)
+	c.csrf.carry(req, c.base)
 
 	res, err := c.http.Do(req)
 	if err != nil {
 		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
 	}
 	defer res.Body.Close()
+
+	if !sameServer(c.base, res.Request.URL) {
+		// The redirect policy refuses this before anything is sent. A
+		// transport that followed one by other means still does not have its
+		// answer read: a page from elsewhere is not drawn, and its token is not
+		// the one sent back to the server.
+		return Page{}, fmt.Errorf("%w: answered from %s://%s", ErrOffServer, res.Request.URL.Scheme, res.Request.URL.Host)
+	}
 
 	page, err := decode(method, path, res)
 	if err != nil {
