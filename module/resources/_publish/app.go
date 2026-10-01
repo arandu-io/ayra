@@ -169,7 +169,7 @@ func (a *App) open(c ayra.Context) {
 	a.asked = true
 
 	a.ask(c, func(ctx context.Context) (client.Page, error) {
-		return a.server.Get(ctx, "/")
+		return a.server.Get(ctx, client.At())
 	})
 }
 

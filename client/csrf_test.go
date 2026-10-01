@@ -92,11 +92,11 @@ func TestAPostCarriesTheTokenTheServerSent(t *testing.T) {
 
 	// The page that was going to render the form. This is where the token
 	// arrives.
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
-	page, err := talk.Post(context.Background(), "/login", url.Values{"email": {"paulo@hyz.is"}})
+	page, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"paulo@hyz.is"}})
 	if err != nil {
 		t.Fatalf("the post was refused: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestAPostWithNoTokenYetIsRefusedByTheServerAndSaysSo(t *testing.T) {
 
 	// Straight to the post, with no page fetched first, so nothing has sent a
 	// token yet.
-	_, err = talk.Post(context.Background(), "/login", url.Values{"email": {"paulo@hyz.is"}})
+	_, err = talk.Post(context.Background(), client.At("login"), url.Values{"email": {"paulo@hyz.is"}})
 	if err == nil {
 		t.Fatal("a post with no token was accepted")
 	}
@@ -162,7 +162,7 @@ func TestTheTokenIsNotSentOnASafeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if _, err := talk.Get(context.Background(), "/"); err != nil {
+		if _, err := talk.Get(context.Background(), client.At()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -190,17 +190,17 @@ func TestAPageWithNoTokenLeavesTheOneHeldAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
 	// The same client, fetching a page with nothing on it. This is the frame
 	// where a client that cleared what it held would lose the token.
-	if _, err := talk.Get(context.Background(), "/about"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("about")); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err != nil {
+	if _, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"x"}}); err != nil {
 		t.Fatalf("the post after a page with no token was refused: %v", err)
 	}
 	if carried := sent(); len(carried) != 1 || carried[0] != "the-token" {
@@ -217,14 +217,14 @@ func TestSigningOutDropsTheToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 	if err := talk.Forget(); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err == nil {
+	if _, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"x"}}); err == nil {
 		t.Fatal("a post after signing out was accepted")
 	}
 	carried := sent()
@@ -248,15 +248,15 @@ func TestThePageThatCarriesNoTokenLeavesTheHeldOneAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := talk.Get(context.Background(), "/list"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("list")); err != nil {
 		t.Fatalf("a page whose values are a list was refused: %v", err)
 	}
 
-	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err != nil {
+	if _, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"x"}}); err != nil {
 		t.Fatalf("the post was refused after a page whose values are a list: %v", err)
 	}
 	if carried := sent(); len(carried) != 1 || carried[0] != "the-token" {
@@ -293,10 +293,10 @@ func TestTheTokenIsReadFromTheEnvelopeAndNotFromTheValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Post(context.Background(), "/login", url.Values{"email": {"x"}}); err != nil {
+	if _, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"x"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -314,7 +314,7 @@ func TestTheEnvelopeFieldIsReadableByACallerThatBuildsItsOwnRequests(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := talk.Get(context.Background(), "/login")
+	page, err := talk.Get(context.Background(), client.At("login"))
 	if err != nil {
 		t.Fatal(err)
 	}

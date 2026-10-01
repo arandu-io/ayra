@@ -107,11 +107,11 @@ func TestARedirectToAnotherServerIsNotFollowed(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx := context.Background()
-			if _, err := talk.Get(ctx, "/"); err != nil {
+			if _, err := talk.Get(ctx, client.At()); err != nil {
 				t.Fatal(err)
 			}
 
-			page, err := talk.Post(ctx, "/login", url.Values{"email": {"a@b.c"}, "password": {"hunter2"}})
+			page, err := talk.Post(ctx, client.At("login"), url.Values{"email": {"a@b.c"}, "password": {"hunter2"}})
 			if err == nil {
 				t.Errorf("a redirect to another server answered a page, %q", page.View)
 			}
@@ -122,7 +122,7 @@ func TestARedirectToAnotherServerIsNotFollowed(t *testing.T) {
 				t.Errorf("the other server was reached: %s with token %q and body %q", method, token, body)
 			}
 
-			if _, err := talk.Post(ctx, "/after", nil); err != nil {
+			if _, err := talk.Post(ctx, client.At("after"), nil); err != nil {
 				t.Fatal(err)
 			}
 			if got := after(); got != "home-token" {
@@ -143,7 +143,7 @@ func TestARedirectOnTheSameServerIsStillFollowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := talk.Post(context.Background(), "/login", url.Values{"email": {"a@b.c"}})
+	page, err := talk.Post(context.Background(), client.At("login"), url.Values{"email": {"a@b.c"}})
 	if err != nil {
 		t.Fatalf("a redirect on the same server was refused: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestAPathCannotNameAnotherServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := talk.Get(ctx, "/"); err != nil {
+	if _, err := talk.Get(ctx, client.At()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,7 +174,7 @@ func TestAPathCannotNameAnotherServer(t *testing.T) {
 		foreign.server.URL + "/steal",
 		"http:" + host,
 	} {
-		_, _ = talk.Post(ctx, path, url.Values{"comment": {"hi"}})
+		_, _ = talk.Post(ctx, client.At(path), url.Values{"comment": {"hi"}})
 	}
 
 	if hits, token, method, body := foreign.seen(); hits != 0 {

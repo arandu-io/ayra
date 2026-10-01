@@ -81,7 +81,7 @@ func TestSigningInReachesTheHomeScreen(t *testing.T) {
 		t.Fatalf("the application opens on screen %v; until there is a session there is nothing to draw", app.screen)
 	}
 
-	page, err := talk.Post(context.Background(), "/login", url.Values{
+	page, err := talk.Post(context.Background(), client.At("login"), url.Values{
 		"email":    {"paulo@hyz.is"},
 		"password": {"a-password"},
 	})
@@ -104,7 +104,7 @@ func TestSigningInReachesTheHomeScreen(t *testing.T) {
 
 	// And the session it was handed is carried, which is what makes the next
 	// page reachable without signing in again.
-	next, err := talk.Get(context.Background(), "/")
+	next, err := talk.Get(context.Background(), client.At())
 	if err != nil {
 		t.Fatalf("the page after signing in was refused: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestASessionKeptFromLastTimeOpensWhereItLeftOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := first.Post(context.Background(), "/login", url.Values{"email": {"paulo@hyz.is"}})
+	page, err := first.Post(context.Background(), client.At("login"), url.Values{"email": {"paulo@hyz.is"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestASessionKeptFromLastTimeOpensWhereItLeftOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := second.Get(context.Background(), "/")
+	again, err := second.Get(context.Background(), client.At())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func TestSigningOutForgetsTheSessionHere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -297,7 +297,7 @@ func TestSigningOutForgetsTheSessionHere(t *testing.T) {
 		t.Errorf("signing out answered %q", page.View)
 	}
 
-	if answer, err := talk.Get(context.Background(), "/"); err != nil || answer.View != "auth.login" {
+	if answer, err := talk.Get(context.Background(), client.At()); err != nil || answer.View != "auth.login" {
 		t.Errorf("the client still carries the session it signed out of: %q (%v)", answer.View, err)
 	}
 
@@ -305,7 +305,7 @@ func TestSigningOutForgetsTheSessionHere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if answer, err := next.Get(context.Background(), "/"); err != nil || answer.View != "auth.login" {
+	if answer, err := next.Get(context.Background(), client.At()); err != nil || answer.View != "auth.login" {
 		t.Errorf("the session survived signing out and a restart: %q (%v)", answer.View, err)
 	}
 }
@@ -328,7 +328,7 @@ func TestTheSessionInTheConfigReachesTheClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,7 +345,7 @@ func TestTheSessionInTheConfigReachesTheClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := plain.Get(context.Background(), "/login"); err != nil {
+	if _, err := plain.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 	if again, _ := store.Load(serverBase(t, server.URL)); len(again) != len(kept) {
