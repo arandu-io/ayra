@@ -36,7 +36,15 @@ type Carousel struct {
 	first    int
 	previous Button
 	next     Button
-	dots     []Button
+
+	// dots holds a button for each position that has a mark in the row, by
+	// position, and for no other: the count of slides comes from the server,
+	// and a button per position is an allocation the server sizes. dotsFor is
+	// the number of positions they were made for, and shownDots the positions
+	// marked when the row was last drawn, which is the order they are asked in.
+	dots      map[int]*Button
+	dotsFor   int
+	shownDots []int
 
 	// Where the finger went down and how far it has come since, in pixels.
 	// The step is decided from the distance rather than from the position,
@@ -160,8 +168,8 @@ func (p CarouselProps) Layout(c ayra.Context, state *Carousel, slide func(c ayra
 	// across a change, the button that was position seven of forty answers for
 	// position seven of three, and the press lands on a slide nobody pointed
 	// at.
-	if len(state.dots) != pages {
-		state.dots = make([]Button, pages)
+	if state.dotsFor != pages {
+		state.dots, state.shownDots, state.dotsFor = nil, nil, pages
 	}
 
 	// Asked before anything is drawn, so that what a press changes is on the
@@ -177,8 +185,8 @@ func (p CarouselProps) Layout(c ayra.Context, state *Carousel, slide func(c ayra
 	if state.next.Clicked(c) && !p.Disabled {
 		state.move(1)
 	}
-	for index := range state.dots {
-		if state.dots[index].Clicked(c) && !p.Disabled && p.Dots {
+	for _, index := range state.shownDots {
+		if dot := state.dots[index]; dot != nil && dot.Clicked(c) && !p.Disabled && p.Dots {
 			state.jump(index)
 		}
 	}
@@ -342,9 +350,11 @@ func (p CarouselProps) marks(c ayra.Context, state *Carousel, pages int) ayra.Di
 	}
 
 	side := c.Dp(unit.Dp(8))
-	children := make([]layout.FlexChild, 0, pages)
+	row := p.dotPages(state.first, pages)
+	state.holdDots(row)
+	children := make([]layout.FlexChild, 0, len(row))
 
-	for _, page := range p.dotPages(state.first, pages) {
+	for _, page := range row {
 		page := page
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return p.mark(c.With(gtx), state, page, side)
@@ -389,6 +399,32 @@ func (p CarouselProps) mark(c ayra.Context, state *Carousel, page, side int) ayr
 		paint.FillShape(gtx.Ops, ink, clip.UniformRRect(dot, side/2).Op(gtx.Ops))
 		return layout.Dimensions{Size: image.Pt(target, target)}
 	})
+}
+
+// holdDots keeps a button for each position marked in row, which counts from
+// one with nought for a gap, and drops the rest.
+func (c *Carousel) holdDots(row []int) {
+	if c.dots == nil {
+		c.dots = make(map[int]*Button, len(row))
+	}
+	kept := make(map[int]bool, len(row))
+	c.shownDots = c.shownDots[:0]
+	for _, page := range row {
+		if page == 0 {
+			continue
+		}
+		index := page - 1
+		kept[index] = true
+		c.shownDots = append(c.shownDots, index)
+		if c.dots[index] == nil {
+			c.dots[index] = &Button{}
+		}
+	}
+	for index := range c.dots {
+		if !kept[index] {
+			delete(c.dots, index)
+		}
+	}
 }
 
 // dotPages answers which positions get a mark, with nought standing for a run

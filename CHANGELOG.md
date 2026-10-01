@@ -25,6 +25,9 @@
   holds more than `client.DefaultPageLimit` (8 MiB) after decompression, so a
   small compressed body can no longer inflate into hundreds of megabytes.
   `client.WithPageLimit` sets a different limit.
+- `widget`: a pager and a carousel hold a button only for each page or position
+  they show, and compute the row from the window, so a total sent by the server
+  no longer costs an allocation of that size on every frame.
 
 ## v0.1.0 - 2026-09-14
 
