@@ -99,6 +99,8 @@ type Client struct {
 	// csrf is the token the server last sent, which every request that changes
 	// something has to carry back.
 	csrf tokens
+	// limit is the most one answer may hold once decoded, in bytes.
+	limit int64
 }
 
 // New returns a client for the server at base.
@@ -114,7 +116,7 @@ func New(base string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("ayra/client: %q has no scheme and host, and a device has no page to resolve it against", base)
 	}
 
-	c := &Client{base: u, http: &http.Client{}}
+	c := &Client{base: u, http: &http.Client{}, limit: DefaultPageLimit}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -211,7 +213,7 @@ func (c *Client) do(ctx context.Context, method string, path Path, body io.Reade
 		return Page{}, fmt.Errorf("%w: answered from %s://%s", ErrOffServer, res.Request.URL.Scheme, res.Request.URL.Host)
 	}
 
-	page, err := decode(method, name, res)
+	page, err := decode(method, name, res, c.limit)
 	if err != nil {
 		return page, err
 	}
@@ -221,7 +223,7 @@ func (c *Client) do(ctx context.Context, method string, path Path, body io.Reade
 
 // decode turns one response into a page, or into the error that says why the
 // response was not one.
-func decode(method, path string, res *http.Response) (Page, error) {
+func decode(method, path string, res *http.Response, limit int64) (Page, error) {
 	if res.StatusCode >= 400 {
 		return Page{}, &StatusError{Method: method, Path: path, Status: res.StatusCode}
 	}
@@ -237,8 +239,12 @@ func decode(method, path string, res *http.Response) (Page, error) {
 		)
 	}
 
+	body, err := readLimited(method, path, res, limit)
+	if err != nil {
+		return Page{}, err
+	}
 	var page Page
-	if err := json.NewDecoder(res.Body).Decode(&page); err != nil {
+	if err := json.Unmarshal(body, &page); err != nil {
 		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
 	}
 	if page.View == "" {

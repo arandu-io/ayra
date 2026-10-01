@@ -21,6 +21,10 @@
   ignores copy and cut, and the snippet it hands the platform input method (the
   hidden text area in the browser, the keyboard application on a phone) carries
   the mask rather than the text.
+- `client`: an answer is refused with the new `*client.TooLargeError` once it
+  holds more than `client.DefaultPageLimit` (8 MiB) after decompression, so a
+  small compressed body can no longer inflate into hundreds of megabytes.
+  `client.WithPageLimit` sets a different limit.
 
 ## v0.1.0 - 2026-09-14
 
