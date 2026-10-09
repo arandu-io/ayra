@@ -10,14 +10,14 @@
 // lever is the module boundary.
 module github.com/arandu-io/ayra/module
 
-go 1.26
+go 1.26.0
 
 require (
-	github.com/arandu-io/framework v0.48.0
-	github.com/arandu-io/hesape v0.42.2
+	github.com/arandu-io/framework v0.50.2
+	github.com/arandu-io/hesape v0.44.3
 )
 
 require (
-	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )
