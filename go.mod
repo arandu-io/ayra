@@ -1,6 +1,6 @@
 module github.com/arandu-io/ayra
 
-go 1.26.0
+go 1.26.10
 
 require (
 	eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d
