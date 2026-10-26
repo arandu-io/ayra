@@ -50,7 +50,7 @@ func TestTheRequestAsksForValuesRatherThanMarkup(t *testing.T) {
 		viewData(`{"view":"home","data":null}`)(w, r)
 	})
 
-	if _, err := c.Get(context.Background(), "/"); err != nil {
+	if _, err := c.Get(context.Background(), client.At()); err != nil {
 		t.Fatalf("the page was refused: %v", err)
 	}
 	if accept != client.ViewMediaType {
@@ -63,7 +63,7 @@ func TestTheRequestAsksForValuesRatherThanMarkup(t *testing.T) {
 func TestThePageCarriesTheNameTheServerChose(t *testing.T) {
 	c := serve(t, viewData(`{"view":"auth.sign-in","data":{"email":"a@b.c"}}`))
 
-	page, err := c.Get(context.Background(), "/dashboard")
+	page, err := c.Get(context.Background(), client.At("dashboard"))
 	if err != nil {
 		t.Fatalf("the page was refused: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestThePageCarriesTheNameTheServerChose(t *testing.T) {
 func TestAPageWithNoValuesIsStillAPage(t *testing.T) {
 	c := serve(t, viewData(`{"view":"about"}`))
 
-	page, err := c.Get(context.Background(), "/about")
+	page, err := c.Get(context.Background(), client.At("about"))
 	if err != nil {
 		t.Fatalf("a page with no values was refused: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestMarkupIsReportedAsAServerThatDoesNotSpeakThis(t *testing.T) {
 		w.Write([]byte("<!doctype html><title>Home</title>"))
 	})
 
-	_, err := c.Get(context.Background(), "/")
+	_, err := c.Get(context.Background(), client.At())
 	if err == nil {
 		t.Fatal("markup was accepted as values")
 	}
@@ -135,7 +135,7 @@ func TestARefusalCarriesItsStatus(t *testing.T) {
 			w.WriteHeader(status)
 		})
 
-		_, err := c.Get(context.Background(), "/private")
+		_, err := c.Get(context.Background(), client.At("private"))
 		if err == nil {
 			t.Fatalf("%d was accepted as a page", status)
 		}
@@ -150,7 +150,7 @@ func TestARefusalCarriesItsStatus(t *testing.T) {
 func TestSomethingThatIsNotARefusalCarriesNoStatus(t *testing.T) {
 	c := serve(t, viewData(`not json`))
 
-	_, err := c.Get(context.Background(), "/")
+	_, err := c.Get(context.Background(), client.At())
 	if err == nil {
 		t.Fatal("a body that is not values was accepted")
 	}
@@ -164,7 +164,7 @@ func TestSomethingThatIsNotARefusalCarriesNoStatus(t *testing.T) {
 func TestValuesWithNoViewNameAreRefused(t *testing.T) {
 	c := serve(t, viewData(`{"data":{"email":"a@b.c"}}`))
 
-	if _, err := c.Get(context.Background(), "/"); err == nil {
+	if _, err := c.Get(context.Background(), client.At()); err == nil {
 		t.Fatal("values with no view name were accepted")
 	}
 }
@@ -185,10 +185,10 @@ func TestTheSessionSurvivesBetweenPages(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	if _, err := c.Post(ctx, "/sign-in", url.Values{"email": {"a@b.c"}}); err != nil {
+	if _, err := c.Post(ctx, client.At("sign-in"), url.Values{"email": {"a@b.c"}}); err != nil {
 		t.Fatalf("signing in was refused: %v", err)
 	}
-	if _, err := c.Get(ctx, "/dashboard"); err != nil {
+	if _, err := c.Get(ctx, client.At("dashboard")); err != nil {
 		t.Fatalf("the second page was refused: %v", err)
 	}
 
@@ -209,7 +209,7 @@ func TestAFormIsSubmittedAsAForm(t *testing.T) {
 		viewData(`{"view":"home","data":null}`)(w, r)
 	})
 
-	_, err := c.Post(context.Background(), "/sign-in", url.Values{"email": {"a@b.c"}})
+	_, err := c.Post(context.Background(), client.At("sign-in"), url.Values{"email": {"a@b.c"}})
 	if err != nil {
 		t.Fatalf("the form was refused: %v", err)
 	}
@@ -259,10 +259,10 @@ func TestATransportWithoutAJarStillKeepsItsSession(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if _, err := c.Get(ctx, "/"); err != nil {
+	if _, err := c.Get(ctx, client.At()); err != nil {
 		t.Fatalf("the first page was refused: %v", err)
 	}
-	if _, err := c.Get(ctx, "/dashboard"); err != nil {
+	if _, err := c.Get(ctx, client.At("dashboard")); err != nil {
 		t.Fatalf("the second page was refused: %v", err)
 	}
 
@@ -299,7 +299,7 @@ func TestASuppliedJarIsKept(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a supplied jar was refused: %v", err)
 	}
-	if _, err := c.Get(context.Background(), "/"); err != nil {
+	if _, err := c.Get(context.Background(), client.At()); err != nil {
 		t.Fatalf("the page was refused: %v", err)
 	}
 
@@ -338,7 +338,7 @@ func TestARequestThatNeverAnswersIsGivenUpOn(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.Get(context.Background(), "/")
+		_, err := c.Get(context.Background(), client.At())
 		done <- err
 	}()
 

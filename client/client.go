@@ -99,6 +99,8 @@ type Client struct {
 	// csrf is the token the server last sent, which every request that changes
 	// something has to carry back.
 	csrf tokens
+	// limit is the most one answer may hold once decoded, in bytes.
+	limit int64
 }
 
 // New returns a client for the server at base.
@@ -114,7 +116,7 @@ func New(base string, opts ...Option) (*Client, error) {
 		return nil, fmt.Errorf("ayra/client: %q has no scheme and host, and a device has no page to resolve it against", base)
 	}
 
-	c := &Client{base: u, http: &http.Client{}}
+	c := &Client{base: u, http: &http.Client{}, limit: DefaultPageLimit}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -133,6 +135,11 @@ func New(base string, opts ...Option) (*Client, error) {
 		}
 		c.http.Jar = jar
 	}
+	// Set on the transport in place, like the timeout and the jar, because the
+	// transport is what follows a redirect and a request has no policy of its
+	// own. Whatever the caller's policy decided still applies, after this has
+	// refused anything that leaves the server.
+	c.http.CheckRedirect = stayOnServer(c.http.CheckRedirect)
 	return c, nil
 }
 
@@ -160,9 +167,8 @@ func WithHTTPClient(h *http.Client) Option {
 
 // Get fetches the page at path.
 //
-// The path is relative to the server's base, and the values come back as the
-// handler produced them.
-func (c *Client) Get(ctx context.Context, path string) (Page, error) {
+// The values come back as the handler produced them.
+func (c *Client) Get(ctx context.Context, path Path) (Page, error) {
 	return c.do(ctx, http.MethodGet, path, nil, "")
 }
 
@@ -172,33 +178,42 @@ func (c *Client) Get(ctx context.Context, path string) (Page, error) {
 // the same handler, the same validation and the same errors a browser reaches.
 // A body of our own would be a second way in, and a second way in is a second
 // set of rules about who may pass.
-func (c *Client) Post(ctx context.Context, path string, form url.Values) (Page, error) {
+func (c *Client) Post(ctx context.Context, path Path, form url.Values) (Page, error) {
 	return c.do(ctx, http.MethodPost, path, strings.NewReader(form.Encode()), "application/x-www-form-urlencoded")
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body io.Reader, contentType string) (Page, error) {
-	ref, err := url.Parse(path)
+func (c *Client) do(ctx context.Context, method string, path Path, body io.Reader, contentType string) (Page, error) {
+	address, err := path.on(c.base)
 	if err != nil {
-		return Page{}, fmt.Errorf("ayra/client: %q is not a path: %w", path, err)
+		return Page{}, err
 	}
+	name := path.String()
 
-	req, err := http.NewRequestWithContext(ctx, method, c.base.ResolveReference(ref).String(), body)
+	req, err := http.NewRequestWithContext(onServer(ctx, c.base), method, address.String(), body)
 	if err != nil {
-		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
+		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
 	}
 	req.Header.Set("Accept", ViewMediaType)
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	c.csrf.carry(req)
+	c.csrf.carry(req, c.base)
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
+		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
 	}
 	defer res.Body.Close()
 
-	page, err := decode(method, path, res)
+	if !sameServer(c.base, res.Request.URL) {
+		// The redirect policy refuses this before anything is sent. A
+		// transport that followed one by other means still does not have its
+		// answer read: a page from elsewhere is not drawn, and its token is not
+		// the one sent back to the server.
+		return Page{}, fmt.Errorf("%w: answered from %s://%s", ErrOffServer, res.Request.URL.Scheme, res.Request.URL.Host)
+	}
+
+	page, err := decode(method, name, res, c.limit)
 	if err != nil {
 		return page, err
 	}
@@ -208,7 +223,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, co
 
 // decode turns one response into a page, or into the error that says why the
 // response was not one.
-func decode(method, path string, res *http.Response) (Page, error) {
+func decode(method, path string, res *http.Response, limit int64) (Page, error) {
 	if res.StatusCode >= 400 {
 		return Page{}, &StatusError{Method: method, Path: path, Status: res.StatusCode}
 	}
@@ -224,8 +239,12 @@ func decode(method, path string, res *http.Response) (Page, error) {
 		)
 	}
 
+	body, err := readLimited(method, path, res, limit)
+	if err != nil {
+		return Page{}, err
+	}
 	var page Page
-	if err := json.NewDecoder(res.Body).Decode(&page); err != nil {
+	if err := json.Unmarshal(body, &page); err != nil {
 		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, path, err)
 	}
 	if page.View == "" {

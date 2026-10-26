@@ -2,6 +2,7 @@ package client
 
 import (
 	"net/http"
+	"net/url"
 	"sync"
 )
 
@@ -61,9 +62,13 @@ func (t *tokens) forget() {
 	t.mu.Unlock()
 }
 
-// carry puts the token on a request that needs one.
-func (t *tokens) carry(req *http.Request) {
-	if safeMethods[req.Method] {
+// carry puts the token on a request that needs one, and only on a request to
+// the server at base.
+//
+// The token is the server's, and a request built for anywhere else does not
+// get it whatever else is wrong with it.
+func (t *tokens) carry(req *http.Request, base *url.URL) {
+	if safeMethods[req.Method] || !sameServer(base, req.URL) {
 		return
 	}
 

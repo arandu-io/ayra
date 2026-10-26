@@ -40,6 +40,9 @@ func (t *Toggle) Set(on bool) { t.on = on }
 // Applied here rather than by the caller because forgetting is silent: the
 // control draws its old state, the press appears to do nothing, and the bug
 // looks like the pointer missed.
+//
+// A toggle drawn disabled is no target for the pointer or the keyboard, so it
+// reports nothing and its value does not move while it is drawn that way.
 func (t *Toggle) Changed(c ayra.Context) bool {
 	if !t.click.Clicked(c.Context) {
 		return false

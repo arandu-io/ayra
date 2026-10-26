@@ -31,6 +31,11 @@ type FileEntry struct {
 	// Name is the entry's own name, without anything above it. A listing is of
 	// one directory, so the names in it are already distinct, and the picker
 	// uses the name as the entry's identity for that reason.
+	//
+	// A name that is empty, "." or "..", or that holds a slash, a backslash or
+	// a NUL, is not one entry's name: joined to the path being listed it is a
+	// path somewhere else. Such an entry is not drawn, and so is never reported
+	// as chosen or opened.
 	Name string
 	// Dir marks an entry that leads somewhere rather than one that can be
 	// chosen.
@@ -308,6 +313,9 @@ func (p FilePickerProps) visible(filter string) []FileEntry {
 
 	kept := make([]FileEntry, 0, len(p.Entries))
 	for _, entry := range p.Entries {
+		if !entryName(entry.Name) {
+			continue
+		}
 		if wanted != "" && !strings.Contains(strings.ToLower(entry.Name), wanted) {
 			continue
 		}
@@ -326,6 +334,15 @@ func (p FilePickerProps) visible(filter string) []FileEntry {
 		}
 	}
 	return ordered
+}
+
+// entryName reports whether name is the name of one entry in one directory.
+//
+// Empty, ".", "..", or anything holding a separator of either kind or a NUL is
+// not: the caller joins the name to the path it is listing, and joined, such a
+// name is a path somewhere else.
+func entryName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
 }
 
 // listing draws the rows inside their panel, or says why there are none.

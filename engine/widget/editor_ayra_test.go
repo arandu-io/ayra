@@ -2,6 +2,7 @@ package widget
 
 import (
 	"image"
+	"io"
 	"strings"
 	"testing"
 	"unicode"
@@ -13,6 +14,7 @@ import (
 	"github.com/arandu-io/ayra/engine/io/input"
 	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/io/system"
+	"github.com/arandu-io/ayra/engine/io/transfer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
@@ -723,5 +725,90 @@ func TestAyraEditorReadOnlyRefusesEveryWayIn(t *testing.T) {
 	f.send(key.SelectionEvent(key.Range{Start: 0, End: 6}))
 	if got := f.editor.SelectedText(); got != "locked" {
 		t.Errorf("a read only field refused a selection: %q", got)
+	}
+}
+
+// TestAyraEditorMaskedTextNeverReachesTheClipboard states that a field drawn as
+// a mask cannot be read back through copy or cut.
+//
+// A password field that draws dots and then writes its plaintext to the system
+// clipboard has shown it to every application that reads the clipboard, and
+// to the clipboard history some platforms keep.
+func TestAyraEditorMaskedTextNeverReachesTheClipboard(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.Mask = '•'
+	f.editor.SetText("hunter2-secret")
+	f.frame()
+
+	f.send(key.Event{Name: "A", Modifiers: key.ModShortcut, State: key.Press})
+	f.send(key.Event{Name: "C", Modifiers: key.ModShortcut, State: key.Press})
+	if _, content, ok := f.router.WriteClipboard(); ok {
+		t.Errorf("copying a masked field wrote %q to the clipboard", content)
+	}
+
+	f.send(key.Event{Name: "X", Modifiers: key.ModShortcut, State: key.Press})
+	if _, content, ok := f.router.WriteClipboard(); ok {
+		t.Errorf("cutting a masked field wrote %q to the clipboard", content)
+	}
+	if got := f.editor.Text(); got != "hunter2-secret" {
+		t.Errorf("a cut that wrote nothing still removed the text: %q", got)
+	}
+}
+
+// TestAyraEditorMaskedTextIsMaskedForTheInputMethod states that what a masked
+// field tells the platform's input method is the mask, rune for rune.
+//
+// The snippet is what the platform is handed to edit against: the browser puts
+// it in a text area of its own, where the browser's own copy reads it, and a
+// phone hands it to the keyboard application. Rune for rune, so the ranges the
+// input method sends back still land on the right characters.
+func TestAyraEditorMaskedTextIsMaskedForTheInputMethod(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.Mask = '•'
+	f.editor.SetText("hunter2")
+	f.frame()
+
+	f.send(key.SnippetEvent(key.Range{Start: 0, End: 7}))
+	snippet := f.state().Snippet
+	if snippet.Text != "•••••••" {
+		t.Errorf("the input method was told %q", snippet.Text)
+	}
+	if snippet.Range != (key.Range{Start: 0, End: 7}) {
+		t.Errorf("the masked snippet covers %+v", snippet.Range)
+	}
+
+	// Typing still lands where the input method says, against the mask.
+	f.send(key.EditEvent{Range: key.Range{Start: 7, End: 7}, Text: "!"})
+	if got := f.editor.Text(); got != "hunter2!" {
+		t.Errorf("an edit against the masked snippet produced %q", got)
+	}
+}
+
+// TestAyraEditorReadOnlyRefusesAPasteThatArrivesLate states that text handed
+// over after the field stopped being editable is not inserted.
+//
+// A paste is asked for while the field is editable and answered later, by the
+// platform. A form that is submitted in between draws its fields read only
+// while the request runs, and the answer used to be typed into one anyway.
+// Text dropped onto the field arrives the same way, as data rather than as
+// keys, and is refused for the same reason.
+func TestAyraEditorReadOnlyRefusesAPasteThatArrivesLate(t *testing.T) {
+	f := newAyraField(t, true)
+	f.editor.SetText("locked")
+	f.frame()
+
+	f.send(key.Event{Name: "V", Modifiers: key.ModShortcut, State: key.Press})
+	if !f.router.ClipboardRequested() {
+		t.Fatal("an editable field did not ask for the clipboard on a paste")
+	}
+
+	f.editor.ReadOnly = true
+	f.frame()
+	f.send(transfer.DataEvent{
+		Type: "application/text",
+		Open: func() io.ReadCloser { return io.NopCloser(strings.NewReader(" and opened")) },
+	})
+	if got := f.editor.Text(); got != "locked" {
+		t.Errorf("a read only field took a paste that arrived late: %q", got)
 	}
 }

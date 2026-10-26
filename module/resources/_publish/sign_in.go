@@ -44,7 +44,7 @@ func (a *App) layoutSignIn(c ayra.Context, st status) ayra.Dimensions {
 	if (pressed || fromEmail || fromPassword) && !st.Busy {
 		email, password := s.email.Text(), s.password.Text()
 		a.ask(c, func(ctx context.Context) (client.Page, error) {
-			return a.server.Post(ctx, "/login", url.Values{
+			return a.server.Post(ctx, client.At("login"), url.Values{
 				"email":    {email},
 				"password": {password},
 			})
