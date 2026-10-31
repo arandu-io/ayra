@@ -56,6 +56,32 @@
   not (`HiddenInput` and `SkipLink` alone), and CI checks Kyse out so that the
   test fails instead of skipping.
 
+- `widget`: `DataTable`, the listing of Kyse's DataTable drawn natively, with the
+  same state. `DataTableState`, `DataTableValues`, `DataTableChange` and
+  `DataTableParams` are Kyse's, field for field, so one route serves the browser
+  and the app: the address the app asks is the one the web table writes into its
+  links (a search, an order, facets, a page and a size, a default left out, a
+  repeated value once and in order). `compat/` runs the same inputs through Kyse
+  and hesape's listing and compares what each writes and reads.
+- `widget`: `ServerSource`, the `DataSource` that speaks an Arandu route. It asks
+  the route's address with the table's state and the view media type, and reads
+  the rows, the total and the facet counts from the `{view, data, token}` the
+  handler answers with, at paths the application names. Any other `DataSource`
+  -- `Source` is the same interface -- is the application's own, over the client
+  and whatever credential it holds.
+- `widget`: under 600 points (`Breakpoint`) a `DataTable` draws cards instead of
+  the table: the primary column is the title, the others lines of label and
+  value, the row actions are icons under them, and a column draws its cell with a
+  widget of the application's own (`DataColumn.Cell`, `Row.Data`). The search is
+  on top and the filters -- choice, text and period -- are in a sheet from the
+  bottom that asks once. `Infinite` makes the list endless, and the list is
+  pulled from its top to ask again.
+- `widget`: `Live` tells a `DataTable` the rows changed on the server. The table
+  asks again for every page on screen, swaps the answer in whole, and neither
+  goes inert nor loses its place; `LiveEvent` forwards the `<table>.changed`
+  frames of the web tables, and `DataTable.Notify` is the hook for any other way
+  of knowing.
+
 ### Changed
 
 - `theme.Theme` carries a pointer, `Styles`, and stays comparable with `==`.

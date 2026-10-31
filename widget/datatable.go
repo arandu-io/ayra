@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,11 @@ type Row struct {
 	Key string
 	// Cells are the values, in column order.
 	Cells []string
+	// Data is the row as the source had it, field by field, for a cell that is
+	// drawn with a widget of the application's own -- a plate, a status, a badge
+	// -- and needs more than the text of its column. A [ServerSource] fills it
+	// with the row's object; a source of the application's may leave it nil.
+	Data map[string]any
 }
 
 // FacetCount is how many rows carry one value of a facet under the rest of the
@@ -70,7 +76,10 @@ type Result struct {
 	Rows []Row
 	// Total is how many rows match the whole query, across every page. It is what
 	// the pager and the count are drawn from, and it is the source's to say: a
-	// table that counted what it had been given would count one page.
+	// table that counted what it had been given would count one page. Negative
+	// says the source does not count (a route that pages by position): the table
+	// then draws no total, offers the next page for as long as a page comes back
+	// full, and the infinite list ends at the first short one.
 	Total int
 	// Facets are the counts per facet key, when the source gives them.
 	Facets map[string][]FacetCount
@@ -109,17 +118,50 @@ type DataColumn struct {
 	Align   Align
 	Flex    float32
 	Numeric bool
+	// Primary makes the column the title of a row drawn as a card on a narrow
+	// screen. None marked is the first column.
+	Primary bool
+	// CardHidden leaves the column out of the card, for a value that only makes
+	// sense under a heading.
+	CardHidden bool
+	// Cell draws the column's value with a widget of the application's own. It
+	// is asked for each row, and returns the widget that draws that row's cell,
+	// so that a plate, a status or a badge is the application's component and
+	// not a string. Nil draws the text of the cell.
+	Cell func(Row) ayra.Widget
 }
 
 // Facet is a list of values a listing can be narrowed by.
 type Facet struct {
-	// Key is the name the facet goes by in [Query.Filters].
+	// Key is the name the facet goes by in [Query.Filters] and the parameter it
+	// travels in, as Kyse's DataTableFilter.Key is.
 	Key string
 	// Title is what the control that opens it says.
 	Title string
-	// Options are the values on offer, with the words that name them.
+	// Kind is how the value is chosen. Zero is a choice among Options.
+	Kind FacetKind
+	// EndKey is, for a [FacetPeriod], the parameter the last day travels in:
+	// Key carries the first ("de") and EndKey the last ("ate"), as two ISO days.
+	EndKey string
+	// Placeholder is what stands in a text or period field that holds nothing.
+	Placeholder string
+	// Options are the values on offer, with the words that name them. A text and
+	// a period facet have none.
 	Options []FacetOption
 }
+
+// FacetKind is how a facet's value is chosen.
+type FacetKind uint8
+
+const (
+	// FacetChoice is a choice among the options, any number of them.
+	FacetChoice FacetKind = iota
+	// FacetText is a short piece of text the rows are narrowed by.
+	FacetText
+	// FacetPeriod is a period chosen in one field: two days, travelling as
+	// [Facet.Key] and [Facet.EndKey].
+	FacetPeriod
+)
 
 // FacetOption is one value of a facet.
 type FacetOption struct {
@@ -165,6 +207,10 @@ type DataTable struct {
 	checks    []Toggle
 	everyone  Toggle
 	activated string
+
+	// m is what the narrow layout, the infinite list, the pull to refresh, the
+	// live updates and the row actions hold.
+	m tableExtras
 }
 
 // Query is the query the table is showing, or is waiting for the answer to.
@@ -239,24 +285,78 @@ type DataTableProps struct {
 	Debounce time.Duration
 	// Words are the table's own text. Zero values draw English.
 	Words DataTableWords
+
+	// Layout chooses between the table and the cards. Zero decides by the width
+	// the table is given.
+	Mode DataTableMode
+	// Breakpoint is the width, in points, under which the cards are drawn
+	// instead of the table. Zero takes 600, the width of a tablet held upright.
+	Breakpoint unit.Dp
+	// Infinite replaces the pager by a list that asks for the next page as the
+	// end comes into view, in the cards. The table of a wide screen keeps its
+	// pager: columns read down are read a page at a time.
+	Infinite bool
+	// Actions are the buttons at the end of each row: icons in the cards and in
+	// the table. A press is read with [DataTable.Action].
+	Actions []RowAction
+	// Live is told when the rows changed on the server. The table asks again for
+	// what it shows, without losing its place. Nil is a table that changes when
+	// the person does.
+	Live Live
+	// NoRefresh turns off the pull to refresh of the cards.
+	NoRefresh bool
 }
 
 // DataTableWords are the sentences a table says, in the application's language.
 type DataTableWords struct {
 	Search, Empty, Loading, Retry, Failed, Clear string
+	// Filters is the button that opens the sheet of filters, Apply the one that
+	// asks with them, Reset the one that empties them and Close the one that
+	// puts the sheet away without asking.
+	Filters, Apply, Reset, Close, SortBy string
+	// Refresh is what the pull says while it is pulled and Refreshing once it
+	// asked. LoadMore is the button at the end of a list that cannot tell when
+	// it is reached, and End the line under the last row of an infinite list.
+	Refresh, Release, Refreshing, LoadMore, End string
+	// Actions names the buttons at the end of a row for a screen reader.
+	Actions string
 	// Rows is the count: "%d row(s)" with the number put where the text has {n}.
 	Rows string
 	// Page is the position: "Page {page} of {pages}".
 	Page string
 }
 
+// rows is the count line. The placeholders are the two spellings of the same
+// number -- {n}, and {total} as Kyse's DataTableLines.Rows writes it -- so a
+// sentence taken from the web half's catalogue works here unchanged.
 func (w DataTableWords) rows(n int) string {
-	return strings.ReplaceAll(orDefault(w.Rows, "{n} row(s)"), "{n}", strconv.Itoa(n))
+	text := strings.ReplaceAll(orDefault(w.Rows, "{total} row(s)."), "{total}", strconv.Itoa(n))
+	return strings.ReplaceAll(text, "{n}", strconv.Itoa(n))
 }
 
+// page is the position line, with Kyse's placeholders ({n} of {total}) or the
+// ones this table began with ({page} of {pages}).
 func (w DataTableWords) page(page, pages int) string {
-	text := strings.ReplaceAll(orDefault(w.Page, "Page {page} of {pages}"), "{page}", strconv.Itoa(page))
-	return strings.ReplaceAll(text, "{pages}", strconv.Itoa(pages))
+	text := orDefault(w.Page, "Page {n} of {total}")
+	text = strings.NewReplacer(
+		"{n}", strconv.Itoa(page), "{total}", strconv.Itoa(pages),
+		"{page}", strconv.Itoa(page), "{pages}", strconv.Itoa(pages),
+	).Replace(text)
+	return text
+}
+
+// pageCount is how many pages the answer makes: the total over the size, and
+// when the source does not count, the page being shown plus one while a page
+// comes back full.
+func pageCount(result Result, q Query) int {
+	size := max(q.PageSize, 1)
+	if result.Total >= 0 {
+		return max((result.Total+size-1)/size, 1)
+	}
+	if len(result.Rows) >= size {
+		return q.Page + 1
+	}
+	return max(q.Page, 1)
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -273,7 +373,25 @@ func (p DataTableProps) sizes() []int {
 }
 
 // fetch starts a query and supersedes the one in flight.
-func (d *DataTable) fetch(c ayra.Context, p DataTableProps) {
+func (d *DataTable) fetch(c ayra.Context, p DataTableProps) { d.ask(c, p, fetchReplace) }
+
+// fetchMode is what an answer does to the rows already on screen.
+type fetchMode uint8
+
+const (
+	// fetchReplace puts the answer where the rows were. The rows stay on screen,
+	// inert, until it arrives.
+	fetchReplace fetchMode = iota
+	// fetchAppend puts the answer after the rows: the next page of an infinite
+	// list.
+	fetchAppend
+	// fetchSilent asks again for everything on screen, as the server has it now,
+	// and swaps it in when all of it has arrived. Nothing goes inert and nothing
+	// moves: it is what a "the table changed" notice asks for.
+	fetchSilent
+)
+
+func (d *DataTable) ask(c ayra.Context, p DataTableProps, mode fetchMode) {
 	if p.Source == nil {
 		return
 	}
@@ -285,13 +403,21 @@ func (d *DataTable) fetch(c ayra.Context, p DataTableProps) {
 	d.cancel = cancel
 	d.seq++
 	seq := d.seq
-	d.loading = true
+	d.loading = mode != fetchSilent
+	d.m.more = mode == fetchAppend
 	query := d.query
+	pages := d.m.pages
 	d.mu.Unlock()
 
 	redraw := c.Redraw
 	go func() {
-		result, err := p.Source.Fetch(ctx, query)
+		var result Result
+		var err error
+		if mode == fetchSilent {
+			result, err = refetch(ctx, p.Source, query, pages)
+		} else {
+			result, err = p.Source.Fetch(ctx, query)
+		}
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		if seq != d.seq {
@@ -299,10 +425,24 @@ func (d *DataTable) fetch(c ayra.Context, p DataTableProps) {
 			// asking any more.
 			return
 		}
-		d.loading = false
-		if err != nil {
+		d.loading, d.m.more, d.m.refreshing = false, false, false
+		switch {
+		case err != nil && mode == fetchSilent:
+			// A notice that could not be followed leaves what is on screen where
+			// it is: the rows were right a moment ago, and an error in their
+			// place would be worse than a list a second late.
+		case err != nil:
 			d.err = err
-		} else {
+		default:
+			if mode != fetchSilent || d.m.pages <= 1 {
+				d.m.last = len(result.Rows)
+			}
+			if mode == fetchAppend {
+				result.Rows = append(slices.Clone(d.result.Rows), newRows(d.result.Rows, result.Rows)...)
+				d.m.pages++
+			} else if mode == fetchReplace {
+				d.m.pages = 1
+			}
 			d.err, d.result, d.loaded = nil, result, true
 		}
 		redraw()
@@ -316,6 +456,7 @@ func (p DataTableProps) Layout(c ayra.Context, state *DataTable) ayra.Dimensions
 		state.started = true
 		state.query = Query{Sort: p.InitialSort, Page: 1, PageSize: p.sizes()[0]}
 		state.fetch(c, p)
+		state.m.start(c, p, state)
 	}
 	for len(state.headers) < len(p.Columns) {
 		state.headers = append(state.headers, Button{})
@@ -326,6 +467,9 @@ func (p DataTableProps) Layout(c ayra.Context, state *DataTable) ayra.Dimensions
 	}
 
 	changed := p.apply(c, state)
+	if p.readFields(c, state) {
+		changed = true
+	}
 	if changed {
 		state.query.Page = 1
 		state.pages.Show(1)
@@ -334,6 +478,11 @@ func (p DataTableProps) Layout(c ayra.Context, state *DataTable) ayra.Dimensions
 	if page := state.pages.Current(); page != state.query.Page {
 		state.query.Page = page
 		state.fetch(c, p)
+	}
+
+	state.m.follow(c, p, state)
+	if p.narrow(c) {
+		return p.cards(c, state)
 	}
 
 	state.mu.Lock()
@@ -459,6 +608,12 @@ func (p DataTableProps) toolbar(c ayra.Context, state *DataTable) ayra.Dimension
 		active := 0
 		for index, facet := range p.Facets {
 			index, facet := index, facet
+			if facet.Kind != FacetChoice {
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return p.field(c.With(gtx), state, facet)
+				}), layout.Rigid(layout.Spacer{Width: 6}.Layout))
+				continue
+			}
 			active += len(state.query.Filters[facet.Key])
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				inner := c.With(gtx)
@@ -612,6 +767,11 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 			)
 		}))
 	}
+	if len(p.Actions) > 0 {
+		cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Dimensions{Size: image.Pt(p.actionsWidth(c), 0)}
+		}))
+	}
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, cells...)
 }
 
@@ -642,11 +802,22 @@ func (p DataTableProps) row(c ayra.Context, state *DataTable, grid TableProps, r
 	}
 	cells = append(cells, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 		return state.rows[index].click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return grid.row(c.With(gtx), row.Cells, 8, false)
+			return p.cells(c.With(gtx), grid, row)
 		})
 	}))
 	if state.rows[index].Clicked(c) {
 		state.activated = row.Key
+	}
+	if len(p.Actions) > 0 {
+		cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			width := p.actionsWidth(c)
+			gtx.Constraints.Min.X, gtx.Constraints.Max.X = width, width
+			return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				inner := c.With(gtx)
+				inner.Constraints.Min = image.Point{}
+				return p.actions(inner, state, row, index)
+			})
+		}))
 	}
 
 	style := c.Theme.Resolve("datatable", "row", p.VariantName("default"), theme.Style{}, p.ComponentProps)
@@ -664,13 +835,13 @@ func (p DataTableProps) footer(c ayra.Context, state *DataTable, result Result, 
 	style := t.Resolve("datatable", "footer", p.VariantName("default"), theme.Style{}, p.ComponentProps)
 
 	size := max(state.query.PageSize, 1)
-	pages := max((result.Total+size-1)/size, 1)
+	pages := pageCount(result, state.query)
 
 	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				count := ""
-				if loaded {
+				if loaded && result.Total >= 0 {
 					count = p.Words.rows(result.Total)
 					if p.Selectable {
 						count = strconv.Itoa(len(state.Selected())) + " / " + count

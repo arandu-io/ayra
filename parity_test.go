@@ -36,7 +36,7 @@ var aliases = map[string]string{
 	"container-card":    "Card",
 	"copy-button":       "Copy",
 	"command":           "Palette",
-	"data-table":        "Table",
+	"data-table":        "DataTable",
 	"dropdown-menu":     "Menu",
 	"media-player":      "Player",
 	"number-input":      "Number",
@@ -58,7 +58,7 @@ var absent = map[string]string{
 // each with what they do not do and where the rest is being done. Empty is the
 // goal; an entry is a promise in the open.
 var incomplete = map[string]string{
-	"data-table": "the listing with its server-side state is being rebuilt on the datatable-native branch; the control here is the plain Table",
+	"data-table": "the listing over a server route, with the state and parameter names of the browser half; not the columns menu, the bulk bar or paging by cursor",
 }
 
 func kyseComponents(t *testing.T) (dir string, names []string) {

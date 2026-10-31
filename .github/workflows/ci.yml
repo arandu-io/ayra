@@ -192,6 +192,14 @@ jobs:
           go -C module vet ./...
           go -C module test -race ./...
 
+      # The native listing asks what the web listing asks. The proof holds Ayra,
+      # Kyse and hesape in one graph, which the root module must not, so it is a
+      # module of its own (compat/) and runs here.
+      - name: compare the data table with Kyse and hesape
+        run: |
+          go -C compat vet ./...
+          go -C compat test -race ./...
+
       # The palette is generated from the stylesheet, and the generated file is
       # committed: go get has no build step, so what is in the repository is
       # what every project reads. A hand edit compiles, looks right, and is

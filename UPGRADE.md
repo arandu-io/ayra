@@ -4,6 +4,22 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- the data table
+
+`widget.DataTable` is new and nothing that compiled changes. Three things are
+worth knowing before writing a screen with it:
+
+- `Result.Total` is negative for a source that does not count (a route that pages
+  by position). The table then draws no total and offers the next page for as
+  long as a page comes back full. A source that always counts is unaffected.
+- The words default to Kyse's: `"{total} row(s)."` and `"Page {n} of {total}"`.
+  A sentence copied from the web half's catalogue works unchanged; `{n}` and
+  `{page}` and `{pages}` are still read.
+- The sheet of filters is not dismissed by a press outside it: on a touch screen
+  `Drawer` closes on the press that lands on its own buttons. It closes with its
+  own button, and `DrawerProps.Dismissible` should not be set on a touch screen
+  until that is fixed in `Drawer`.
+
 ## Unreleased -- restylable widgets
 
 Nothing that compiled stops compiling for an application that uses the widgets as
