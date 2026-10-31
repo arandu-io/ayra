@@ -7,8 +7,6 @@ import (
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/theme"
@@ -20,11 +18,18 @@ import (
 // thing on both, so a destructive badge and a destructive button are the same
 // red, and somebody who learned one has learned the other.
 type BadgeProps struct {
+	// ComponentProps is what the caller changes on this one instance. A badge
+	// publishes one part, "root".
+	ComponentProps
 	// Label is the text inside it.
 	Label string
 	// Variant is what it is for. Zero is the ordinary one.
 	Variant Variant
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p BadgeProps) PartNames() []string { return []string{"root"} }
 
 // Layout draws the badge and returns the room it took.
 //
@@ -33,28 +38,33 @@ type BadgeProps struct {
 // banner is an [AlertProps].
 func (p BadgeProps) Layout(c ayra.Context) ayra.Dimensions {
 	fill, ink, border := p.colours(c.Theme)
+	style := c.Theme.Resolve("badge", "root", p.VariantName(p.Variant.String()), theme.Style{
+		Background: theme.Colour(fill),
+		Foreground: theme.Colour(ink),
+		Border:     theme.Colour(border),
+		Padding:    theme.InsetXY(8, 2),
+		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Small)},
+	}, p.ComponentProps)
 
 	c.Constraints.Min = image.Point{}
 
-	inset := layout.Inset{Top: 2, Bottom: 2, Left: 8, Right: 8}
 	measure := op.Record(c.Ops)
-	dims := inset.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return drawText(c.With(gtx), p.Label, unit.Sp(c.Theme.Type.Small), ink, 1, text.Start, semibold())
+	dims := insetOf(style.Padding).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+		return drawPart(c.With(gtx), p.Label, style, unit.Sp(c.Theme.Type.Small), 1, text.Start, semibold())
 	})
 	drawn := measure.Stop()
 
 	// A pill rather than the control radius: a badge is round-ended at every
 	// size, and reusing the radius makes a short one look like a small button.
 	radius := dims.Size.Y / 2
-	shape := clip.UniformRRect(image.Rectangle{Max: dims.Size}, radius)
-
-	if fill.A > 0 {
-		paint.FillShape(c.Ops, fill, shape.Op(c.Ops))
+	if style.Radius.IsSet() {
+		radius = c.Dp(unit.Dp(style.Radius.Points()))
 	}
-	if border.A > 0 {
-		stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(max(c.Dp(unit.Dp(1)), 1))}
-		paint.FillShape(c.Ops, border, stroke.Op())
+	width := max(c.Dp(unit.Dp(1)), 1)
+	if style.BorderWidth.IsSet() {
+		width = c.Dp(unit.Dp(style.BorderWidth.Points()))
 	}
+	paintShape(c, dims.Size, style.Background.NRGBA(), style.Border.NRGBA(), radius, width)
 
 	drawn.Add(c.Ops)
 	return dims

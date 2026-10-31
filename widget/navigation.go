@@ -8,6 +8,7 @@ import (
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // Crumbs is the state half of a breadcrumb: the press on each step.
@@ -100,7 +101,7 @@ func (p LinkProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 
 		size := unit.Sp(c.Theme.Type.Body)
 		dims := drawText(inner, p.Text, size, ink, 1, text.Start, plain())
-		underline(inner, dims, p.Text, size, ink)
+		underline(inner, dims, p.Text, theme.Style{Foreground: theme.Colour(ink), Font: theme.Font{Size: theme.Pt(float32(size))}})
 		return dims
 	})
 }

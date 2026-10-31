@@ -1,13 +1,9 @@
 package widget
 
 import (
-	"image"
 	"image/color"
 
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
@@ -20,22 +16,7 @@ import (
 // cover, and the background is painted underneath afterwards. Written per
 // control, one of them eventually paints the fill over its own text.
 func surface(c ayra.Context, fill, border color.NRGBA, radius int, content ayra.Widget) ayra.Dimensions {
-	measure := op.Record(c.Ops)
-	dims := content(c)
-	drawn := measure.Stop()
-
-	shape := clip.UniformRRect(image.Rectangle{Max: dims.Size}, radius)
-
-	if fill.A > 0 {
-		paint.FillShape(c.Ops, fill, shape.Op(c.Ops))
-	}
-	if border.A > 0 {
-		stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(hairline(c))}
-		paint.FillShape(c.Ops, border, stroke.Op())
-	}
-
-	drawn.Add(c.Ops)
-	return dims
+	return surfaceWidth(c, fill, border, radius, hairline(c), content)
 }
 
 // hairline is one point, and never less than one pixel.

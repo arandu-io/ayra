@@ -50,6 +50,10 @@ func (b *Button) Hovered() bool { return b.click.Hovered() }
 // is what has no meaning here: there is no class, no attribute and no request
 // -- a press calls Go, and the screen decides what that means.
 type ButtonProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each part. The button publishes
+	// one part, "root", which is the button itself.
+	ComponentProps
 	// Label is the text on the button.
 	Label string
 	// Variant is what the button is for. Zero is the ordinary one.
@@ -60,9 +64,14 @@ type ButtonProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p ButtonProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the button and returns the room it took.
 func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
-	fill, ink, border := p.colours(c.Theme)
+	style := p.style(c.Theme)
+	fill, ink, border := style.Background.NRGBA(), style.Foreground.NRGBA(), style.Border.NRGBA()
 
 	if p.Disabled {
 		// Half opacity rather than a grey of its own: a grey is a colour the
@@ -75,8 +84,16 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 	}
 
 	if !p.Disabled && (state.Pressed() || state.Hovered()) {
-		fill = press(fill, state.Pressed())
+		switch {
+		case state.Pressed() && style.PressedBackground.IsSet():
+			fill = style.PressedBackground.NRGBA()
+		case !state.Pressed() && style.HoverBackground.IsSet():
+			fill = style.HoverBackground.NRGBA()
+		default:
+			fill = press(fill, state.Pressed())
+		}
 	}
+	style.Background, style.Foreground, style.Border = theme.Colour(fill), theme.Colour(ink), theme.Colour(border)
 
 	if p.Size == Icon {
 		// Square, which the size's own name promises and the inset alone does
@@ -89,12 +106,12 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
-		return p.surface(inner, fill, border, func(inner ayra.Context) ayra.Dimensions {
-			return p.inset().Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
+		return p.surface(inner, style, func(inner ayra.Context) ayra.Dimensions {
+			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
-				dims := buttonLabel(content, p.Label, p.textSize(c.Theme), ink)
-				if p.Variant == Link {
-					underline(content, dims, p.Label, p.textSize(c.Theme), ink)
+				dims := buttonLabel(content, p.Label, style)
+				if p.Variant == Link && p.Custom == "" {
+					underline(content, dims, p.Label, style)
 				}
 				return dims
 			})
@@ -102,11 +119,31 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 	})
 }
 
+// style answers how the button looks: what the variant and the size say on
+// their own, with the theme's look, the registered variant and the instance's
+// own style laid over it.
+func (p ButtonProps) style(t theme.Theme) theme.Style {
+	fill, ink, border := p.colours(t)
+	radius := t.Metrics.Radius
+	if p.Variant == Link {
+		radius = 0
+	}
+	base := theme.Style{
+		Background: theme.Colour(fill),
+		Foreground: theme.Colour(ink),
+		Border:     theme.Colour(border),
+		Radius:     theme.Pt(radius),
+		Padding:    p.inset(),
+		Font:       theme.Font{Size: theme.Pt(p.textSize(t))},
+	}
+	return t.Resolve("button", "root", p.VariantName(p.Variant.String()), base, p.ComponentProps)
+}
+
 // colours answers the fill, the ink and the border for this variant.
 //
 // Every one comes from the palette by name. A variant that needed a colour the
-// palette does not name would be a variant that does not belong to this design
-// system, which is the whole reason the set is closed.
+// palette does not name is registered in the theme under a name of its own,
+// which is the open half of what used to be a closed set.
 func (p ButtonProps) colours(t theme.Theme) (fill, ink, border color.NRGBA) {
 	transparent := color.NRGBA{}
 
@@ -126,29 +163,29 @@ func (p ButtonProps) colours(t theme.Theme) (fill, ink, border color.NRGBA) {
 }
 
 // inset is the room around the label, by size.
-func (p ButtonProps) inset() layout.Inset {
+func (p ButtonProps) inset() theme.Insets {
 	switch p.Size {
 	case ExtraSmall:
-		return layout.Inset{Top: 4, Bottom: 4, Left: 8, Right: 8}
+		return theme.InsetXY(8, 4)
 	case Small:
-		return layout.Inset{Top: 6, Bottom: 6, Left: 10, Right: 10}
+		return theme.InsetXY(10, 6)
 	case Large:
-		return layout.Inset{Top: 12, Bottom: 12, Left: 20, Right: 20}
+		return theme.InsetXY(20, 12)
 	case Icon:
-		return layout.UniformInset(8)
+		return theme.Uniform(8)
 	}
-	return layout.Inset{Top: 8, Bottom: 8, Left: 14, Right: 14}
+	return theme.InsetXY(14, 8)
 }
 
-// textSize is the label's size, by control size.
-func (p ButtonProps) textSize(t theme.Theme) unit.Sp {
+// textSize is the label's size in points, by control size.
+func (p ButtonProps) textSize(t theme.Theme) float32 {
 	switch p.Size {
 	case ExtraSmall, Small:
-		return unit.Sp(t.Type.Small)
+		return t.Type.Small
 	case Large:
-		return unit.Sp(t.Type.Heading)
+		return t.Type.Heading
 	}
-	return unit.Sp(t.Type.Body)
+	return t.Type.Body
 }
 
 // surface paints the fill and the border behind the content.
@@ -157,7 +194,8 @@ func (p ButtonProps) textSize(t theme.Theme) unit.Sp {
 // has to be -- there is no other way round: a background cannot be painted
 // before it is known how much there is to cover, and painting it afterwards
 // would put it over the label.
-func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content ayra.Widget) ayra.Dimensions {
+func (p ButtonProps) surface(c ayra.Context, style theme.Style, content ayra.Widget) ayra.Dimensions {
+	fill, border := style.Background.NRGBA(), style.Border.NRGBA()
 	measure := op.Record(c.Ops)
 	dims := content(c)
 	drawn := measure.Stop()
@@ -169,10 +207,7 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 		dims.Size = image.Pt(side, side)
 	}
 
-	radius := c.Dp(unit.Dp(c.Theme.Metrics.Radius))
-	if p.Variant == Link {
-		radius = 0
-	}
+	radius := c.Dp(unit.Dp(style.Radius.Points()))
 	rect := image.Rectangle{Max: dims.Size}
 	shape := clip.UniformRRect(rect, radius)
 
@@ -187,7 +222,11 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 		paint.FillShape(c.Ops, fill, shape.Op(c.Ops))
 	}
 	if border.A > 0 {
-		stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(c.Dp(unit.Dp(1)))}
+		width := c.Dp(unit.Dp(1))
+		if style.BorderWidth.IsSet() {
+			width = c.Dp(unit.Dp(style.BorderWidth.Points()))
+		}
+		stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(width)}
 		paint.FillShape(c.Ops, border, stroke.Op())
 	}
 
@@ -207,8 +246,8 @@ func (p ButtonProps) surface(c ayra.Context, fill, border color.NRGBA, content a
 // The name says which control it belongs to, and that is the fix for a real
 // mistake: it was called "label", the text field reused it, and centring it
 // here centred every placeholder in the product.
-func buttonLabel(c ayra.Context, content string, size unit.Sp, ink color.NRGBA) ayra.Dimensions {
-	return drawText(c, content, size, ink, 1, text.Middle, font.Font{Weight: font.Medium})
+func buttonLabel(c ayra.Context, content string, style theme.Style) ayra.Dimensions {
+	return drawPart(c, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, font.Font{Weight: font.Medium})
 }
 
 // underline draws the rule beneath a link's text.
@@ -223,13 +262,13 @@ func buttonLabel(c ayra.Context, content string, size unit.Sp, ink color.NRGBA) 
 // It is measured rather than drawn across the control, because a link takes
 // the width it is offered like any other button, and a rule under the whole
 // column is a divider.
-func underline(c ayra.Context, dims ayra.Dimensions, content string, size unit.Sp, ink color.NRGBA) {
+func underline(c ayra.Context, dims ayra.Dimensions, content string, style theme.Style) {
 	measuring := c
 	measuring.Constraints.Min.X = 0
 	measuring.Constraints.Max.X = dims.Size.X
 
 	measured := op.Record(c.Ops)
-	text := buttonLabel(measuring, content, size, ink)
+	text := buttonLabel(measuring, content, style)
 	measured.Stop()
 
 	width := text.Size.X
@@ -255,7 +294,7 @@ func underline(c ayra.Context, dims ayra.Dimensions, content string, size unit.S
 	}
 
 	rule := image.Rect(left, top, left+width, top+thickness)
-	paint.FillShape(c.Ops, ink, clip.Rect(rule).Op())
+	paint.FillShape(c.Ops, style.Foreground.NRGBA(), clip.Rect(rule).Op())
 }
 
 // fade halves the alpha, which is how a control says "not now" without the

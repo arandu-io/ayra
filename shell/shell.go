@@ -8,6 +8,7 @@ package shell
 
 import (
 	"os"
+	"strings"
 
 	"github.com/arandu-io/ayra/engine/app"
 	"github.com/arandu-io/ayra/engine/op"
@@ -31,6 +32,13 @@ type Config struct {
 
 	// Scheme is the palette to open with.
 	Scheme theme.Scheme
+
+	// Theme builds the theme for a scheme. Zero takes [theme.New], the Basecoat
+	// palette; a product that has its own -- made from its stylesheet by
+	// theme/css, with its look and its variants registered -- hands the function
+	// that returns it, so the window and everything drawn in it read the
+	// product's tokens instead of the default ones.
+	Theme func(theme.Scheme) theme.Theme
 
 	// Fonts is the collection text is shaped from. Zero uses whatever the
 	// system offers, which is nothing on a target with no filesystem -- so an
@@ -59,6 +67,16 @@ func Run(cfg Config, screen Screen) error {
 	}
 	cfg = cfg.withDefaults()
 
+	// A typeface the scale names and the collection lacks does not fail when
+	// text is shaped: it falls back, and a product whose text is in the wrong
+	// face finds out by looking. Said here, it is a mistake with a name. A
+	// collection left empty is the system's, which cannot be checked.
+	if len(cfg.Fonts) > 0 {
+		if missing := cfg.theme().Type.Missing(cfg.Fonts); len(missing) > 0 {
+			return &MissingFaceError{Faces: missing}
+		}
+	}
+
 	shaper := text.NewShaper(text.WithCollection(cfg.Fonts))
 
 	go func() {
@@ -74,6 +92,27 @@ func Run(cfg Config, screen Screen) error {
 	// this line is where the main one is spent.
 	app.Main()
 	return nil
+}
+
+// theme answers the theme the window draws with.
+func (c Config) theme() theme.Theme {
+	if c.Theme != nil {
+		return c.Theme(c.Scheme)
+	}
+	return theme.New(c.Scheme)
+}
+
+// MissingFaceError is what Run answers when the theme's scale names a typeface
+// that the configured fonts do not carry.
+type MissingFaceError struct {
+	// Faces are the typefaces the theme names and Fonts lacks.
+	Faces []string
+}
+
+// Error names the faces.
+func (e *MissingFaceError) Error() string {
+	return "ayra/shell: the theme names the typefaces " + strings.Join(e.Faces, ", ") +
+		", and the fonts the window was configured with do not carry them"
 }
 
 // withDefaults answers cfg with an opening size that fits a form on a laptop
@@ -103,7 +142,7 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 		app.Size(unit.Dp(cfg.Width), unit.Dp(cfg.Height)),
 	)
 
-	palette := theme.New(cfg.Scheme)
+	palette := cfg.theme()
 
 	var ops op.Ops
 	for {

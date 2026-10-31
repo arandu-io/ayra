@@ -148,7 +148,7 @@ func (p TextProps) Layout(c ayra.Context) ayra.Dimensions {
 func (p TextProps) face() font.Font {
 	f := font.Font{}
 	if p.Role == Mono {
-		f.Typeface = "Go Mono"
+		f.Typeface = theme.MonoTypeface
 	}
 	if p.Bold {
 		f.Weight = font.Bold
@@ -169,7 +169,7 @@ func semibold() font.Font { return font.Font{Weight: font.SemiBold} }
 func plain() font.Font { return font.Font{} }
 
 // mono is the face a key, an identifier or a column of figures is set in.
-func mono() font.Font { return font.Font{Typeface: "Go Mono"} }
+func mono() font.Font { return font.Font{Typeface: theme.MonoTypeface} }
 
 // drawLine draws one line of text in a weight, wrapping as the room allows.
 func drawLine(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, face font.Font) ayra.Dimensions {
@@ -178,13 +178,31 @@ func drawLine(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, fac
 
 // drawText is the one place text is put on screen.
 //
+// The font a control asks for is a role -- the ordinary face, the monospace
+// one, a weight -- and is turned into the application's own face here, through
+// the theme's scale. That is why a product with fonts of its own needs no
+// change to a control: none of them names a typeface.
+//
 // The colour arrives as a recorded operation because that is what the shaper
 // takes: it draws the glyphs and then replays what it was handed to fill them,
 // so a caller cannot set a colour that the shaping forgets.
 func drawText(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, maxLines int, align text.Alignment, f font.Font) ayra.Dimensions {
+	return drawFace(c, content, size, ink, maxLines, align, c.Theme.Type.Resolve(f))
+}
+
+// drawFace draws text in a font that has already been resolved against the
+// theme, which is what a part's own Font is.
+func drawFace(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, maxLines int, align text.Alignment, f font.Font) ayra.Dimensions {
 	recording := op.Record(c.Ops)
 	paint.ColorOp{Color: ink}.Add(c.Ops)
 	stop := recording.Stop()
 
 	return engine.Label{MaxLines: maxLines, Alignment: align}.Layout(c.Context, c.Shaper, f, size, content, stop)
+}
+
+// drawPart draws text the way a part's resolved style says: its foreground, its
+// font, its size. The base font and size are what the widget would have used.
+func drawPart(c ayra.Context, content string, s theme.Style, size unit.Sp, maxLines int, align text.Alignment, base font.Font) ayra.Dimensions {
+	size = unit.Sp(s.Font.Size.Or(theme.Pt(float32(size))).Points())
+	return drawFace(c, content, size, s.Foreground.NRGBA(), maxLines, align, c.Theme.Type.Apply(base, s.Font))
 }

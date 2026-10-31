@@ -12,6 +12,9 @@ import (
 // return. That mistake is invisible until somebody presses return expecting a
 // new line and their half-written message is sent.
 type TextareaProps struct {
+	// ComponentProps is what the caller changes on this one instance. A text
+	// area publishes the parts of a field, restyled under the name "textarea".
+	ComponentProps
 	// Placeholder is shown while it is empty.
 	Placeholder string
 	// Rows is how many lines tall it opens. Zero takes a paragraph.
@@ -20,6 +23,12 @@ type TextareaProps struct {
 	Disabled bool
 	// Invalid draws it as rejected. What was wrong is said beside it.
 	Invalid bool
+}
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p TextareaProps) PartNames() []string {
+	return []string{"root", "focus", "invalid", "placeholder"}
 }
 
 // Layout draws the field and returns the room it took.
@@ -36,9 +45,11 @@ func (p TextareaProps) Layout(c ayra.Context, state *Input) ayra.Dimensions {
 	c.Constraints.Min.Y = max(c.Constraints.Min.Y, line*rows+c.Dp(unit.Dp(16)))
 
 	return InputProps{
-		Placeholder: p.Placeholder,
-		Multiline:   true,
-		Disabled:    p.Disabled,
-		Invalid:     p.Invalid,
+		ComponentProps: p.ComponentProps,
+		widget:         "textarea",
+		Placeholder:    p.Placeholder,
+		Multiline:      true,
+		Disabled:       p.Disabled,
+		Invalid:        p.Invalid,
 	}.Layout(c, state)
 }

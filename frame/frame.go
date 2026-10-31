@@ -40,6 +40,11 @@ type Options struct {
 	// Scheme is the palette to draw with.
 	Scheme theme.Scheme
 
+	// Theme builds the theme for a scheme. Zero takes [theme.New]; a product
+	// whose pictures are kept hands its own, so a golden image is the product's
+	// screen and not the default palette's.
+	Theme func(theme.Scheme) theme.Theme
+
 	// Fonts are the faces text is shaped from. Empty takes whatever the system
 	// offers, which is nothing on a machine with no fonts installed -- so a
 	// caller that needs the same picture everywhere carries its own.
@@ -81,6 +86,9 @@ func Draw(o Options, screen ayra.Widget) (*image.RGBA, error) {
 
 	shaper := text.NewShaper(text.WithCollection(o.Fonts))
 	palette := theme.New(o.Scheme)
+	if o.Theme != nil {
+		palette = o.Theme(o.Scheme)
+	}
 	var source input.Source
 
 	var ops op.Ops

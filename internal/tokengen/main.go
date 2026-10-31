@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/arandu-io/ayra/internal/colour"
 )
 
 // property matches one custom property declaration and its value.
@@ -62,7 +64,7 @@ var notColours = map[string]string{
 // scheme is one block of the stylesheet: the properties under one selector.
 type scheme struct {
 	name    string
-	colours map[string]Colour
+	colours map[string]colour.Colour
 	lengths map[string]float64
 	// aliases are the properties whose value is another property, left
 	// unresolved. A stylesheet resolves one at the point of use, not at the
@@ -155,7 +157,7 @@ func main() {
 func read(source, selector string) (scheme, error) {
 	s := scheme{
 		name:    selector,
-		colours: map[string]Colour{},
+		colours: map[string]colour.Colour{},
 		lengths: map[string]float64{},
 		aliases: map[string]string{},
 	}
@@ -184,13 +186,13 @@ func read(source, selector string) (scheme, error) {
 					alpha /= 100
 				}
 			}
-			s.colours[name] = oklchToRGB(l, c, h, alpha)
+			s.colours[name] = colour.OKLCH(l, c, h, alpha)
 			continue
 		}
 
 		if hex := hexColour.FindStringSubmatch(value); hex != nil {
 			n, _ := strconv.ParseUint(hex[1], 16, 32)
-			s.colours[name] = Colour{R: uint8(n >> 16), G: uint8(n >> 8), B: uint8(n), A: 255}
+			s.colours[name] = colour.Colour{R: uint8(n >> 16), G: uint8(n >> 8), B: uint8(n), A: 255}
 			continue
 		}
 
@@ -200,7 +202,7 @@ func read(source, selector string) (scheme, error) {
 		}
 
 		if value == "transparent" {
-			s.colours[name] = Colour{}
+			s.colours[name] = colour.Colour{}
 			continue
 		}
 
