@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- Kyse's icons
+## v0.6.0 -- Kyse's icons
 
 Nothing that compiled stops compiling, and the pictures of an application that
 keeps its own goldens will change: the widgets draw inside themselves the icons
