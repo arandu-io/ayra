@@ -11,7 +11,7 @@
 // the same commit, which is the only moment the rename is cheap.
 module github.com/arandu-io/ayra/catalogue
 
-go 1.26.0
+go 1.26.10
 
 require github.com/arandu-io/ayra v0.0.0
 
