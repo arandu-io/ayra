@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- restylable widgets
+## v0.4.0 -- restylable widgets
 
 Nothing that compiled stops compiling for an application that uses the widgets as
 they were: every addition is a field a keyed literal leaves at zero, and the
