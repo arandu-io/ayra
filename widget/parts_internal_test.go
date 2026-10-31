@@ -20,9 +20,15 @@ import (
 var (
 	publishes = regexp.MustCompile(`(?m)^func \(p ([A-Za-z]+)Props\) PartNames\(\) \[\]string \{\s*return \[\]string\{([^}]*)\}`)
 	resolves  = regexp.MustCompile(`Resolve\("([a-z]+)", "([a-z-]+)"`)
-	// resolvesByName is the form a widget uses when it is drawn under two names:
-	// the input, which is a text area as well.
+	// resolvesByName is the form a widget uses when it is drawn under several
+	// names: the input, which is a text area and a masked field as well, and the
+	// closed control of the date pickers.
 	resolvesByName = regexp.MustCompile(`Resolve\(name, "([a-z-]+)"`)
+	// drawnUnder says which names those files draw under.
+	drawnUnder = map[string][]string{
+		"input.go":     {"input", "textarea", "masked"},
+		"datefield.go": {"daterangepicker", "datetimepicker"},
+	}
 )
 
 func TestEveryPublishedPartIsResolvedAndEveryResolvedPartIsPublished(t *testing.T) {
@@ -50,9 +56,11 @@ func TestEveryPublishedPartIsResolvedAndEveryResolvedPartIsPublished(t *testing.
 			}
 			resolved[found[1]][found[2]] = true
 		}
-		if filepath.Base(path) == "input.go" {
+		if names, shared := drawnUnder[filepath.Base(path)]; shared {
 			for _, found := range resolvesByName.FindAllStringSubmatch(body, -1) {
-				byName = append(byName, found[1])
+				for _, name := range names {
+					byName = append(byName, name+"/"+found[1])
+				}
 			}
 		}
 	}
@@ -61,12 +69,13 @@ func TestEveryPublishedPartIsResolvedAndEveryResolvedPartIsPublished(t *testing.
 		t.Fatalf("only %d widgets publish their parts; the pattern stopped matching", len(published))
 	}
 
-	// The input resolves its parts under the name it is drawn as.
-	for _, name := range []string{"input", "textarea"} {
-		resolved[name] = map[string]bool{}
-		for _, part := range byName {
-			resolved[name][part] = true
+	// A widget drawn under several names resolves its parts under each.
+	for _, shared := range byName {
+		name, part, _ := strings.Cut(shared, "/")
+		if resolved[name] == nil {
+			resolved[name] = map[string]bool{}
 		}
+		resolved[name][part] = true
 	}
 
 	for name, parts := range published {

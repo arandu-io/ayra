@@ -19,6 +19,18 @@ type Calendar struct {
 	previous Button
 	next     Button
 	days     [42]Button
+	// pressed is the day the last press landed on, held until it is read. The
+	// selection moves with it, but a press on the day that is already selected
+	// moves nothing -- and a period is chosen by pressing the same day twice.
+	pressed time.Time
+}
+
+// Pressed reports the day a press landed on since the last frame, once, and the
+// zero time when there was none.
+func (c *Calendar) Pressed() time.Time {
+	day := c.pressed
+	c.pressed = time.Time{}
+	return day
 }
 
 // Selected is the day chosen, and the zero time when none is.
@@ -68,6 +80,20 @@ type CalendarProps struct {
 	Min, Max time.Time
 	// Monday starts the week on Monday rather than Sunday.
 	Monday bool
+	// Range marks the days from the first to the second, ends included, as a
+	// period. A zero end leaves the period open: the start alone is marked as
+	// the one day it is.
+	Range [2]time.Time
+	// MonthNames and WeekdayNames are what the header and the column heads say,
+	// in the language of the application: twelve names starting at January, and
+	// seven starting at Sunday. They are data because a calendar is where a
+	// locale is least negotiable, and a library that guessed would draw the
+	// wrong one in every country but its own. Empty draws English.
+	MonthNames   []string
+	WeekdayNames []string
+	// PreviousLabel and NextLabel are what the two steps say. Empty says the
+	// arrows.
+	PreviousLabel, NextLabel string
 }
 
 // Layout draws the month and returns the room it took.
@@ -98,6 +124,7 @@ func (p CalendarProps) Layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 		}
 		if state.days[index].Clicked(c) {
 			state.selected = day
+			state.pressed = day
 		}
 	}
 
@@ -121,16 +148,19 @@ func (p CalendarProps) header(c ayra.Context, state *Calendar, month time.Time) 
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: "<", Variant: Ghost, Size: Small}.Layout(inner, &state.previous)
+			return ButtonProps{Label: orDefault(p.PreviousLabel, "<"), Variant: Ghost, Size: Small}.Layout(inner, &state.previous)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			label := month.Format("January 2006")
+			if len(p.MonthNames) == 12 {
+				label = p.MonthNames[month.Month()-1] + " " + strconv.Itoa(month.Year())
+			}
 			return drawText(c.With(gtx), label, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Middle, semibold())
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: ">", Variant: Ghost, Size: Small}.Layout(inner, &state.next)
+			return ButtonProps{Label: orDefault(p.NextLabel, ">"), Variant: Ghost, Size: Small}.Layout(inner, &state.next)
 		}),
 	)
 }
@@ -152,6 +182,9 @@ func (p CalendarProps) weekdays(c ayra.Context) ayra.Dimensions {
 // weekdayNames answers the seven initials, starting on the right day.
 func (p CalendarProps) weekdayNames() []string {
 	names := []string{"S", "M", "T", "W", "T", "F", "S"}
+	if len(p.WeekdayNames) == 7 {
+		names = append([]string(nil), p.WeekdayNames...)
+	}
 	if p.Monday {
 		return append(names[1:], names[0])
 	}
@@ -210,8 +243,10 @@ func (p CalendarProps) day(c ayra.Context, state *Calendar, day time.Time, index
 
 	variant := Ghost
 	switch {
-	case selected:
+	case selected, p.edge(day):
 		variant = Default
+	case p.within(day):
+		variant = Secondary
 	case today:
 		variant = Outline
 	}
@@ -223,6 +258,29 @@ func (p CalendarProps) day(c ayra.Context, state *Calendar, day time.Time, index
 		Size:     Small,
 		Disabled: !allowed,
 	}.Layout(c, &state.days[index])
+}
+
+// edge reports whether a day is one end of the marked period.
+func (p CalendarProps) edge(day time.Time) bool {
+	return sameDay(day, p.Range[0]) || sameDay(day, p.Range[1])
+}
+
+// within reports whether a day is inside the marked period, ends excluded.
+func (p CalendarProps) within(day time.Time) bool {
+	from, to := p.Range[0], p.Range[1]
+	if from.IsZero() || to.IsZero() {
+		return false
+	}
+	at := startOfDay(day)
+	return at.After(startOfDay(from)) && at.Before(startOfDay(to))
+}
+
+// orDefault is the text, or the fallback when it is empty.
+func orDefault(text, fallback string) string {
+	if text == "" {
+		return fallback
+	}
+	return text
 }
 
 // allowed reports whether a day is inside the bounds.

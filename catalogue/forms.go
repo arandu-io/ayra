@@ -25,6 +25,10 @@ func forms() []Entry {
 		sliderEntry(),
 		ratingEntry(),
 		colourPickerEntry(),
+		maskedEntry(),
+		oneTimeCodeEntry(),
+		dateRangePickerEntry(),
+		dateTimePickerEntry(),
 	}
 }
 
