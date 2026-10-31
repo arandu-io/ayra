@@ -113,6 +113,15 @@ type AvatarProps struct {
 	Initials string
 	// Size is the diameter. Zero takes the one a row of them is built from.
 	Size unit.Dp
+	// Photo is the person's picture, drawn in the circle instead of the
+	// initials once it has loaded; the initials stand in until then, and when it
+	// fails. It is a pointer to state the caller holds, because a picture has to
+	// be remembered from one frame to the next and an avatar is drawn from a
+	// value that remembers nothing.
+	Photo *Image
+	// Source produces the photo, the first time the avatar is drawn. Nil leaves
+	// Photo to whoever fills it with [Image.Set].
+	Source ImageSource
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -141,6 +150,17 @@ func (p AvatarProps) Layout(c ayra.Context) ayra.Dimensions {
 		radius = c.Dp(unit.Dp(root.Radius.Points()))
 	}
 	paint.FillShape(c.Ops, root.Background.NRGBA(), clip.UniformRRect(circle, radius).Op(c.Ops))
+
+	if p.Photo != nil {
+		p.Photo.ensure(c, p.Source)
+		p.Photo.mu.Lock()
+		picture, photo := p.Photo.picture, p.Photo.op
+		p.Photo.mu.Unlock()
+		if picture != nil {
+			DrawImage(c, photo, circle.Max, Cover, radius)
+			return ayra.Dimensions{Size: circle.Max}
+		}
+	}
 
 	c.Constraints = layout.Exact(circle.Max)
 	layout.Center.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {

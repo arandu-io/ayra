@@ -12,6 +12,7 @@ import (
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
+	"github.com/arandu-io/ayra/icons"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/theme"
@@ -56,6 +57,9 @@ type ButtonProps struct {
 	ComponentProps
 	// Label is the text on the button.
 	Label string
+	// Icon is drawn before the label, and alone when there is none -- the
+	// icon-only button, which wants a Size of Icon. The zero Icon draws nothing.
+	Icon icons.Icon
 	// Variant is what the button is for. Zero is the ordinary one.
 	Variant Variant
 	// Size is how much room it takes. Zero is the one a form is built from.
@@ -109,7 +113,7 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		return p.surface(inner, style, func(inner ayra.Context) ayra.Dimensions {
 			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
-				dims := buttonLabel(content, p.Label, style)
+				dims := buttonContent(content, p.Label, p.Icon, style)
 				if p.Variant == Link && p.Custom == "" {
 					underline(content, dims, p.Label, style)
 				}
@@ -233,6 +237,48 @@ func (p ButtonProps) surface(c ayra.Context, style theme.Style, content ayra.Wid
 	drawn.Add(c.Ops)
 	close()
 	return dims
+}
+
+// buttonContent draws what is on a button: the label, and the icon before it. An
+// icon and a label are centred together as one, and an icon alone is centred in
+// the room it is given.
+func buttonContent(c ayra.Context, label string, icon icons.Icon, style theme.Style) ayra.Dimensions {
+	if icon.IsZero() {
+		return buttonLabel(c, label, style)
+	}
+
+	side := c.Dp(unit.Dp(style.Font.Size.Or(theme.Pt(c.Theme.Type.Body)).Points()))
+	gap := 0
+	if label != "" {
+		gap = c.Dp(unit.Dp(6))
+	}
+
+	// Measured first, so that the pair can be centred as one.
+	measure := op.Record(c.Ops)
+	text := ayra.Dimensions{}
+	if label != "" {
+		measuring := c
+		measuring.Constraints.Min = image.Point{}
+		text = buttonLabel(measuring, label, style)
+	}
+	measure.Stop()
+
+	width := side + gap + text.Size.X
+	height := max(side, text.Size.Y)
+	left := max((c.Constraints.Min.X-width)/2, 0)
+
+	icon0 := op.Offset(image.Pt(left, (height-side)/2)).Push(c.Ops)
+	DrawIcon(c, icon, side, style.Foreground.NRGBA())
+	icon0.Pop()
+
+	if label != "" {
+		shifted := op.Offset(image.Pt(left+side+gap, 0)).Push(c.Ops)
+		measuring := c
+		measuring.Constraints.Min = image.Point{}
+		buttonLabel(measuring, label, style)
+		shifted.Pop()
+	}
+	return ayra.Dimensions{Size: image.Pt(max(width+left*2, c.Constraints.Min.X), height), Baseline: text.Baseline}
 }
 
 // buttonLabel draws a button's text: one line, centred in whatever width the
