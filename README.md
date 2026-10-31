@@ -108,7 +108,9 @@ here until it has a pair or a written reason.
 **It draws for a server that is running.** Authorization is decided on the
 server, always. There is no local policy, no local cache and no offline queue,
 and there will not be: the credential the data path requires comes from a
-session, and a process on a device does not mint one.
+session -- a cookie, or a bearer token the server issued and the application
+hands the client with `client.WithBearer` -- and a process on a device does not
+mint one.
 
 **Screen readers reach one platform.** Of the nine platform backends beneath
 this library, one walks a semantic tree; the other eight do not. On macOS,
@@ -136,6 +138,101 @@ to build a web application, and the web half of Arandu is not going anywhere.
 remote desktop session, a virtual machine without passthrough or a server host,
 window creation can fail before any of this runs; the failure is detected at
 start-up and reported with what was missing.
+
+## Push notifications and live video
+
+Two capabilities that need the device itself are packages of their own, so an
+application that never imports them carries none of their code.
+
+`push` is the device's half of a push notification and nothing else: the
+permission, the token the server addresses the device by, the notification that
+arrived while the application was open, and the one a person touched.
+
+`live` plays the video a camera's node serves over a WebSocket, decoded by the
+phone's hardware, and `widget.LiveProps` draws the frame it leaves with a hook
+for what goes on top of the picture.
+
+```go
+package main
+
+import (
+	"context"
+
+	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/live"
+	"github.com/arandu-io/ayra/push"
+	"github.com/arandu-io/ayra/shell"
+	"github.com/arandu-io/ayra/widget"
+)
+
+func main() {
+	var video widget.Live
+
+	player := live.NewPlayer(live.PlayerConfig{
+		Endpoint: "wss://api1.example.test/live/camera-7",
+		// The pass is short-lived and the node ends a session every few
+		// minutes, so the application is asked for a new one each time.
+		Pass: func(ctx context.Context) (string, error) { return "", nil },
+	})
+	player.Start()
+
+	go func() {
+		if _, err := push.Request(context.Background()); err != nil {
+			return
+		}
+		for opened := range push.Opened() {
+			_ = opened.Link // where the notification that was touched goes
+		}
+	}()
+
+	shell.Exit(shell.Run(shell.Config{Title: "Cameras"}, func(c ayra.Context) ayra.Dimensions {
+		player.SetRedraw(c.Redraw)
+		frame := player.Frame()
+		return widget.LiveProps{
+			Frame:   frame.Image,
+			Seq:     frame.Seq,
+			Label:   "Gate camera",
+			Caption: caption(player.Status()),
+		}.Layout(c, &video)
+	}))
+}
+
+// caption is the sentence a state needs; the words are the application's.
+func caption(status live.Status) string {
+	switch status.State {
+	case live.StateWaiting, live.StateStarting:
+		return "Preparing the video"
+	case live.StateLost:
+		return "No signal from the camera"
+	case live.StateFailed:
+		return "The video is not available"
+	}
+	return ""
+}
+```
+
+What each needs from the platform, and what it costs:
+
+- **Push on Android** is Firebase Cloud Messaging, and the application is built
+  with the libraries the project chooses: `aru native:build -android-lib DIR`
+  takes the `.aar` and `.jar` files of `firebase-messaging` and what it depends
+  on, and `-google-services` takes the project's `google-services.json`, which
+  is never kept in a repository. Nothing is downloaded or carried by `aru` or by
+  this module.
+- **Push on iOS** is the APNs device token, without the Firebase SDK; `push.Kind`
+  says which of the two a token is, because a server sending through Firebase
+  maps an APNs token to a registration token. The provisioning profile needs the
+  Push Notifications capability, and `aru` refuses to sign without it.
+- **Live video** decodes with MediaCodec on Android and VideoToolbox on iOS and
+  macOS. The windows of the other targets have no decoder: the stream connects
+  and reports `live.ErrUnsupported`, and an application on them shows the status
+  and the overlay over no picture, or hands `live.PlayerConfig.Decoder` its own.
+  The decoded picture is converted to RGBA once on its way to the screen; on a
+  phone at 1080p that conversion is the cost that matters, and drawing a codec
+  surface as a texture would remove it.
+- Neither package keeps anything: no queue that outlives the process, no cache
+  of a message or a picture. The server decides what a device is sent and what it
+  may watch.
 
 ## Install
 
