@@ -15,6 +15,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,6 +24,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -86,10 +88,11 @@ func (p Page) Into(v any) error {
 // Client asks one server for pages.
 //
 // It carries a cookie jar, so a session established by signing in is the
-// session every later page is fetched under. That is the whole of its
-// authentication: this holds no token, mints nothing, and decides nothing
-// about what the person may see. The server decides, from the session, the
-// same way it decides for a browser.
+// session every later page is fetched under. Where the server issues a token
+// instead, [WithBearer] sends it on every request. Either way this mints
+// nothing and decides nothing about what the person may see: the credential is
+// the server's, and the server decides, from it, the same way it decides for a
+// browser.
 type Client struct {
 	base *url.URL
 	http *http.Client
@@ -101,6 +104,13 @@ type Client struct {
 	csrf tokens
 	// limit is the most one answer may hold once decoded, in bytes.
 	limit int64
+	// download is the most a download may hold, zero for the default.
+	download int64
+	// bearer is the credential provider, nil when the client signs in with a
+	// session. Calls to it are serialised by bearerMu, so concurrent requests
+	// that find the token spent wait for one renewal instead of making several.
+	bearer   Bearer
+	bearerMu sync.Mutex
 }
 
 // New returns a client for the server at base.
@@ -179,39 +189,16 @@ func (c *Client) Get(ctx context.Context, path Path) (Page, error) {
 // A body of our own would be a second way in, and a second way in is a second
 // set of rules about who may pass.
 func (c *Client) Post(ctx context.Context, path Path, form url.Values) (Page, error) {
-	return c.do(ctx, http.MethodPost, path, strings.NewReader(form.Encode()), "application/x-www-form-urlencoded")
+	return c.do(ctx, http.MethodPost, path, []byte(form.Encode()), "application/x-www-form-urlencoded")
 }
 
-func (c *Client) do(ctx context.Context, method string, path Path, body io.Reader, contentType string) (Page, error) {
-	address, err := path.on(c.base)
+func (c *Client) do(ctx context.Context, method string, path Path, body []byte, contentType string) (Page, error) {
+	name := path.String()
+	res, err := c.send(ctx, method, path, body, contentType, ViewMediaType)
 	if err != nil {
 		return Page{}, err
 	}
-	name := path.String()
-
-	req, err := http.NewRequestWithContext(onServer(ctx, c.base), method, address.String(), body)
-	if err != nil {
-		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
-	}
-	req.Header.Set("Accept", ViewMediaType)
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	c.csrf.carry(req, c.base)
-
-	res, err := c.http.Do(req)
-	if err != nil {
-		return Page{}, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
-	}
 	defer res.Body.Close()
-
-	if !sameServer(c.base, res.Request.URL) {
-		// The redirect policy refuses this before anything is sent. A
-		// transport that followed one by other means still does not have its
-		// answer read: a page from elsewhere is not drawn, and its token is not
-		// the one sent back to the server.
-		return Page{}, fmt.Errorf("%w: answered from %s://%s", ErrOffServer, res.Request.URL.Scheme, res.Request.URL.Host)
-	}
 
 	page, err := decode(method, name, res, c.limit)
 	if err != nil {
@@ -221,11 +208,72 @@ func (c *Client) do(ctx context.Context, method string, path Path, body io.Reade
 	return page, nil
 }
 
+// send makes one request, with the credential the client was given, and answers
+// the response unread.
+//
+// A response that was refused for its token is asked for once more, after the
+// provider has been told which token was refused: a token that expired between
+// being issued and being used is the ordinary case, and a screen that failed on
+// it would be a screen that failed for something the application can repair.
+// Only a request whose body can be sent again is retried, which is every one
+// this client makes.
+func (c *Client) send(ctx context.Context, method string, path Path, body []byte, contentType, accept string) (*http.Response, error) {
+	address, err := path.on(c.base)
+	if err != nil {
+		return nil, err
+	}
+	name := path.String()
+
+	rejected := ""
+	for attempt := 0; ; attempt++ {
+		var reader io.Reader
+		if body != nil {
+			reader = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(onServer(ctx, c.base), method, address.String(), reader)
+		if err != nil {
+			return nil, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
+		}
+		req.Header.Set("Accept", accept)
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		c.csrf.carry(req, c.base)
+
+		token, err := c.credential(ctx, rejected)
+		if err != nil {
+			return nil, fmt.Errorf("ayra/client: %s %s: the credential could not be obtained: %w", method, name, err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		res, err := c.http.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("ayra/client: %s %s: %w", method, name, err)
+		}
+		if !sameServer(c.base, res.Request.URL) {
+			// The redirect policy refuses this before anything is sent. A
+			// transport that followed one by other means still does not have its
+			// answer read: a page from elsewhere is not drawn, and its token is not
+			// the one sent back to the server.
+			res.Body.Close()
+			return nil, fmt.Errorf("%w: answered from %s://%s", ErrOffServer, res.Request.URL.Scheme, res.Request.URL.Host)
+		}
+		if res.StatusCode == http.StatusUnauthorized && token != "" && attempt == 0 {
+			res.Body.Close()
+			rejected = token
+			continue
+		}
+		return res, nil
+	}
+}
+
 // decode turns one response into a page, or into the error that says why the
 // response was not one.
 func decode(method, path string, res *http.Response, limit int64) (Page, error) {
 	if res.StatusCode >= 400 {
-		return Page{}, &StatusError{Method: method, Path: path, Status: res.StatusCode}
+		return Page{}, statusError(method, path, res)
 	}
 
 	if got := mediaType(res.Header.Get("Content-Type")); got != ViewMediaType {
@@ -267,6 +315,45 @@ type StatusError struct {
 	// Status is the code the server answered with, and it is what a caller
 	// acts on.
 	Status int
+	// ContentType is the media type the refusal's body was sent as, without its
+	// parameters.
+	ContentType string
+	// Body is the start of what the server said with the refusal, at most
+	// [ErrorBodyLimit] bytes of it. A server that explains a refusal -- a sign-in
+	// barrier, a forbidden request with a code the screen acts on -- does it
+	// here, and a client that dropped the body could tell the person only that
+	// something was refused.
+	Body []byte
+}
+
+// ErrorBodyLimit is how much of a refusal's body a [StatusError] keeps: 64 KiB.
+// A refusal is a sentence and a code, and the cap is what stops a server that
+// answers an error with a page from filling a phone's memory.
+const ErrorBodyLimit = 64 << 10
+
+// statusError builds the error for a refused response, reading the start of its
+// body. A body that cannot be read leaves the error without one, because the
+// status is the part that decides what happens next.
+func statusError(method, path string, res *http.Response) *StatusError {
+	body, _ := io.ReadAll(io.LimitReader(res.Body, ErrorBodyLimit))
+	return &StatusError{
+		Method: method, Path: path, Status: res.StatusCode,
+		ContentType: mediaType(res.Header.Get("Content-Type")), Body: body,
+	}
+}
+
+// Into decodes the body of a refusal as JSON into v, which is a pointer to
+// whatever the screen expects -- the server's error envelope, with its code and
+// its messages. It answers an error when the body is not JSON or does not fit,
+// and the caller then falls back on the status.
+func (e *StatusError) Into(v any) error {
+	if len(e.Body) == 0 {
+		return errors.New("ayra/client: the refusal carried no body")
+	}
+	if err := json.Unmarshal(e.Body, v); err != nil {
+		return fmt.Errorf("ayra/client: the body of the %d from %s %s does not fit %T: %w", e.Status, e.Method, e.Path, v, err)
+	}
+	return nil
 }
 
 // Error names the request and what the server answered.
