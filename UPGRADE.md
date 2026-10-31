@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- the system theme
+## v0.7.0 -- the system theme
 
 Nothing that compiled stops compiling. `app.Config`, `ayra.Context`, `theme.Theme`
 and `shell.Config` have more fields, so a literal written with positional values
