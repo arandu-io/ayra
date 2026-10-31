@@ -85,8 +85,20 @@ jobs:
           go mod download gioui.org@v0.10.2
           echo "fetched into $(go env GOMODCACHE)"
 
+      # The parity gate compares this half's controls with the browser half's
+      # components, and Kyse has to be beside it to read them. Without the checkout
+      # the test fails rather than skips when CI is set, so a gate that skips cannot
+      # pass for one that ran.
+      - name: the browser half the parity gate reads
+        uses: actions/checkout@v7
+        with:
+          repository: arandu-io/kyse
+          path: kyse
+
       - name: test
         run: go test -race ./...
+        env:
+          AYRA_KYSE: ${{ github.workspace }}/kyse
 
       # The checked-in shader bindings are generated elsewhere, but their
       # Apple target selection is repaired locally and idempotently. Running

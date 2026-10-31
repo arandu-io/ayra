@@ -299,3 +299,36 @@ func TestClickableHoverFollowsThePointer(t *testing.T) {
 		t.Error("the pointer outside the area still registered as hovering")
 	}
 }
+
+// TestADisabledClickableIsNoTarget fixes that a clickable laid out on a
+// disabled context takes neither a press nor the focus.
+//
+// The caller asks Clicked before it draws, on a context that is enabled. A
+// target registered while the control was drawn unavailable would have had the
+// press routed to it in between, and the question asked before the next frame
+// would report it.
+func TestADisabledClickableIsNoTarget(t *testing.T) {
+	var b widget.Clickable
+	clicks := 0
+	s := newClickStage(t, func(gtx layout.Context) {
+		if b.Clicked(gtx) {
+			clicks++
+		}
+		b.Layout(gtx.Disabled(), fill)
+	})
+
+	s.queue(at(pointer.Press, centre), at(pointer.Release, centre))
+	s.frame()
+	s.router.MoveFocus(key.FocusForward)
+	s.frame()
+	s.queue(key.Event{Name: key.NameSpace, State: key.Press}, key.Event{Name: key.NameSpace, State: key.Release})
+	s.frame()
+	s.frame()
+
+	if clicks != 0 {
+		t.Errorf("a disabled clickable reported %d clicks", clicks)
+	}
+	if b.Pressed() {
+		t.Error("a disabled clickable is held down")
+	}
+}

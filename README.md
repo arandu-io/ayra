@@ -62,6 +62,47 @@ write this one. What is **not** shared is code: markup, stylesheet classes and
 browser behaviours have no meaning in a drawing list, and a component that
 tried to serve both would carry one medium's compromises into the other.
 
+## Making it look like your product
+
+The widgets are restylable the way the web components are (ADR-0131): each
+publishes the parts it draws -- `root`, `title`, `label` -- under the names the
+web component publishes in `data-part`, and the application, a variant it
+registers, or one instance overrides any of them: a fill, a border, a radius, an
+inset, a type.
+
+```go
+package main
+
+import (
+	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/theme"
+	"github.com/arandu-io/ayra/widget"
+)
+
+var pay widget.Button
+
+// payButton is a button of a variant the product registers, with its corners
+// overridden on this one instance.
+func payButton(c ayra.Context) ayra.Dimensions {
+	return widget.ButtonProps{
+		Label: "Pagar",
+		ComponentProps: widget.ComponentProps{
+			Custom: "brand", // a variant the theme registers, not a value of an enum
+			Parts:  theme.Parts{"root": {Radius: theme.Pt(999)}},
+		},
+	}.Layout(c, &pay)
+}
+
+func main() { _ = payButton }
+```
+
+`theme/css` builds the theme from the product's own stylesheet, so the native
+half is the web half's colours and not a copy of them. `mask`, `icons` and the
+primitives a product's own widgets are written from (`widget.Surface`,
+`widget.DrawText`, `widget.Clickable`) are exported. `parity_test.go` keeps the
+set of components equal to the browser half's: a component added there fails
+here until it has a pair or a written reason.
+
 ## What it is, and what it is not
 
 **It draws for a server that is running.** Authorization is decided on the

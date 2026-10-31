@@ -13,6 +13,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // Dialog is the state half: whether it is open, and the two ways it closes.
@@ -59,6 +60,11 @@ func (d *Dialog) Dismissed() bool {
 
 // DialogProps is what a dialog is drawn from.
 type DialogProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Width is how wide the panel may get. Zero takes a width a form reads
 	// comfortably at.
 	Width unit.Dp
@@ -79,6 +85,10 @@ type DialogProps struct {
 	Dismissible bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p DialogProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the dialog over the screen and returns the room it took, which
 // is all of it.
 //
@@ -86,6 +96,13 @@ type DialogProps struct {
 // unconditionally -- which is what keeps the call beside the rest of the screen
 // rather than inside a branch that somebody has to remember to write.
 func (p DialogProps) Layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
+	return p.layout(c, state, content)
+}
+
+// layout draws the dialog. Its root is the panel and not the whole overlay: what
+// a caller restyles on a dialog is the box, and the scrim behind it is the
+// window's.
+func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
 	if !state.open {
 		return ayra.Dimensions{}
 	}
@@ -121,11 +138,13 @@ func (p DialogProps) Layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 		// The panel takes the presses that land on it, so the barrier behind
 		// does not read them as a press outside.
 		measure := op.Record(panel.Ops)
-		dims := surface(panel, panel.Theme.Colours.Popover, panel.Theme.Colours.Border, controlRadius(panel), func(c ayra.Context) ayra.Dimensions {
-			return layout.UniformInset(20).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-				return content(c.With(gtx))
-			})
-		})
+		root := panel.Theme.Resolve("dialog", "root", p.VariantName("default"), theme.Style{
+			Background: theme.Colour(panel.Theme.Colours.Popover),
+			Border:     theme.Colour(panel.Theme.Colours.Border),
+			Radius:     theme.Pt(panel.Theme.Metrics.Radius),
+			Padding:    theme.Uniform(20),
+		}, p.ComponentProps)
+		dims := Surface(panel, root, content)
 		drawn := measure.Stop()
 
 		defer clip.Rect{Max: dims.Size}.Push(panel.Ops).Pop()

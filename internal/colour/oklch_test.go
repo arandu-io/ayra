@@ -1,4 +1,4 @@
-package main
+package colour
 
 import "testing"
 
@@ -42,7 +42,7 @@ func TestTheConversionLandsOnKnownColours(t *testing.T) {
 	}
 	for _, p := range primaries {
 		t.Run(p.name, func(t *testing.T) {
-			if got := oklchToRGB(p.l, p.c, p.h, 1); !within(got, p.want, 1) {
+			if got := OKLCH(p.l, p.c, p.h, 1); !within(got, p.want, 1) {
 				t.Errorf("oklch(%g %g %g) = %+v, want %+v", p.l, p.c, p.h, got, p.want)
 			}
 		})
@@ -50,7 +50,7 @@ func TestTheConversionLandsOnKnownColours(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := oklchToRGB(c.l, c.c, c.h, c.a)
+			got := OKLCH(c.l, c.c, c.h, c.a)
 			if !within(got, c.want, 1) {
 				t.Errorf("oklch(%g %g %g / %g) = %+v, want %+v", c.l, c.c, c.h, c.a, got, c.want)
 			}
@@ -87,7 +87,7 @@ func TestTheTransferFunctionIsPiecewise(t *testing.T) {
 // cannot show, because the alternative is a channel that wraps and a red that
 // comes out green.
 func TestAColourOutsideTheGamutIsClipped(t *testing.T) {
-	got := oklchToRGB(0.7, 0.4, 27, 1)
+	got := OKLCH(0.7, 0.4, 27, 1)
 	if got.R != 255 {
 		t.Errorf("a red past the gamut clipped to R=%d, want 255", got.R)
 	}

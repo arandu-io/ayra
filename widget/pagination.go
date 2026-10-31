@@ -16,7 +16,12 @@ type Pages struct {
 	current  int
 	previous Button
 	next     Button
-	numbers  []Button
+	// numbers holds a button for each page in the row, by page, and for no
+	// other: the total comes from the server, and a button per page is an
+	// allocation the server sizes. shown is the row as it was last drawn,
+	// which is the order the buttons are asked in.
+	numbers map[int]*Button
+	shown   []int
 }
 
 // Current is the page showing, counting from one.
@@ -31,6 +36,11 @@ func (p *Pages) Show(page int) { p.current = page }
 // are many, which is the only part of a pager with any logic in it: a row of
 // two hundred numbers is not navigation.
 type PaginationProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Total is how many pages there are.
 	Total int
 	// Window is how many numbers to show either side of the current one, at
@@ -39,17 +49,24 @@ type PaginationProps struct {
 	Window int
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p PaginationProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the pager and returns the room it took.
 func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
+	return withRoot(c, "pagination", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p PaginationProps) layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	if state.current < 1 {
 		state.current = 1
 	}
 	if p.Total > 0 && state.current > p.Total {
 		state.current = p.Total
-	}
-
-	for len(state.numbers) < p.Total {
-		state.numbers = append(state.numbers, Button{})
 	}
 
 	if state.previous.Clicked(c) && state.current > 1 {
@@ -58,9 +75,9 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	if state.next.Clicked(c) && state.current < p.Total {
 		state.current++
 	}
-	for index := range state.numbers[:min(len(state.numbers), p.Total)] {
-		if state.numbers[index].Clicked(c) {
-			state.current = index + 1
+	for _, page := range state.shown {
+		if button := state.numbers[page]; button != nil && button.Clicked(c) && page <= p.Total {
+			state.current = page
 		}
 	}
 
@@ -80,7 +97,9 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 		}),
 	}
 
-	for _, page := range p.visible(state.current, window) {
+	row := p.visible(state.current, window)
+	state.hold(row)
+	for _, page := range row {
 		page := page
 		children = append(children, layout.Rigid(layout.Spacer{Width: 4}.Layout))
 
@@ -104,7 +123,7 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 				variant = Secondary
 			}
 			return ButtonProps{Label: strconv.Itoa(page), Variant: variant, Size: Small}.
-				Layout(inner, &state.numbers[page-1])
+				Layout(inner, state.numbers[page])
 		}))
 	}
 
@@ -116,6 +135,32 @@ func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	)
 
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
+}
+
+// hold keeps a button for each page in row, and drops the rest.
+//
+// A page that leaves the row loses its button, and with it any press half made
+// on it: the number it stood for is no longer on the screen.
+func (p *Pages) hold(row []int) {
+	if p.numbers == nil {
+		p.numbers = make(map[int]*Button, len(row))
+	}
+	kept := make(map[int]bool, len(row))
+	for _, page := range row {
+		if page == 0 {
+			continue
+		}
+		kept[page] = true
+		if p.numbers[page] == nil {
+			p.numbers[page] = &Button{}
+		}
+	}
+	for page := range p.numbers {
+		if !kept[page] {
+			delete(p.numbers, page)
+		}
+	}
+	p.shown = append(p.shown[:0], row...)
 }
 
 // step draws one of the two ends.
@@ -167,25 +212,36 @@ func (p PaginationProps) wider(c ayra.Context, state *Pages, window int) bool {
 // visible answers the pages to draw, with 0 standing for a gap.
 //
 // The ends are always shown, because "page one" and "the last page" are the two
-// a person looks for and neither is reachable by pressing next.
+// a person looks for and neither is reachable by pressing next. One gap stands
+// for any run of pages, and two gaps never sit beside each other: a row reading
+// "1 ... ... 40" says nothing the first one did not.
+//
+// It is computed from the window rather than by walking the pages, because the
+// total is the server's: walking it was ten million steps, and an allocation
+// of ten million, on every frame of a pager that shows nine numbers.
 func (p PaginationProps) visible(current, window int) []int {
 	if p.Total <= 0 {
 		return nil
 	}
+	current = min(max(current, 1), p.Total)
+	window = max(window, 0)
 
-	pages := make([]int, 0, p.Total)
-	for page := 1; page <= p.Total; page++ {
-		near := page >= current-window && page <= current+window
-		if page == 1 || page == p.Total || near {
-			pages = append(pages, page)
-			continue
-		}
-		// One gap stands for any run of pages, and two gaps never sit beside
-		// each other: a row reading "1 ... ... 40" says nothing the first one
-		// did not.
-		if len(pages) > 0 && pages[len(pages)-1] != 0 {
+	low, high := max(current-window, 1), min(current+window, p.Total)
+	pages := make([]int, 0, high-low+5)
+	if low > 1 {
+		pages = append(pages, 1)
+		if low > 2 {
 			pages = append(pages, 0)
 		}
+	}
+	for page := low; page <= high; page++ {
+		pages = append(pages, page)
+	}
+	if high < p.Total {
+		if high < p.Total-1 {
+			pages = append(pages, 0)
+		}
+		pages = append(pages, p.Total)
 	}
 	return pages
 }

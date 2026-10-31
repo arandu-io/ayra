@@ -434,13 +434,17 @@ func TestTheDotsAreRebuiltWhenTheNumberOfPositionsChanges(t *testing.T) {
 	state := &Carousel{}
 
 	CarouselProps{Count: 40, Dots: true}.Layout(carouselFrame(t, 400), state, blank)
-	if len(state.dots) != 40 {
-		t.Fatalf("a carousel over 40 positions holds %d dots", len(state.dots))
+	first := state.dots[0]
+	if first == nil || state.dots[39] == nil {
+		t.Fatal("a carousel over 40 positions has no mark for an end")
 	}
 
 	CarouselProps{Count: 3, Dots: true}.Layout(carouselFrame(t, 400), state, blank)
 	if len(state.dots) != 3 {
 		t.Errorf("after the list got shorter the carousel holds %d dots, want 3", len(state.dots))
+	}
+	if state.dots[0] == first {
+		t.Error("the first mark of forty positions answers for the first of three")
 	}
 	if state.first > 2 {
 		t.Errorf("the window stayed at position %d of a carousel with three", state.first)
@@ -501,8 +505,8 @@ func TestADisabledCarouselDoesNotAnswerAPress(t *testing.T) {
 	props.Layout(carouselFrame(t, 400), state, blank)
 
 	state.next.click.Click()
-	if len(state.dots) > 1 {
-		state.dots[3].click.Click()
+	if dot := state.dots[4]; dot != nil {
+		dot.click.Click()
 	}
 	props.Layout(carouselFrame(t, 400), state, blank)
 
@@ -522,11 +526,11 @@ func TestAPressOnADotGoesToThatPosition(t *testing.T) {
 
 	props.Layout(carouselFrame(t, 400), state, blank)
 
-	state.dots[3].click.Click()
+	state.dots[4].click.Click()
 	props.Layout(carouselFrame(t, 400), state, blank)
 
-	if state.At() != 3 {
-		t.Errorf("a press on the fourth mark left the window at %d, want 3", state.At())
+	if state.At() != 4 {
+		t.Errorf("a press on the last mark left the window at %d, want 4", state.At())
 	}
 	if !state.Changed() {
 		t.Error("a press on a mark reported no move")

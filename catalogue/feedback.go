@@ -21,6 +21,12 @@ func feedback() []Entry {
 		meterEntry(),
 		skeletonEntry(),
 		emptyEntry(),
+		dialogTriggerEntry(),
+		formDialogEntry(),
+		hoverCardEntry(),
+		optimisticToggleEntry(),
+		deleteRowEntry(),
+		lazyLoadEntry(),
 	}
 }
 

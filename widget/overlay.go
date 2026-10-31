@@ -30,6 +30,11 @@ func (h *Hover) Hovering() bool { return h.inside }
 
 // TooltipProps is a short line that appears beside a control.
 type TooltipProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Text is the line. One line: a tooltip long enough to wrap is help, and
 	// help belongs under the control where it can be read without hovering.
 	Text string
@@ -38,8 +43,19 @@ type TooltipProps struct {
 	Below bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p TooltipProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control, and the tooltip over it while the pointer rests.
 func (p TooltipProps) Layout(c ayra.Context, state *Hover, control ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "tooltip", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, control)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p TooltipProps) layout(c ayra.Context, state *Hover, control ayra.Widget) ayra.Dimensions {
 	dims := control(c)
 
 	// The area is registered after the control is drawn and over exactly its
@@ -125,12 +141,28 @@ func (t *Toasts) Showing() int { return len(t.messages) }
 
 // ToastProps is where the stack sits.
 type ToastProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Width is how wide a message may get. Zero takes one that fits a sentence.
 	Width unit.Dp
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p ToastProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the stack in the corner of the room it was given.
 func (p ToastProps) Layout(c ayra.Context, state *Toasts) ayra.Dimensions {
+	return withRoot(c, "toast", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p ToastProps) layout(c ayra.Context, state *Toasts) ayra.Dimensions {
 	if len(state.messages) == 0 {
 		return ayra.Dimensions{}
 	}

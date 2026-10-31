@@ -46,6 +46,11 @@ const copiedFor = 2 * time.Second
 // The confirmation is the whole point. A copy that gives no sign is a copy
 // somebody does twice, then pastes to find out whether it worked.
 type CopyProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Value is what is copied.
 	Value string
 	// Label is the control's own text. Empty says "Copy".
@@ -56,8 +61,19 @@ type CopyProps struct {
 	Size Size
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CopyProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control and copies when it is pressed.
 func (p CopyProps) Layout(c ayra.Context, state *Copier) ayra.Dimensions {
+	return withRoot(c, "copy", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p CopyProps) layout(c ayra.Context, state *Copier) ayra.Dimensions {
 	if state.button.Clicked(c) {
 		c.Execute(clipboard.WriteCmd{Type: "application/text", Data: reader(p.Value)})
 		state.copied = c.Now
@@ -97,14 +113,30 @@ func (s *Segments) Choose(index int) { s.selected = index }
 // row: a filter, a unit, a view. Past four or five it becomes a [SelectProps],
 // because a row of segments that wraps is a row nobody can read as a set.
 type SegmentedProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Options are the choices, in order.
 	Options []string
 	// Size is how much room each takes.
 	Size Size
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SegmentedProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control and returns the room it took.
 func (p SegmentedProps) Layout(c ayra.Context, state *Segments) ayra.Dimensions {
+	return withRoot(c, "segmented", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SegmentedProps) layout(c ayra.Context, state *Segments) ayra.Dimensions {
 	if chosen := state.group.Clicked(c); chosen >= 0 {
 		state.selected = chosen
 	}
@@ -113,6 +145,11 @@ func (p SegmentedProps) Layout(c ayra.Context, state *Segments) ayra.Dimensions 
 
 // SidebarProps is the column of places a screen can go.
 type SidebarProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Entries are the destinations, in order.
 	Entries []string
 	// Title is the heading above them. Empty draws none.
@@ -120,6 +157,10 @@ type SidebarProps struct {
 	// Width is how wide the column is. Zero takes one that fits a name.
 	Width unit.Dp
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SidebarProps) PartNames() []string { return []string{"root"} }
 
 // Sidebar is the state half: which entry is current, and the press on each.
 type Sidebar struct {
@@ -150,6 +191,13 @@ func (s *Sidebar) Chosen(c ayra.Context) int {
 
 // Layout draws the column and returns the room it took.
 func (p SidebarProps) Layout(c ayra.Context, state *Sidebar) ayra.Dimensions {
+	return withRoot(c, "sidebar", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SidebarProps) layout(c ayra.Context, state *Sidebar) ayra.Dimensions {
 	for len(state.entries) < len(p.Entries) {
 		state.entries = append(state.entries, Button{})
 	}

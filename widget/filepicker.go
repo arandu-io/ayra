@@ -31,6 +31,11 @@ type FileEntry struct {
 	// Name is the entry's own name, without anything above it. A listing is of
 	// one directory, so the names in it are already distinct, and the picker
 	// uses the name as the entry's identity for that reason.
+	//
+	// A name that is empty, "." or "..", or that holds a slash, a backslash or
+	// a NUL, is not one entry's name: joined to the path being listed it is a
+	// path somewhere else. Such an entry is not drawn, and so is never reported
+	// as chosen or opened.
 	Name string
 	// Dir marks an entry that leads somewhere rather than one that can be
 	// chosen.
@@ -189,6 +194,11 @@ func (f *FilePicker) relist(entries []FileEntry) {
 // wanted to be modal is this inside a [DialogProps], which already owns the
 // scrim, the escape key and the press outside.
 type FilePickerProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Entries are the listing of the directory currently open, in the order
 	// they should be read. The order inside each kind is kept as it arrives,
 	// because a caller that sorted by date already made that decision and a
@@ -207,6 +217,10 @@ type FilePickerProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p FilePickerProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the picker and returns the room it took, which is the width it
 // was given.
 //
@@ -215,6 +229,13 @@ type FilePickerProps struct {
 // somebody went into a directory -- and the sizes on the right would move with
 // it.
 func (p FilePickerProps) Layout(c ayra.Context, state *FilePicker) ayra.Dimensions {
+	return withRoot(c, "filepicker", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p FilePickerProps) layout(c ayra.Context, state *FilePicker) ayra.Dimensions {
 	entries := p.visible(state.Filter())
 	state.relist(entries)
 
@@ -308,6 +329,9 @@ func (p FilePickerProps) visible(filter string) []FileEntry {
 
 	kept := make([]FileEntry, 0, len(p.Entries))
 	for _, entry := range p.Entries {
+		if !entryName(entry.Name) {
+			continue
+		}
 		if wanted != "" && !strings.Contains(strings.ToLower(entry.Name), wanted) {
 			continue
 		}
@@ -326,6 +350,15 @@ func (p FilePickerProps) visible(filter string) []FileEntry {
 		}
 	}
 	return ordered
+}
+
+// entryName reports whether name is the name of one entry in one directory.
+//
+// Empty, ".", "..", or anything holding a separator of either kind or a NUL is
+// not: the caller joins the name to the path it is listing, and joined, such a
+// name is a path somewhere else.
+func entryName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
 }
 
 // listing draws the rows inside their panel, or says why there are none.

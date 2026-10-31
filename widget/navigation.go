@@ -8,6 +8,7 @@ import (
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // Crumbs is the state half of a breadcrumb: the press on each step.
@@ -31,14 +32,30 @@ func (c *Crumbs) Clicked(ctx ayra.Context) int {
 
 // BreadcrumbProps is the trail back to where somebody came from.
 type BreadcrumbProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Steps are the places, in order, with the current one last. The last is
 	// drawn as the page rather than as a link: a trail whose final step invites
 	// a press offers to navigate to where somebody already is.
 	Steps []string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p BreadcrumbProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the trail and returns the room it took.
 func (p BreadcrumbProps) Layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
+	return withRoot(c, "breadcrumb", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 	for len(state.clicks) < len(p.Steps) {
 		state.clicks = append(state.clicks, engine.Clickable{})
 	}
@@ -80,6 +97,11 @@ func (p BreadcrumbProps) Layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 // rule under it is what says which, and it is the only thing that can -- there
 // is no cursor to change on a touch screen.
 type LinkProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Text is what is written.
 	Text string
 	// Muted draws it as a secondary link, for one in a footer or beside a
@@ -87,8 +109,19 @@ type LinkProps struct {
 	Muted bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p LinkProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the link and returns the room it took.
 func (p LinkProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
+	return withRoot(c, "link", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p LinkProps) layout(c ayra.Context, state *Button) ayra.Dimensions {
 	ink := c.Theme.Colours.Primary
 	if p.Muted {
 		ink = c.Theme.Colours.MutedForeground
@@ -100,7 +133,7 @@ func (p LinkProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 
 		size := unit.Sp(c.Theme.Type.Body)
 		dims := drawText(inner, p.Text, size, ink, 1, text.Start, plain())
-		underline(inner, dims, p.Text, size, ink)
+		underline(inner, dims, p.Text, theme.Style{Foreground: theme.Colour(ink), Font: theme.Font{Size: theme.Pt(float32(size))}})
 		return dims
 	})
 }
@@ -111,6 +144,11 @@ func (p LinkProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 // different things: the first is something that has not loaded, the second is
 // something there is none of. Saying which is the whole job.
 type EmptyProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Title is the one line.
 	Title string
 	// Body is the sentence under it, and the place to say what would put
@@ -118,8 +156,19 @@ type EmptyProps struct {
 	Body string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p EmptyProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the message centred in the room it was given.
 func (p EmptyProps) Layout(c ayra.Context) ayra.Dimensions {
+	return withRoot(c, "empty", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p EmptyProps) layout(c ayra.Context) ayra.Dimensions {
 	return layout.Center.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
 		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(inner.Context,
@@ -139,6 +188,11 @@ func (p EmptyProps) Layout(c ayra.Context) ayra.Dimensions {
 
 // StatProps is one measured figure and what it counts.
 type StatProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Value is the figure, already formatted: this draws it and does not decide
 	// how a number is written, because that is a locale's decision and not a
 	// control's.
@@ -149,8 +203,19 @@ type StatProps struct {
 	Note string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p StatProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the figure above its label.
 func (p StatProps) Layout(c ayra.Context) ayra.Dimensions {
+	return withRoot(c, "stat", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p StatProps) layout(c ayra.Context) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return drawText(c.With(gtx), p.Value, unit.Sp(c.Theme.Type.Display), c.Theme.Colours.Foreground, 1, text.Start, semibold())

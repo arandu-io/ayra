@@ -62,7 +62,7 @@ func (a *App) layoutHome(c ayra.Context, st status) ayra.Dimensions {
 // is easy to leave out and a closure inside a layout is a decision no test can
 // reach without pressing a button.
 func (a *App) signOut(ctx context.Context) (client.Page, error) {
-	page, err := a.server.Post(ctx, "/logout", nil)
+	page, err := a.server.Post(ctx, client.At("logout"), nil)
 	if err != nil {
 		return page, err
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // SeparatorProps is what a rule between two things is drawn from.
@@ -15,6 +16,10 @@ import (
 // label would be a heading with a line through it, which is a different thing
 // and belongs to whoever draws the heading.
 type SeparatorProps struct {
+	// ComponentProps is what the caller changes on this one instance. A
+	// separator publishes one part, "root", and its background is the rule.
+	ComponentProps
+
 	// Vertical draws it down instead of across, for a rule between two columns.
 	Vertical bool
 
@@ -22,6 +27,10 @@ type SeparatorProps struct {
 	// short of the card's own edge instead of touching it.
 	Inset unit.Dp
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SeparatorProps) PartNames() []string { return []string{"root"} }
 
 // Layout draws the rule and returns the room it took.
 //
@@ -50,6 +59,9 @@ func (p SeparatorProps) Layout(c ayra.Context) ayra.Dimensions {
 		rule.Min.X, rule.Max.X = inset, max(size.X-inset, inset)
 	}
 
-	paint.FillShape(c.Ops, c.Theme.Colours.Border, clip.Rect(rule).Op())
+	style := c.Theme.Resolve("separator", "root", p.VariantName("default"), theme.Style{
+		Background: theme.Colour(c.Theme.Colours.Border),
+	}, p.ComponentProps)
+	paint.FillShape(c.Ops, style.Background.NRGBA(), clip.Rect(rule).Op())
 	return ayra.Dimensions{Size: size}
 }

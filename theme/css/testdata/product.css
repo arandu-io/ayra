@@ -1,0 +1,135 @@
+/* The tokens of a product stylesheet, in the shape a real one has: a font under
+ * @theme, a light scheme under :root, the dark one under .dark, aliases between
+ * properties, and properties that are not colours at all (a clamp(), a cubic
+ * bezier, a duration) that the reader has to step over. The values are the ones
+ * of the Alpr.sh panel; the file is the fixture the product theme is tested
+ * against, so a change in the reader shows up as a change in these colours. */
+@theme {
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+:root {
+  --brand-graphite: #222222;
+  --brand-neon: #00ffa3;
+  --tone-in: #0e7490;
+  --tone-read: #00875a;
+  --tone-act: #d92d20;
+  --box-green: #39ff14;
+  --box-red: #ff2a2a;
+  --box-pink: #ff2bd6;
+  --box-cyan: #00e5ff;
+  --box-yellow: #ffe600;
+  --box-orange: #ff8a00;
+  --box-white: #ffffff;
+  --box-blue: #2f8cff;
+  --rule-w: 1px;
+  --strip-h: 64px;
+  --page-max: 1240px;
+  --gutter: 24px;
+  --radius: 0.375rem;
+  --inset: clamp(1.25rem, 0.5rem + 3vw, 3rem);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 180ms;
+  --t-mid: 320ms;
+  --t-slow: 720ms;
+  --screen: #ffffff;
+  --screen-2: #f7f7f7;
+  --screen-3: #ebebeb;
+  --screen-line: #d6d6d6;
+  --screen-ink: #000000;
+  --screen-muted: #5c5c5c;
+  --screen-accent: #000000;
+  --screen-accent-ink: #ffffff;
+  --screen-accent-hover: #333333;
+  --screen-in: var(--tone-in);
+  --screen-read: var(--tone-read);
+  --screen-act: var(--tone-act);
+  --screen-error: #b42318;
+  --t-flag: #5c5c5c;
+  --t-str: #333333;
+  --t-num: #000000;
+  --t-dim: #8a8a8a;
+  --background: #f4f4f4;
+  --foreground: #000000;
+  --surface: #ffffff;
+  --surface-2: #ebebeb;
+  --rule: #d6d6d6;
+  --rule-strong: #b0b0b0;
+  --ink-2: #333333;
+  --accent-ink: #000000;
+  --selection: #d9d9d9;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #222222;
+  --primary-foreground: #ffffff;
+  --secondary: #ebebeb;
+  --secondary-foreground: #222222;
+  --muted: #ebebeb;
+  --muted-foreground: #5c5c5c;
+  --accent: #ebebeb;
+  --accent-foreground: #222222;
+  --border: #d6d6d6;
+  --input: #c2c2c2;
+  --ring: #222222;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #222222;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ebebeb;
+  --sidebar-accent-foreground: #222222;
+  --sidebar-border: #d6d6d6;
+  --sidebar-ring: #222222;
+}
+.dark {
+  --tone-in: #00e5ff;
+  --tone-read: var(--brand-neon);
+  --tone-act: #ff5a52;
+  --screen: #000000;
+  --screen-2: #111111;
+  --screen-3: #1a1a1a;
+  --screen-line: #2a2a2a;
+  --screen-ink: #f4f4f4;
+  --screen-muted: #8a8a8a;
+  --screen-accent: #ffffff;
+  --screen-accent-ink: #000000;
+  --screen-accent-hover: #d9d9d9;
+  --screen-error: #ffb4a8;
+  --t-flag: #a6a6a6;
+  --t-str: #d9d9d9;
+  --t-num: #ffffff;
+  --t-dim: #6b6b6b;
+  --background: #000000;
+  --foreground: #f4f4f4;
+  --surface: #111111;
+  --surface-2: #1a1a1a;
+  --rule: #2a2a2a;
+  --rule-strong: #444444;
+  --ink-2: #c4c4c4;
+  --accent-ink: #ffffff;
+  --selection: #3a3a3a;
+  --card: #111111;
+  --card-foreground: #f4f4f4;
+  --popover: #161616;
+  --popover-foreground: #f4f4f4;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #222222;
+  --secondary-foreground: #f4f4f4;
+  --muted: #1a1a1a;
+  --muted-foreground: #9a9a9a;
+  --accent: #222222;
+  --accent-foreground: #f4f4f4;
+  --border: #2a2a2a;
+  --input: #3a3a3a;
+  --ring: #ffffff;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #f4f4f4;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #f4f4f4;
+  --sidebar-border: #2a2a2a;
+  --sidebar-ring: #ffffff;
+}
+

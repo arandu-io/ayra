@@ -21,6 +21,11 @@ import (
 // wrong thing -- and in a column of them, drifting by one is the failure that
 // reads as correct.
 type FigureProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Caption is the line under it.
 	Caption string
 	// Bordered draws a rule around the content, for something whose own edges
@@ -28,8 +33,19 @@ type FigureProps struct {
 	Bordered bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p FigureProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the content with its caption.
 func (p FigureProps) Layout(c ayra.Context, content ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "figure", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p FigureProps) layout(c ayra.Context, content ayra.Widget) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
@@ -55,6 +71,11 @@ func (p FigureProps) Layout(c ayra.Context, content ayra.Widget) ayra.Dimensions
 // rather than by the caller splitting the string: a caller that split it would
 // decide what matching means, and two screens would decide differently.
 type HighlightProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Text is the whole line.
 	Text string
 	// Match is the part to mark. Empty marks nothing, which is what a result
@@ -64,8 +85,19 @@ type HighlightProps struct {
 	Role Role
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p HighlightProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the line with the match behind a wash.
 func (p HighlightProps) Layout(c ayra.Context) ayra.Dimensions {
+	return withRoot(c, "highlight", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p HighlightProps) layout(c ayra.Context) ayra.Dimensions {
 	size := p.Role.size(c.Theme)
 	ink := c.Theme.Colours.Foreground
 
@@ -130,12 +162,28 @@ func marked(c ayra.Context, match string, size unit.Sp, ink color.NRGBA) ayra.Di
 // in one is a record, an event or a message, and none of those is something a
 // control should know the shape of.
 type FeedProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Count is how many entries there are.
 	Count int
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p FeedProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws each entry against the rail.
 func (p FeedProps) Layout(c ayra.Context, entry func(int) ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "feed", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, entry)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p FeedProps) layout(c ayra.Context, entry func(int) ayra.Widget) ayra.Dimensions {
 	children := make([]layout.FlexChild, 0, p.Count)
 
 	for index := 0; index < p.Count; index++ {

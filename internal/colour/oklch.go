@@ -1,4 +1,7 @@
-package main
+// Package colour converts the colour spaces a stylesheet writes into the 8-bit
+// sRGB the drawing layer takes. It is shared by the generator of the default
+// palette and by the one a product runs on its own stylesheet.
+package colour
 
 import "math"
 
@@ -7,7 +10,7 @@ type Colour struct {
 	R, G, B, A uint8
 }
 
-// oklchToRGB converts one colour from OKLCH to 8-bit sRGB.
+// OKLCH converts one colour from OKLCH to 8-bit sRGB.
 //
 // The conversion is written out rather than taken from a library for the
 // reason the rest of this module has one dependency: it is forty lines of
@@ -21,7 +24,7 @@ type Colour struct {
 // l is 0..1, c is chroma in the same scale, h is degrees. A value outside the
 // sRGB gamut is clipped per channel, because the target is a screen and a
 // screen has no answer for a colour it cannot show.
-func oklchToRGB(l, c, h, alpha float64) Colour {
+func OKLCH(l, c, h, alpha float64) Colour {
 	hr := h * math.Pi / 180
 	a := c * math.Cos(hr)
 	b := c * math.Sin(hr)

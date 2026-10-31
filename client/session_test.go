@@ -59,7 +59,7 @@ func TestASessionIsLostWithoutAStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 	if page, err := ask(t, first); page.View != "home" {
@@ -89,7 +89,7 @@ func TestASessionSurvivesTheApplicationClosing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,10 +118,10 @@ func TestSigningOutIsNotUndoneByRestarting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/logout"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("logout")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,10 +176,10 @@ func TestADeletionSpelledWithAnExpiryIsAlsoADeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/logout"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("logout")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -202,7 +202,7 @@ func TestForgettingEndsTheSessionOnThisSide(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 	if err := talk.Forget(); err != nil {
@@ -237,7 +237,7 @@ func TestAnExpiredSessionIsNotCarried(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,7 +264,7 @@ func TestTwoServersAreTwoSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := dev.Get(context.Background(), "/login"); err != nil {
+	if _, err := dev.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -273,7 +273,7 @@ func TestTwoServersAreTwoSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prod.Get(context.Background(), "/login"); err != nil {
+	if _, err := prod.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,7 +305,7 @@ func TestTheSessionFileIsReadableByNobodyElse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -344,7 +344,7 @@ func TestACorruptSessionFileIsNotAnApplicationThatWillNotStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := talk.Get(context.Background(), "/login"); err != nil {
+	if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -448,7 +448,7 @@ func TestTheSessionFileHoldsNoMoreThanItNeeds(t *testing.T) {
 // session.
 func ask(t *testing.T, c *client.Client) (client.Page, error) {
 	t.Helper()
-	return c.Get(context.Background(), "/")
+	return c.Get(context.Background(), client.At())
 }
 
 // fileStore is a store under a directory this test owns.
@@ -540,10 +540,10 @@ func TestADeletionWithAnAgeOfZeroIsADeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/login"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("login")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.Get(context.Background(), "/logout"); err != nil {
+	if _, err := first.Get(context.Background(), client.At("logout")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -620,7 +620,7 @@ func TestClearingOneServerLeavesTheOthers(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := talk.Get(context.Background(), "/login"); err != nil {
+		if _, err := talk.Get(context.Background(), client.At("login")); err != nil {
 			t.Fatal(err)
 		}
 	}

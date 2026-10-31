@@ -4,7 +4,9 @@ import (
 	"image/color"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/theme"
 )
@@ -40,6 +42,9 @@ func (s Severity) String() string {
 
 // AlertProps is what a message about the screen it is on is drawn from.
 type AlertProps struct {
+	// ComponentProps is what the caller changes on this one instance. An alert
+	// publishes "root", "title" and "message".
+	ComponentProps
 	// Title is the one line somebody reads if they read nothing else.
 	Title string
 	// Body is the detail. Empty draws the title alone, which is right for a
@@ -49,6 +54,10 @@ type AlertProps struct {
 	Severity Severity
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p AlertProps) PartNames() []string { return []string{"root", "title", "message"} }
+
 // Layout draws the alert and returns the room it took.
 //
 // It fills the width it is given, unlike a badge: an alert is a band across the
@@ -56,23 +65,38 @@ type AlertProps struct {
 // the middle of a form.
 func (p AlertProps) Layout(c ayra.Context) ayra.Dimensions {
 	fill, ink, border := p.colours(c.Theme)
+	variant := p.VariantName(p.Severity.String())
 
-	return surface(c, fill, border, controlRadius(c), func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(12).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			if p.Body == "" {
-				return drawLine(inner, p.Title, unit.Sp(c.Theme.Type.Body), ink, semibold())
-			}
-			return layout.Flex{Axis: layout.Vertical}.Layout(inner.Context,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return drawLine(inner.With(gtx), p.Title, unit.Sp(c.Theme.Type.Body), ink, semibold())
-				}),
-				layout.Rigid(layout.Spacer{Height: 4}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return drawLine(inner.With(gtx), p.Body, unit.Sp(c.Theme.Type.Small), ink, plain())
-				}),
-			)
-		})
+	root := c.Theme.Resolve("alert", "root", variant, theme.Style{
+		Background: theme.Colour(fill),
+		Border:     theme.Colour(border),
+		Padding:    theme.Uniform(12),
+	}, p.ComponentProps)
+	title := c.Theme.Resolve("alert", "title", variant, theme.Style{
+		Foreground: theme.Colour(ink),
+		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Body)},
+	}, p.ComponentProps)
+	message := c.Theme.Resolve("alert", "message", variant, theme.Style{
+		Foreground: theme.Colour(ink),
+		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Small)},
+	}, p.ComponentProps)
+
+	return Surface(c, root, func(c ayra.Context) ayra.Dimensions {
+		line := func(c ayra.Context, content string, s theme.Style, face font.Font) ayra.Dimensions {
+			return drawPart(c, content, s, unit.Sp(c.Theme.Type.Body), 0, text.Start, face)
+		}
+		if p.Body == "" {
+			return line(c, p.Title, title, semibold())
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return line(c.With(gtx), p.Title, title, semibold())
+			}),
+			layout.Rigid(layout.Spacer{Height: 4}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return line(c.With(gtx), p.Body, message, plain())
+			}),
+		)
 	})
 }
 

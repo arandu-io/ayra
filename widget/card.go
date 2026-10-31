@@ -2,8 +2,8 @@ package widget
 
 import (
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // CardProps is what a grouped region of a screen is drawn from.
@@ -12,6 +12,10 @@ import (
 // own, no close button and no state. What goes inside it is a widget, so a card
 // containing a heading and a form is written by writing a heading and a form.
 type CardProps struct {
+	// ComponentProps is what the caller changes on this one instance. A card
+	// publishes one part, "root".
+	ComponentProps
+
 	// Padding is the room between the border and the content. Zero takes a
 	// value that leaves text clear of the corner radius.
 	Padding unit.Dp
@@ -21,6 +25,10 @@ type CardProps struct {
 	Muted bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CardProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the card around the content and returns the room it took.
 func (p CardProps) Layout(c ayra.Context, content ayra.Widget) ayra.Dimensions {
 	padding := p.Padding
@@ -28,14 +36,17 @@ func (p CardProps) Layout(c ayra.Context, content ayra.Widget) ayra.Dimensions {
 		padding = 16
 	}
 
-	fill := c.Theme.Colours.Card
+	fill, variant := c.Theme.Colours.Card, "default"
 	if p.Muted {
-		fill = c.Theme.Colours.Muted
+		fill, variant = c.Theme.Colours.Muted, "muted"
 	}
 
-	return surface(c, fill, c.Theme.Colours.Border, controlRadius(c), func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(padding).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			return content(c.With(gtx))
-		})
-	})
+	style := c.Theme.Resolve("card", "root", p.VariantName(variant), theme.Style{
+		Background: theme.Colour(fill),
+		Foreground: theme.Colour(c.Theme.Colours.CardForeground),
+		Border:     theme.Colour(c.Theme.Colours.Border),
+		Radius:     theme.Pt(c.Theme.Metrics.Radius),
+		Padding:    theme.Uniform(float32(padding)),
+	}, p.ComponentProps)
+	return Surface(c, style, content)
 }

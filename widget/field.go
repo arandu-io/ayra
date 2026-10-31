@@ -18,6 +18,11 @@ import (
 // every form in a product agree, and it is the single most repeated shape in
 // any application that has forms at all.
 type FieldProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Label names the control.
 	Label string
 	// Help is the sentence under it, shown while there is no error.
@@ -33,8 +38,19 @@ type FieldProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p FieldProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the label, the control and whichever line belongs under it.
 func (p FieldProps) Layout(c ayra.Context, control ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "field", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, control)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p FieldProps) layout(c ayra.Context, control ayra.Widget) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if p.Label == "" {
@@ -74,6 +90,11 @@ func (p FieldProps) Invalid() bool { return p.Error != "" }
 // a failed sign-in on a phone, where the keyboard hides half the letters and
 // autocorrect touches the rest.
 type PasswordProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Placeholder is shown while the field is empty.
 	Placeholder string
 	// Disabled draws the field as unavailable and refuses input.
@@ -82,6 +103,10 @@ type PasswordProps struct {
 	// whoever knows; this carries the look and nothing else.
 	Invalid bool
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p PasswordProps) PartNames() []string { return []string{"root"} }
 
 // Secret is the state half of a password field: what is typed, and whether it
 // is shown.
@@ -100,6 +125,13 @@ func (p *Secret) Shown() bool { return p.shown }
 
 // Layout draws the field with the control that reveals it.
 func (p PasswordProps) Layout(c ayra.Context, state *Secret) ayra.Dimensions {
+	return withRoot(c, "password", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 	if state.reveal.Clicked(c.Context) {
 		state.shown = !state.shown
 	}
