@@ -378,3 +378,193 @@ func themeToggleEntry() Entry {
 		},
 	}
 }
+
+func outputEntry() Entry {
+	return Entry{
+		Control: "OutputProps",
+		Summary: "A value the screen calculated, with the name of what it is.",
+		Build: func() ayra.Widget {
+			return stack(10,
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.OutputProps{Label: "Total", Value: "R$ 1.234,56", Role: widget.Heading}.Layout(c)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.OutputProps{Label: "Reads today", Value: "412", Role: widget.Mono, Tone: widget.Muted}.Layout(c)
+				},
+			)
+		},
+	}
+}
+
+func responsiveImageEntry() Entry {
+	return Entry{
+		Control: "ResponsiveImageProps",
+		Summary: "A picture in several sizes: the narrowest that is still as wide as the box, in device pixels.",
+		Build: func() ayra.Widget {
+			var state widget.ResponsiveImage
+			variant := func(width int) widget.ImageVariant {
+				return widget.ImageVariant{Width: width, Source: widget.ImageSourceFunc(func(context.Context) (image.Image, error) {
+					return demoPicture(width/4, width/10), nil
+				})}
+			}
+			props := widget.ResponsiveImageProps{Variants: []widget.ImageVariant{variant(400), variant(800), variant(1600)}, Height: 100, Alt: "A gate camera"}
+			return sized(300, func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &state) })
+		},
+	}
+}
+
+func dialogTriggerEntry() Entry {
+	return Entry{
+		Control: "DialogTriggerProps",
+		Summary: "The button that opens a dialog the screen holds.",
+		Build: func() ayra.Widget {
+			var dialog widget.Dialog
+			var trigger, close widget.Button
+			return func(c ayra.Context) ayra.Dimensions {
+				d := widget.DialogTriggerProps{Label: "Remove camera", Icon: icons.Trash(), Variant: widget.Outline, Dialog: &dialog}.Layout(c, &trigger)
+				widget.DialogProps{Modal: true, Dismissible: true, Width: 320}.Layout(c, &dialog, func(c ayra.Context) ayra.Dimensions {
+					return widget.ButtonProps{Label: "Close"}.Layout(c, &close)
+				})
+				if close.Clicked(c) {
+					dialog.Close()
+				}
+				return d
+			}
+		},
+	}
+}
+
+func deleteRowEntry() Entry {
+	return Entry{
+		Control: "DeleteRowProps",
+		Summary: "The control at the end of a row: the first press asks, the second answers.",
+		Build: func() ayra.Widget {
+			var one, two widget.DeleteRow
+			two.Arm()
+			return stack(10,
+				tight(func(c ayra.Context) ayra.Dimensions { return widget.DeleteRowProps{}.Layout(c, &one) }),
+				tight(func(c ayra.Context) ayra.Dimensions { return widget.DeleteRowProps{}.Layout(c, &two) }),
+			)
+		},
+	}
+}
+
+func lazyLoadEntry() Entry {
+	return Entry{
+		Control: "LazyLoadProps",
+		Summary: "A region that holds a placeholder until the application says what it needs has arrived.",
+		Build: func() ayra.Widget {
+			var waiting, ready widget.LazyLoad
+			ready.Ready()
+			return stack(10,
+				sized(280, func(c ayra.Context) ayra.Dimensions {
+					return widget.LazyLoadProps{}.Layout(c, &waiting, func(c ayra.Context) ayra.Dimensions { return ayra.Dimensions{} })
+				}),
+				sized(280, func(c ayra.Context) ayra.Dimensions {
+					return widget.LazyLoadProps{}.Layout(c, &ready, func(c ayra.Context) ayra.Dimensions {
+						return widget.TextProps{Content: "What was fetched."}.Layout(c)
+					})
+				}),
+			)
+		},
+	}
+}
+
+func optimisticToggleEntry() Entry {
+	return Entry{
+		Control: "OptimisticToggleProps",
+		Summary: "A switch that moves at once, asks the server in the background and goes back if the answer is no.",
+		Build: func() ayra.Widget {
+			var accepted, refused widget.OptimisticToggle
+			return stack(10,
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.OptimisticToggleProps{Label: "Notify me", Confirm: func(context.Context, bool) error { return nil }}.Layout(c, &accepted)
+				},
+				func(c ayra.Context) ayra.Dimensions {
+					return widget.OptimisticToggleProps{Label: "The server says no", Confirm: func(context.Context, bool) error {
+						time.Sleep(400 * time.Millisecond)
+						return errors.New("not allowed")
+					}}.Layout(c, &refused)
+				},
+			)
+		},
+	}
+}
+
+func activeSearchEntry() Entry {
+	return Entry{
+		Control: "ActiveSearchProps",
+		Summary: "A search that answers as it is typed, with the results listed under the field.",
+		Build: func() ayra.Widget {
+			var state widget.ActiveSearch
+			props := widget.ActiveSearchProps{
+				Placeholder: "Search a plate",
+				Source: widget.LookupFunc(func(ctx context.Context, query string) ([]widget.Option, error) {
+					var found []widget.Option
+					for _, plate := range []string{"ABC1D23", "ABC1234", "XYZ9A87", "QWE4R56"} {
+						if strings.Contains(strings.ToLower(plate), strings.ToLower(query)) {
+							found = append(found, widget.Option{Value: plate, Label: plate})
+						}
+					}
+					return found, nil
+				}),
+			}
+			return sized(320, func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &state) })
+		},
+	}
+}
+
+func hoverCardEntry() Entry {
+	return Entry{
+		Control: "HoverCardProps",
+		Summary: "A panel that opens when the pointer rests on its control, and on a press where there is no hover.",
+		Build: func() ayra.Widget {
+			var state widget.HoverCard
+			var button widget.Button
+			return tight(func(c ayra.Context) ayra.Dimensions {
+				return widget.HoverCardProps{Width: 260}.Layout(c, &state,
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Label: "Gate camera", Variant: widget.Link}.Layout(c, &button)
+					},
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.TextProps{Content: "Reads plates at the main gate. Online since Monday.", Tone: widget.Muted}.Layout(c)
+					})
+			})
+		},
+	}
+}
+
+func formDialogEntry() Entry {
+	return Entry{
+		Control: "FormDialogProps",
+		Summary: "A dialog that holds a form: the fields, the server's errors beside them and the answers reported raw.",
+		Build: func() ayra.Widget {
+			var state widget.FormDialog
+			var open widget.Button
+			errs := map[string]string{}
+			return func(c ayra.Context) ayra.Dimensions {
+				if values, ok := state.Submitted(); ok {
+					errs = map[string]string{}
+					if len(values["plate"]) != 7 {
+						errs["plate"] = "A plate has seven characters."
+					} else {
+						state.Close()
+					}
+				}
+				if open.Clicked(c) {
+					state.Open()
+				}
+				d := widget.ButtonProps{Label: "Add a vehicle"}.Layout(c, &open)
+				widget.FormDialogProps{
+					Title: "Add a vehicle", Description: "The plate is checked by the server.",
+					Errors: errs, Width: 380,
+					Fields: []widget.FormField{
+						{Name: "plate", Label: "Plate", Mask: brazil.Plate, Placeholder: "ABC1D23", Required: true},
+						{Name: "document", Label: "Owner's CPF", Mask: brazil.CPF, Kind: widget.Number},
+					},
+				}.Layout(c, &state)
+				return d
+			}
+		},
+	}
+}

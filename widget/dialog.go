@@ -13,6 +13,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // Dialog is the state half: whether it is open, and the two ways it closes.
@@ -95,12 +96,12 @@ func (p DialogProps) PartNames() []string { return []string{"root"} }
 // unconditionally -- which is what keeps the call beside the rest of the screen
 // rather than inside a branch that somebody has to remember to write.
 func (p DialogProps) Layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
-	return withRoot(c, "dialog", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
-		return p.layout(c, state, content)
-	})
+	return p.layout(c, state, content)
 }
 
-// layout is Layout without the root part around it.
+// layout draws the dialog. Its root is the panel and not the whole overlay: what
+// a caller restyles on a dialog is the box, and the scrim behind it is the
+// window's.
 func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
 	if !state.open {
 		return ayra.Dimensions{}
@@ -137,11 +138,13 @@ func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 		// The panel takes the presses that land on it, so the barrier behind
 		// does not read them as a press outside.
 		measure := op.Record(panel.Ops)
-		dims := surface(panel, panel.Theme.Colours.Popover, panel.Theme.Colours.Border, controlRadius(panel), func(c ayra.Context) ayra.Dimensions {
-			return layout.UniformInset(20).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-				return content(c.With(gtx))
-			})
-		})
+		root := panel.Theme.Resolve("dialog", "root", p.VariantName("default"), theme.Style{
+			Background: theme.Colour(panel.Theme.Colours.Popover),
+			Border:     theme.Colour(panel.Theme.Colours.Border),
+			Radius:     theme.Pt(panel.Theme.Metrics.Radius),
+			Padding:    theme.Uniform(20),
+		}, p.ComponentProps)
+		dims := Surface(panel, root, content)
 		drawn := measure.Stop()
 
 		defer clip.Rect{Max: dims.Size}.Push(panel.Ops).Pop()

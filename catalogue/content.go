@@ -26,6 +26,9 @@ func content() []Entry {
 		iconEntry(),
 		imageEntry(),
 		relativeTimeEntry(),
+		outputEntry(),
+		responsiveImageEntry(),
+		activeSearchEntry(),
 	}
 }
 

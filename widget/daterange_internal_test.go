@@ -141,3 +141,37 @@ func TestTheCalendarSpeaksTheApplicationsLanguage(t *testing.T) {
 		t.Errorf("the calendar took %v and %v", english, portuguese)
 	}
 }
+
+func TestTheKindsOfDateTimeEachHoldTheirOwnValue(t *testing.T) {
+	var state DateTime
+	c, _ := field(t, theme.Light, 400)
+	state.month.Select(pickerDay.AddDate(0, 0, 3)) // Sunday the 13th
+	state.clock.SetValue(clockMask(false), "0930")
+	state.chosenMonth, state.chosenYear = time.October, 2026
+
+	for _, c := range []struct {
+		kind DateTimeKind
+		text string
+		want time.Time
+	}{
+		{DateAndTime, "2026-09-13 09:30", time.Date(2026, 9, 13, 9, 30, 0, 0, time.UTC)},
+		{DateOnly, "2026-09-13", time.Date(2026, 9, 13, 0, 0, 0, 0, time.UTC)},
+		{TimeOnly, "09:30", time.Date(1, 1, 1, 9, 30, 0, 0, time.UTC)},
+		{MonthOnly, "2026-10", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
+		// The 13th is a Sunday, which belongs to the week that began on the 7th.
+		{WeekOnly, "2026-W37", time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)},
+	} {
+		props := DateTimePickerProps{Kind: c.kind, Today: pickerDay}
+		if got := state.Value(c.kind, false); !got.Equal(c.want) {
+			t.Errorf("kind %d holds %v, want %v", c.kind, got, c.want)
+		}
+		if got := props.Text(&state); got != c.text {
+			t.Errorf("kind %d writes %q, want %q", c.kind, got, c.text)
+		}
+		ctx, _ := field(t, theme.Light, 400)
+		if dims := props.Layout(ctx, &state); dims.Size.X <= 0 {
+			t.Errorf("kind %d drew nothing", c.kind)
+		}
+	}
+	_ = c
+}

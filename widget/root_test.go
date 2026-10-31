@@ -127,7 +127,9 @@ func everyWidget() []each {
 			return widget.FeedProps{Count: 1, ComponentProps: i}.Layout(c, func(int) ayra.Widget { return noop })
 		}},
 		{"dialog", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
-			return widget.DialogProps{ComponentProps: i}.Layout(c, new(widget.Dialog), noop)
+			open := new(widget.Dialog)
+			open.Open()
+			return widget.DialogProps{ComponentProps: i}.Layout(c, open, noop)
 		}},
 		{"colourpicker", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.ColourPickerProps{ComponentProps: i}.Layout(c, new(widget.ColourPicker))
@@ -240,6 +242,35 @@ func everyWidget() []each {
 		{"themetoggle", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.ThemeToggleProps{ComponentProps: i}.Layout(c, new(widget.Button))
 		}},
+		{"output", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.OutputProps{Value: "R$ 10,00", ComponentProps: i}.Layout(c)
+		}},
+		{"responsiveimage", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.ResponsiveImageProps{Width: 50, Height: 50, ComponentProps: i}.Layout(c, new(widget.ResponsiveImage))
+		}},
+		{"dialogtrigger", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.DialogTriggerProps{Label: "x", ComponentProps: i}.Layout(c, new(widget.Button))
+		}},
+		{"deleterow", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.DeleteRowProps{ComponentProps: i}.Layout(c, new(widget.DeleteRow))
+		}},
+		{"lazyload", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.LazyLoadProps{Immediate: true, ComponentProps: i}.Layout(c, new(widget.LazyLoad), noop)
+		}},
+		{"optimistictoggle", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.OptimisticToggleProps{Label: "x", ComponentProps: i}.Layout(c, new(widget.OptimisticToggle))
+		}},
+		{"activesearch", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.ActiveSearchProps{ComponentProps: i}.Layout(c, new(widget.ActiveSearch))
+		}},
+		{"hovercard", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.HoverCardProps{ComponentProps: i}.Layout(c, new(widget.HoverCard), noop, noop)
+		}},
+		{"formdialog", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			open := new(widget.FormDialog)
+			open.Open()
+			return widget.FormDialogProps{Title: "x", ComponentProps: i}.Layout(c, open)
+		}},
 		{"tree", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.TreeProps{ComponentProps: i}.Layout(c, new(widget.Tree))
 		}},
@@ -251,7 +282,7 @@ func everyWidget() []each {
 // the root restyles is the fill and the corners -- so the room they take is not
 // what shows the override, and the source test that every published part is
 // resolved is the guard for them.
-var shapes = map[string]bool{"progress": true, "avatar": true, "skeleton": true, "separator": true, "image": true}
+var shapes = map[string]bool{"progress": true, "avatar": true, "skeleton": true, "separator": true, "image": true, "responsiveimage": true}
 
 func TestEveryComponentTakesAnOverride(t *testing.T) {
 	for _, w := range everyWidget() {
