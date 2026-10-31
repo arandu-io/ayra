@@ -86,6 +86,10 @@ func (d *DateRange) Changed() bool {
 	return changed
 }
 
+// Open shows the panel, for a screen that opens it by some other means than the
+// press on the field.
+func (d *DateRange) Open() { d.popover.Open() }
+
 // Showing reports whether the panel is on screen.
 func (d *DateRange) Showing() bool { return d.popover.Showing() }
 

@@ -596,6 +596,9 @@ type HoverCard struct {
 	byHover bool
 }
 
+// Open shows the panel, for a screen that opens it by some other means.
+func (h *HoverCard) Open() { h.panel.Open() }
+
 // HoverCardProps is a panel that opens when the pointer rests on its control, and
 // on a press -- the counterpart of Kyse's HoverCard. A touch screen has no hover
 // to open on, so the press is how it opens there, and the same control serves

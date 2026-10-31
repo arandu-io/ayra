@@ -114,7 +114,7 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
 				dims := buttonContent(content, p.Label, p.Icon, style)
-				if p.Variant == Link && p.Custom == "" {
+				if p.Variant == Link && p.Custom == "" && p.Icon.IsZero() {
 					underline(content, dims, p.Label, style)
 				}
 				return dims

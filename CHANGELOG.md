@@ -1,5 +1,67 @@
 # Release Notes
 
+## Unreleased
+
+### Added
+
+- `theme`: a widget is restylable the way a Kyse component is (ADR-0131). `Style`
+  says what a class would -- background, foreground, border and its width,
+  radius, padding, font, and the hover and pressed fills -- and every field left
+  unset leaves the widget's own choice alone. A `Look` holds styles by widget and
+  part, `Theme.Styles` carries the application's look, its named `Variants` and
+  the `Tokens` of its stylesheet, and `Theme.Resolve` lays four layers over what
+  a widget would draw on its own: the theme's look, the registered variant, the
+  instance's `Style` and the instance's `Parts`. A variant is a name the product
+  registers (`ComponentProps.Custom`), not a value of the closed enum, and a
+  built-in one is restyled by its own name.
+- `widget`: every `Props` type takes `ComponentProps`, publishes its parts in
+  `PartNames()` and resolves them, except `Table`, `Toolbar` and `Player`, which
+  are declared in `widget/root_test.go` with the branch that takes them. The
+  three tests of ADR-0131 exist natively: every component takes an override, and
+  it shows; every published part is resolved and every resolved part published;
+  and the directory is read, so a `Props` type with no row fails. With nothing
+  registered the pictures are byte-for-byte the ones that were approved.
+- `theme.Typography` takes the scale's typefaces (`Sans`, `Monospace`) and the
+  weights a widget's four resolve to, and `Typography.Missing` says which
+  typefaces a font collection lacks; `shell.Run` refuses a configuration that
+  names a face its fonts do not carry (`shell.MissingFaceError`).
+- `theme/css` makes a `Theme` from a product's stylesheet, at run time
+  (`css.Parse`, `Sheet.Theme`) or as committed Go (`css.Generate`, and the
+  command `theme/css/cmd/themegen`). It reads `:root`, `@theme` and `.dark`,
+  resolves `var()` per scheme, converts hex, `rgb()`, `hsl()` and `oklch()`, and
+  steps over what is not a token. `shell.Config.Theme` and `frame.Options.Theme`
+  take the result.
+- `widget`: the primitives the widgets are written from are exported for the
+  product's own: `Surface`, `DrawText`, `DrawIcon`, `DrawImage`, `Hairline`,
+  `ControlRadius`, `Clickable`, `Announce`, `Fade` and `Press`.
+- `mask`: formatting that keeps what a program stores. The package is a copy of
+  `hesape/mask`, kept identical by a test, with `Mask`, `Money` (an amount typed
+  from the cents) and `mask/brazil` naming CPF, CNPJ, phone, CEP, licence plate
+  (old and Mercosul alike) and the real as shapes, not rules. `widget.Masked` is
+  the field.
+- `widget`: `OneTimeCode`, `DateRangePicker` with presets (`LastDays`,
+  `ThisMonth`, `PreviousMonth`), `DateTimePicker` in its five kinds (date, time,
+  datetime, month, week), `Combobox` and `ActiveSearch` over a `Lookup`,
+  `FileUpload` over a `Chooser` and an `Uploader`, `FormDialog`, `HoverCard`,
+  `DialogTrigger`, `DeleteRow`, `LazyLoad`, `OptimisticToggle`, `Output`,
+  `RelativeTime`, `LoadMore`, `EditInPlace`, `InputGroup`, `ThemeToggle`,
+  `ImageProps`, `ResponsiveImage`, and `IconProps`. `AvatarProps` draws a `Photo`;
+  `ButtonProps` takes an `Icon`; the calendar takes the application's month and
+  weekday names and marks a period.
+- `icons`: the Phosphor set under Kyse's function names, generated from Kyse's
+  package by `internal/icongen`; `icons/lookup` is the whole set by name.
+- `ayra.Context.ChangeScheme` asks the window to draw in another palette from the
+  next frame.
+- `parity_test.go`: every component of Kyse has a pair here or a reason it does
+  not (`HiddenInput` and `SkipLink` alone), and CI checks Kyse out so that the
+  test fails instead of skipping.
+
+### Changed
+
+- `theme.Theme` carries a pointer, `Styles`, and stays comparable with `==`.
+  `Typography` gains fields and is still written by key.
+- The dialog's root part is its panel, not the overlay behind it.
+
 ## [v0.3.0](https://github.com/arandu-io/ayra/compare/module/v0.2.0...v0.3.0) - 2026-10-31
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/module/v0.2.0...v0.3.0

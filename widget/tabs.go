@@ -10,6 +10,7 @@ import (
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
+	"github.com/arandu-io/ayra/icons"
 )
 
 // Tabs is the state half: which one is selected, and the press on each.
@@ -50,6 +51,11 @@ type TabsProps struct {
 	// for it. A props that owned the panels would need every one of them built
 	// on every frame, including the ones nobody is looking at.
 	Labels []string
+	// Icons are drawn before each label, by position. Fewer icons than labels
+	// leaves the rest without one, and the zero Icon draws nothing. An icon takes
+	// the colour of its tab's text, so it follows the selection and the scheme
+	// with it.
+	Icons []icons.Icon
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -103,7 +109,24 @@ func (p TabsProps) tab(c ayra.Context, state *Tabs, index int, label string) ayr
 		inner.Constraints.Min = image.Point{}
 
 		dims := layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 12}.Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
-			return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, face)
+			var icon icons.Icon
+			if index < len(p.Icons) {
+				icon = p.Icons[index]
+			}
+			if icon.IsZero() {
+				return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, face)
+			}
+			side := c.Dp(unit.Dp(c.Theme.Type.Body))
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					DrawIcon(inner.With(gtx), icon, side, ink)
+					return layout.Dimensions{Size: image.Pt(side, side)}
+				}),
+				layout.Rigid(layout.Spacer{Width: 6}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, face)
+				}),
+			)
 		})
 
 		if state.selected == index {

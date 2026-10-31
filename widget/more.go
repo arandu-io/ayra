@@ -171,6 +171,13 @@ type EditInPlace struct {
 	value   string
 }
 
+// Edit opens the field, for a screen that opens it by some other means than a
+// press on the text.
+func (e *EditInPlace) Edit(value string) {
+	e.editing = true
+	e.input.SetText(value)
+}
+
 // Editing reports whether the field is open.
 func (e *EditInPlace) Editing() bool { return e.editing }
 
@@ -300,7 +307,15 @@ func (p InputGroupProps) Layout(c ayra.Context, first ayra.Widget, rest ...ayra.
 		for _, widget := range rest {
 			widget := widget
 			children = append(children,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SeparatorProps{Vertical: true}.Layout(c.With(gtx)) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// A rule between two controls is as tall as a control and not
+					// as tall as the room: a vertical separator fills the axis it
+					// runs along, and in a column with no height that is the whole
+					// window.
+					inner := c.With(gtx)
+					inner.Constraints.Max.Y = c.Dp(unit.Dp(24))
+					return SeparatorProps{Vertical: true}.Layout(inner)
+				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					inner := c.With(gtx)
 					inner.Constraints.Min = layout.Constraints{}.Min

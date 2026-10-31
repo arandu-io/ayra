@@ -4,6 +4,49 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- restylable widgets
+
+Nothing that compiled stops compiling for an application that uses the widgets as
+they were: every addition is a field a keyed literal leaves at zero, and the
+approved pictures are unchanged. Three things are worth knowing.
+
+A `Props` literal written with positional fields, `widget.BadgeProps{"x", widget.Default}`,
+stops compiling, because `ComponentProps` is now its first field. Write the
+fields by name.
+
+`theme.Typography` has more fields; one written positionally needs the names.
+
+The way to make an application look like its web panel is a theme and not a copy
+of the values:
+
+```go
+sheet, _ := css.Parse(customCSS) // the product's own stylesheet, embedded
+shell.Run(shell.Config{Title: "Alpr.sh", Theme: sheet.Func(), Fonts: fonts}, screen)
+```
+
+and a variant of the product's own, which the closed `Variant` enum never allowed:
+
+```go
+th.Styles = &theme.Styles{Variants: map[string]theme.Look{
+	"read": {"badge": {"root": {Background: theme.Colour(th.Token("tone-read"))}}},
+}}
+// ...
+widget.BadgeProps{Label: "Lida", ComponentProps: widget.ComponentProps{Custom: "read"}}
+```
+
+A widget the product writes itself is written from the exported primitives and is
+restylable the same way:
+
+```go
+root := c.Theme.Resolve("plate", "root", "", theme.Style{
+	Background: theme.Colour(c.Theme.Colours.Card),
+	Padding:    theme.InsetXY(10, 4),
+}, theme.Component{})
+widget.Surface(c, root, func(c ayra.Context) ayra.Dimensions {
+	return widget.DrawText(c, "ABC1D23", root, widget.TextOptions{Monospace: true})
+})
+```
+
 ## v0.3.0 -- a request path is built from segments
 
 `client.Client.Get` and `client.Client.Post` take a `client.Path` instead of a
