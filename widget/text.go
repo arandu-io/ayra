@@ -121,6 +121,11 @@ func (t Tone) ink(th theme.Theme) color.NRGBA {
 // is not pressed, focused or typed into. A field that can be typed into is an
 // [Input].
 type TextProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Content is the text.
 	Content string
 	// Role is what it is for. Zero is running text.
@@ -139,8 +144,19 @@ type TextProps struct {
 	Bold bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p TextProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the text and returns the room it took.
 func (p TextProps) Layout(c ayra.Context) ayra.Dimensions {
+	return withRoot(c, "text", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p TextProps) layout(c ayra.Context) ayra.Dimensions {
 	return drawText(c, p.Content, p.Role.size(c.Theme), p.Tone.ink(c.Theme), p.MaxLines, p.Align, p.face())
 }
 

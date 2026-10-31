@@ -21,6 +21,11 @@ import (
 // point apart -- and the drift is only visible when two of them are on screen
 // at once, which is always.
 type ItemProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Title is the row's own name.
 	Title string
 	// Body is the line under it. Empty draws the title alone.
@@ -32,8 +37,19 @@ type ItemProps struct {
 	Selected bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p ItemProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the row with whatever the caller puts on its right.
 func (p ItemProps) Layout(c ayra.Context, state *Button, trailing ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "item", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, trailing)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p ItemProps) layout(c ayra.Context, state *Button, trailing ayra.Widget) ayra.Dimensions {
 	draw := func(c ayra.Context) ayra.Dimensions {
 		fill := p.fill(c)
 		return surface(c, fill, p.edge(c), controlRadius(c), func(c ayra.Context) ayra.Dimensions {
@@ -129,6 +145,11 @@ func (p ItemProps) lines(c ayra.Context) ayra.Dimensions {
 // seats taken, a budget spent -- and never finishes. Drawing one as the other
 // tells somebody their disk is loading.
 type MeterProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Value, Low and High are the reading and the range it sits in. When Low
 	// and High are both zero the range is nought to one.
 	Value float32
@@ -139,8 +160,19 @@ type MeterProps struct {
 	Over bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p MeterProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the meter across the width it was given.
 func (p MeterProps) Layout(c ayra.Context) ayra.Dimensions {
+	return withRoot(c, "meter", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p MeterProps) layout(c ayra.Context) ayra.Dimensions {
 	low, high := p.Low, p.High
 	if low == 0 && high == 0 {
 		high = 1
@@ -178,6 +210,11 @@ func (p MeterProps) Layout(c ayra.Context) ayra.Dimensions {
 // between them, and that is the whole point: a gap says "three choices", and a
 // joined row says "one choice, three values".
 type ButtonGroupProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Labels are the buttons, in order.
 	Labels []string
 	// Selected is the index drawn as chosen, or -1 for a group where pressing
@@ -187,6 +224,10 @@ type ButtonGroupProps struct {
 	// from.
 	Size Size
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p ButtonGroupProps) PartNames() []string { return []string{"root"} }
 
 // Group is the state half: the press on each button.
 //
@@ -217,6 +258,13 @@ func (g *Group) Clicked(c ayra.Context) int {
 // group was given -- which drew two rules straight down the screen, through
 // everything under the group.
 func (p ButtonGroupProps) Layout(c ayra.Context, state *Group) ayra.Dimensions {
+	return withRoot(c, "buttongroup", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p ButtonGroupProps) layout(c ayra.Context, state *Group) ayra.Dimensions {
 	for len(state.buttons) < len(p.Labels) {
 		state.buttons = append(state.buttons, Button{})
 	}

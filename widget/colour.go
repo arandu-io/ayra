@@ -157,6 +157,11 @@ func (p *ColourPicker) mirror() {
 
 // ColourPickerProps is what a colour picker is drawn from.
 type ColourPickerProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Alpha draws a bar for how opaque the colour is.
 	//
 	// Without it the control still carries an alpha -- whatever the caller
@@ -175,8 +180,19 @@ type ColourPickerProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p ColourPickerProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the picker and returns the room it took.
 func (p ColourPickerProps) Layout(c ayra.Context, state *ColourPicker) ayra.Dimensions {
+	return withRoot(c, "colourpicker", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p ColourPickerProps) layout(c ayra.Context, state *ColourPicker) ayra.Dimensions {
 	state.settle()
 
 	if p.Disabled {

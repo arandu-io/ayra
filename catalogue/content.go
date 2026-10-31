@@ -23,6 +23,9 @@ func content() []Entry {
 		cardEntry(),
 		collapsibleEntry(),
 		accordionEntry(),
+		iconEntry(),
+		imageEntry(),
+		relativeTimeEntry(),
 	}
 }
 

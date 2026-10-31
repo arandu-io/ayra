@@ -50,12 +50,28 @@ func (d *Disclosure) Changed(c ayra.Context) bool {
 
 // CollapsibleProps is a summary that reveals more.
 type CollapsibleProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Summary is the line that is always visible.
 	Summary string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CollapsibleProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the summary and, when open, the content under it.
 func (p CollapsibleProps) Layout(c ayra.Context, state *Disclosure, content ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "collapsible", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p CollapsibleProps) layout(c ayra.Context, state *Disclosure, content ayra.Widget) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return summaryRow(c.With(gtx), state, p.Summary)
@@ -126,9 +142,18 @@ func marker(c ayra.Context, open bool) ayra.Dimensions {
 // otherwise write, and the one that forgets produces a page that grows until it
 // cannot be read.
 type AccordionProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Sections are the summaries, in order.
 	Sections []string
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p AccordionProps) PartNames() []string { return []string{"root"} }
 
 // Accordion is the state half: which section is open, and the press on each.
 type Accordion struct {
@@ -144,6 +169,13 @@ func (a *Accordion) Showing() int { return a.open }
 
 // Layout draws the sections, asking content for the body of the open one.
 func (p AccordionProps) Layout(c ayra.Context, state *Accordion, content func(int) ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "accordion", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p AccordionProps) layout(c ayra.Context, state *Accordion, content func(int) ayra.Widget) ayra.Dimensions {
 	for len(state.clicks) < len(p.Sections) {
 		state.clicks = append(state.clicks, engine.Clickable{})
 	}

@@ -59,6 +59,11 @@ func (m *Menu) Chosen() int {
 
 // MenuProps is a list of actions under a control.
 type MenuProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Entries are the actions, in order. An empty string is a divider: a menu
 	// long enough to need grouping is one where the groups are the only way
 	// anybody finds anything.
@@ -70,8 +75,19 @@ type MenuProps struct {
 	Above bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p MenuProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control that opens the menu, and the list while it is open.
 func (p MenuProps) Layout(c ayra.Context, state *Menu, trigger ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "menu", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, trigger)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p MenuProps) layout(c ayra.Context, state *Menu, trigger ayra.Widget) ayra.Dimensions {
 	for len(state.entries) < len(p.Entries) {
 		state.entries = append(state.entries, Button{})
 	}
@@ -148,14 +164,30 @@ func (p MenuProps) list(c ayra.Context, state *Menu, trigger ayra.Dimensions) {
 // is anything at all -- a form, a preview, a set of filters. What they share is
 // where they sit, which is why the anchoring is written once.
 type PopoverProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Width is how wide the panel is. Zero takes one a short form reads at.
 	Width unit.Dp
 	// Above opens it upwards.
 	Above bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p PopoverProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control and, while it is open, the panel by it.
 func (p PopoverProps) Layout(c ayra.Context, state *Menu, trigger, content ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "popover", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, trigger, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.Widget) ayra.Dimensions {
 	state.open.Changed(c)
 
 	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
@@ -198,11 +230,20 @@ func (p PopoverProps) Layout(c ayra.Context, state *Menu, trigger, content ayra.
 
 // MenubarProps is a row of menus across the top of a window.
 type MenubarProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Titles are the menus, in order.
 	Titles []string
 	// Entries are the actions under each, in the same order.
 	Entries [][]string
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p MenubarProps) PartNames() []string { return []string{"root"} }
 
 // Menubar is the state half: one menu per title.
 type Menubar struct {
@@ -222,6 +263,13 @@ func (m *Menubar) Chosen() (menu, entry int) {
 
 // Layout draws the row and returns the room it took.
 func (p MenubarProps) Layout(c ayra.Context, state *Menubar) ayra.Dimensions {
+	return withRoot(c, "menubar", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p MenubarProps) layout(c ayra.Context, state *Menubar) ayra.Dimensions {
 	for len(state.menus) < len(p.Titles) {
 		state.menus = append(state.menus, Menu{})
 	}

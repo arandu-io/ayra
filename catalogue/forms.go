@@ -31,6 +31,9 @@ func forms() []Entry {
 		dateTimePickerEntry(),
 		comboboxEntry(),
 		fileUploadEntry(),
+		editInPlaceEntry(),
+		inputGroupEntry(),
+		themeToggleEntry(),
 	}
 }
 

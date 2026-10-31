@@ -72,6 +72,11 @@ func (c *Calendar) Showing(today time.Time) time.Time {
 // to draw and nothing is drawn, rather than a month invented here: an invented
 // one is a working-looking grid of the wrong year.
 type CalendarProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Today is the day to mark as the current one, and the month to open on
 	// when nothing has been chosen. The zero time marks none, and with nothing
 	// chosen or shown either the control draws nothing at all.
@@ -96,8 +101,19 @@ type CalendarProps struct {
 	PreviousLabel, NextLabel string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CalendarProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the month and returns the room it took.
 func (p CalendarProps) Layout(c ayra.Context, state *Calendar) ayra.Dimensions {
+	return withRoot(c, "calendar", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p CalendarProps) layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 	month := state.Showing(p.Today)
 	if month.IsZero() {
 		// Nothing chosen, nothing shown, and no day passed in. Drawing a fixed

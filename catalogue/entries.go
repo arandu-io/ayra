@@ -3,12 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"image"
+	"image/color"
 	"io"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/icons"
 	"github.com/arandu-io/ayra/mask"
 	"github.com/arandu-io/ayra/mask/brazil"
 	"github.com/arandu-io/ayra/widget"
@@ -203,4 +208,173 @@ func demoFile(name string, size int) widget.File {
 	return widget.File{Name: name, Size: int64(size), Open: func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(make([]byte, size))), nil
 	}}
+}
+
+// iconEntry draws a sample of the Phosphor set, in the weights of ink a screen
+// uses, and an icon-only button.
+func iconEntry() Entry {
+	return Entry{
+		Control: "IconProps",
+		Summary: "The Phosphor icons under Kyse's names, drawn in the colour of the text around them.",
+		Build: func() ayra.Widget {
+			var only widget.Button
+			set := []icons.Icon{
+				icons.Trash(), icons.Gear(), icons.Camera(), icons.MagnifyingGlass(), icons.Check(), icons.Warning(),
+				icons.Car(), icons.Bell(), icons.CloudArrowUp(), icons.Funnel(), icons.House(), icons.User(),
+			}
+			return func(c ayra.Context) ayra.Dimensions {
+				return stack(14,
+					func(c ayra.Context) ayra.Dimensions {
+						children := make([]layout.FlexChild, 0, len(set)*2)
+						for _, icon := range set {
+							icon := icon
+							children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return widget.IconProps{Icon: icon, Size: 28}.Layout(c.With(gtx))
+							}), layout.Rigid(layout.Spacer{Width: 10}.Layout))
+						}
+						return layout.Flex{Axis: layout.Horizontal}.Layout(c.Context, children...)
+					},
+					labelled("in a button, and alone", tight(func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Icon: icons.Gear(), Size: widget.Icon, Variant: widget.Outline, Label: ""}.Layout(c, &only)
+					})),
+				)(c)
+			}
+		},
+	}
+}
+
+// imageEntry draws a picture in each of its fits, and an avatar with a photo.
+func imageEntry() Entry {
+	return Entry{
+		Control: "ImageProps",
+		Summary: "A picture loaded once from a source, with a skeleton while it loads and the alternative text if it fails.",
+		Build: func() ayra.Widget {
+			var wide, failed widget.Image
+			wide.Set(demoPicture(240, 90))
+			var avatar widget.Image
+			avatar.Set(demoPicture(64, 64))
+			return func(c ayra.Context) ayra.Dimensions {
+				return stack(12,
+					labelled("cover", sized(240, func(c ayra.Context) ayra.Dimensions {
+						return widget.ImageProps{Height: 90, Alt: "A gate camera"}.Layout(c, &wide)
+					})),
+					labelled("contain", sized(240, func(c ayra.Context) ayra.Dimensions {
+						return widget.ImageProps{Height: 90, Fit: widget.Contain}.Layout(c, &wide)
+					})),
+					labelled("failed", sized(240, func(c ayra.Context) ayra.Dimensions {
+						return widget.ImageProps{
+							Height: 60, Alt: "Camera offline",
+							Source: widget.ImageSourceFunc(func(context.Context) (image.Image, error) { return nil, errors.New("offline") }),
+						}.Layout(c, &failed)
+					})),
+					labelled("avatar with a photo", tight(func(c ayra.Context) ayra.Dimensions {
+						return widget.AvatarProps{Initials: "PL", Photo: &avatar}.Layout(c)
+					})),
+				)(c)
+			}
+		},
+	}
+}
+
+func demoPicture(w, h int) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x * 255 / w), G: uint8(y * 255 / h), B: 140, A: 255})
+		}
+	}
+	return img
+}
+
+// relativeTimeEntry draws moments written the way a person says them.
+func relativeTimeEntry() Entry {
+	return Entry{
+		Control: "RelativeTimeProps",
+		Summary: "A moment as a person says it, relative to the time of the frame.",
+		Build: func() ayra.Widget {
+			now := today()
+			ago := []time.Duration{5 * time.Second, 3 * time.Minute, 2 * time.Hour, 3 * 24 * time.Hour, 20 * 24 * time.Hour, -2 * time.Hour}
+			return func(c ayra.Context) ayra.Dimensions {
+				rows := make([]ayra.Widget, 0, len(ago))
+				for _, d := range ago {
+					d := d
+					rows = append(rows, func(c ayra.Context) ayra.Dimensions {
+						return widget.RelativeTimeProps{At: now.Add(-d), Now: now}.Layout(c)
+					})
+				}
+				return stack(6, rows...)(c)
+			}
+		},
+	}
+}
+
+// loadMoreEntry draws the control at the foot of a list.
+func loadMoreEntry() Entry {
+	return Entry{
+		Control: "LoadMoreProps",
+		Summary: "The button that asks for the next page, and says so while it is coming.",
+		Build: func() ayra.Widget {
+			var ready, busy widget.LoadMore
+			return func(c ayra.Context) ayra.Dimensions {
+				return stack(10,
+					tight(func(c ayra.Context) ayra.Dimensions { return widget.LoadMoreProps{}.Layout(c, &ready) }),
+					tight(func(c ayra.Context) ayra.Dimensions { return widget.LoadMoreProps{IsLoading: true}.Layout(c, &busy) }),
+				)(c)
+			}
+		},
+	}
+}
+
+// editInPlaceEntry draws a text that becomes a field when it is pressed.
+func editInPlaceEntry() Entry {
+	return Entry{
+		Control: "EditInPlaceProps",
+		Summary: "A text edited where it stands: press to open a field, return to save.",
+		Build: func() ayra.Widget {
+			var state widget.EditInPlace
+			value := "Gate camera 1"
+			return func(c ayra.Context) ayra.Dimensions {
+				if saved, ok := state.Saved(); ok {
+					value = saved
+				}
+				return sized(320, func(c ayra.Context) ayra.Dimensions {
+					return widget.EditInPlaceProps{Value: value, Placeholder: "Name"}.Layout(c, &state)
+				})(c)
+			}
+		},
+	}
+}
+
+// inputGroupEntry draws a field and a button sharing one border.
+func inputGroupEntry() Entry {
+	return Entry{
+		Control: "InputGroupProps",
+		Summary: "A row of controls under one border and one set of corners.",
+		Build: func() ayra.Widget {
+			var field widget.Input
+			var send widget.Button
+			return sized(360, func(c ayra.Context) ayra.Dimensions {
+				return widget.InputGroupProps{}.Layout(c,
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "Plate", ComponentProps: widget.GroupedParts()}.Layout(c, &field)
+					},
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.ButtonProps{Label: "Search", Variant: widget.Ghost, ComponentProps: widget.GroupedParts()}.Layout(c, &send)
+					},
+				)
+			})
+		},
+	}
+}
+
+// themeToggleEntry draws the button that switches the palette.
+func themeToggleEntry() Entry {
+	return Entry{
+		Control: "ThemeToggleProps",
+		Summary: "The button that switches between the light and the dark palette: a moon in one, a sun in the other.",
+		Build: func() ayra.Widget {
+			var state widget.Button
+			return tight(func(c ayra.Context) ayra.Dimensions { return widget.ThemeToggleProps{}.Layout(c, &state) })
+		},
+	}
 }

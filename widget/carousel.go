@@ -123,6 +123,11 @@ func (c *Carousel) jump(index int) {
 // tabs does: a props that owned them would have every slide built on every
 // frame, including the ninety-odd nobody is looking at.
 type CarouselProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Count is how many slides there are.
 	Count int
 	// PerView is how many are on screen at once. Zero is one.
@@ -142,6 +147,10 @@ type CarouselProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CarouselProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the window, the steps and the dots, and returns the room they
 // took.
 //
@@ -150,6 +159,13 @@ type CarouselProps struct {
 // images into a frame that misses: the ninety-nine that are not on screen get
 // measured, shaped and recorded, every frame, to be thrown away.
 func (p CarouselProps) Layout(c ayra.Context, state *Carousel, slide func(c ayra.Context, index int) ayra.Dimensions) ayra.Dimensions {
+	return withRoot(c, "carousel", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, slide)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p CarouselProps) layout(c ayra.Context, state *Carousel, slide func(c ayra.Context, index int) ayra.Dimensions) ayra.Dimensions {
 	pages := positions(p.Count, p.view())
 
 	state.positions, state.loop = pages, p.Loop

@@ -72,7 +72,7 @@ func Run(cfg Config, screen Screen) error {
 	// face finds out by looking. Said here, it is a mistake with a name. A
 	// collection left empty is the system's, which cannot be checked.
 	if len(cfg.Fonts) > 0 {
-		if missing := cfg.theme().Type.Missing(cfg.Fonts); len(missing) > 0 {
+		if missing := cfg.theme(cfg.Scheme).Type.Missing(cfg.Fonts); len(missing) > 0 {
 			return &MissingFaceError{Faces: missing}
 		}
 	}
@@ -95,11 +95,11 @@ func Run(cfg Config, screen Screen) error {
 }
 
 // theme answers the theme the window draws with.
-func (c Config) theme() theme.Theme {
+func (c Config) theme(scheme theme.Scheme) theme.Theme {
 	if c.Theme != nil {
-		return c.Theme(c.Scheme)
+		return c.Theme(scheme)
 	}
-	return theme.New(c.Scheme)
+	return theme.New(scheme)
 }
 
 // MissingFaceError is what Run answers when the theme's scale names a typeface
@@ -142,7 +142,15 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 		app.Size(unit.Dp(cfg.Width), unit.Dp(cfg.Height)),
 	)
 
-	palette := cfg.theme()
+	palette := cfg.theme(cfg.Scheme)
+
+	// A change of scheme is asked for during a frame and applied at the start of
+	// the next, so that one frame is never drawn half in each palette.
+	var next *theme.Scheme
+	setScheme := func(scheme theme.Scheme) {
+		next = &scheme
+		window.Invalidate()
+	}
 
 	var ops op.Ops
 	for {
@@ -150,12 +158,16 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
+			if next != nil {
+				palette, next = cfg.theme(*next), nil
+			}
 			gtx := app.NewContext(&ops, e)
 			c := ayra.Context{
 				Context:    gtx,
 				Theme:      palette,
 				Shaper:     shaper,
 				Invalidate: window.Invalidate,
+				SetScheme:  setScheme,
 			}
 
 			// The window is filled before the screen draws, and it is filled

@@ -50,7 +50,9 @@ func (p LabelProps) Layout(c ayra.Context) ayra.Dimensions {
 		// next line.
 		content += " *"
 	}
-	return drawPart(c, content, style, unit.Sp(c.Theme.Type.Small), 1, text.Start, plain())
+	return insetOf(style.Padding).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+		return drawPart(c.With(gtx), content, style, unit.Sp(c.Theme.Type.Small), 1, text.Start, plain())
+	})
 }
 
 // ProgressProps is how far along something is.

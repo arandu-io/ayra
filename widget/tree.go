@@ -155,6 +155,11 @@ func writeInt(to *strings.Builder, value int) {
 
 // TreeProps is a hierarchy of rows that open and close.
 type TreeProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Roots are the top-level nodes, in order.
 	Roots []TreeNode
 	// Indent is how far each level is set in. Zero takes a step a row's own
@@ -165,8 +170,19 @@ type TreeProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p TreeProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the hierarchy and returns the room it took.
 func (p TreeProps) Layout(c ayra.Context, state *Tree) ayra.Dimensions {
+	return withRoot(c, "tree", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p TreeProps) layout(c ayra.Context, state *Tree) ayra.Dimensions {
 	state.ensure()
 
 	rows := make([]layout.FlexChild, 0, len(p.Roots)*2)

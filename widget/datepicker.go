@@ -57,6 +57,11 @@ func (d *DatePicker) Showing() bool { return d.popover.Showing() }
 
 // DatePickerProps is a field that chooses one day.
 type DatePickerProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Placeholder is what stands in the field before a day is chosen.
 	Placeholder string
 	// Today, Min, Max and Monday are the month's, and mean what they mean
@@ -70,8 +75,19 @@ type DatePickerProps struct {
 	Above bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p DatePickerProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the field and, while it is open, the month under it.
 func (p DatePickerProps) Layout(c ayra.Context, state *DatePicker) ayra.Dimensions {
+	return withRoot(c, "datepicker", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensions {
 	label := p.Placeholder
 	if label == "" {
 		label = "Pick a date"

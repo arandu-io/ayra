@@ -40,6 +40,11 @@ func (t *Tabs) Changed(c ayra.Context) bool {
 
 // TabsProps is what a row of tabs is drawn from.
 type TabsProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Labels are the tabs, in order. What each one shows is the caller's: this
 	// draws the row and says which is selected, and the screen draws the panel
 	// for it. A props that owned the panels would need every one of them built
@@ -47,8 +52,19 @@ type TabsProps struct {
 	Labels []string
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p TabsProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the row and returns the room it took.
 func (p TabsProps) Layout(c ayra.Context, state *Tabs) ayra.Dimensions {
+	return withRoot(c, "tabs", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p TabsProps) layout(c ayra.Context, state *Tabs) ayra.Dimensions {
 	for len(state.clicks) < len(p.Labels) {
 		state.clicks = append(state.clicks, engine.Clickable{})
 	}

@@ -181,3 +181,16 @@ func surfaceWidth(c ayra.Context, fill, border color.NRGBA, radius, width int, c
 	drawn.Add(c.Ops)
 	return dims
 }
+
+// withRoot draws a widget inside its root part: the outermost shape it draws,
+// restyled from the theme's look, the registered variant and the instance. A
+// widget that has nothing registered for its root is drawn as it always was, and
+// the check that says so is a comparison of two values, so the common case costs
+// nothing.
+func withRoot(c ayra.Context, name, variant string, inst ComponentProps, content ayra.Widget) ayra.Dimensions {
+	root := c.Theme.Resolve(name, "root", inst.VariantName(variant), theme.Style{}, inst)
+	if root == (theme.Style{}) {
+		return content(c)
+	}
+	return Surface(c, root, content)
+}

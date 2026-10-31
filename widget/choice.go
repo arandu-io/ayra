@@ -50,6 +50,11 @@ func (s *Select) Showing() bool { return s.open.Showing() }
 // [Autocomplete]. A select that grew a search field would be that control under
 // this name, and a screen that needed it would find two controls doing one job.
 type SelectProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Options are the choices, in order.
 	Options []string
 	// Placeholder is shown while nothing is chosen.
@@ -60,8 +65,19 @@ type SelectProps struct {
 	Invalid bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SelectProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the control and, while it is open, the list under it.
 func (p SelectProps) Layout(c ayra.Context, state *Select) ayra.Dimensions {
+	return withRoot(c, "select", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SelectProps) layout(c ayra.Context, state *Select) ayra.Dimensions {
 	for len(state.options) < len(p.Options) {
 		state.options = append(state.options, Button{})
 	}
@@ -189,6 +205,11 @@ func (s *Stepper) SetValue(value int) { s.value = value }
 // than refusing: a control that let somebody type past its own maximum and
 // complained afterwards is a control that wasted the typing.
 type NumberProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Min and Max bound it. Both zero leaves it unbounded below and above.
 	Min, Max int
 	// Step is how much a press changes it. Zero is one.
@@ -196,6 +217,10 @@ type NumberProps struct {
 	// Disabled draws it as unavailable.
 	Disabled bool
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p NumberProps) PartNames() []string { return []string{"root"} }
 
 // clamp holds the value inside the bounds the props declare.
 //
@@ -212,6 +237,13 @@ func (p NumberProps) clamp(state *Stepper) {
 
 // Layout draws the value between its two buttons.
 func (p NumberProps) Layout(c ayra.Context, state *Stepper) ayra.Dimensions {
+	return withRoot(c, "number", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p NumberProps) layout(c ayra.Context, state *Stepper) ayra.Dimensions {
 	step := p.Step
 	if step == 0 {
 		step = 1

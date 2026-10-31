@@ -20,6 +20,9 @@ import (
 var (
 	publishes = regexp.MustCompile(`(?m)^func \(p ([A-Za-z]+)Props\) PartNames\(\) \[\]string \{\s*return \[\]string\{([^}]*)\}`)
 	resolves  = regexp.MustCompile(`Resolve\("([a-z]+)", "([a-z-]+)"`)
+	// rooted is the form a widget uses when all it restyles is its root: the
+	// outermost shape, drawn by withRoot.
+	rooted = regexp.MustCompile(`withRoot\(c, "([a-z]+)"`)
 	// resolvesByName is the form a widget uses when it is drawn under several
 	// names: the input, which is a text area and a masked field as well, and the
 	// closed control of the date pickers.
@@ -55,6 +58,12 @@ func TestEveryPublishedPartIsResolvedAndEveryResolvedPartIsPublished(t *testing.
 				resolved[found[1]] = map[string]bool{}
 			}
 			resolved[found[1]][found[2]] = true
+		}
+		for _, found := range rooted.FindAllStringSubmatch(body, -1) {
+			if resolved[found[1]] == nil {
+				resolved[found[1]] = map[string]bool{}
+			}
+			resolved[found[1]]["root"] = true
 		}
 		if names, shared := drawnUnder[filepath.Base(path)]; shared {
 			for _, found := range resolvesByName.FindAllStringSubmatch(body, -1) {

@@ -59,6 +59,11 @@ func (d *Dialog) Dismissed() bool {
 
 // DialogProps is what a dialog is drawn from.
 type DialogProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Width is how wide the panel may get. Zero takes a width a form reads
 	// comfortably at.
 	Width unit.Dp
@@ -79,6 +84,10 @@ type DialogProps struct {
 	Dismissible bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p DialogProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the dialog over the screen and returns the room it took, which
 // is all of it.
 //
@@ -86,6 +95,13 @@ type DialogProps struct {
 // unconditionally -- which is what keeps the call beside the rest of the screen
 // rather than inside a branch that somebody has to remember to write.
 func (p DialogProps) Layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "dialog", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
 	if !state.open {
 		return ayra.Dimensions{}
 	}

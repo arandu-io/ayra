@@ -48,6 +48,23 @@ type Context struct {
 	// does nothing, which is the right answer when there is no window to
 	// redraw.
 	Invalidate func()
+
+	// SetScheme is what a control that changes the palette -- the light and dark
+	// toggle -- calls. The window applies it from the next frame, and the whole
+	// application is drawn in the other scheme with no work from the screens.
+	//
+	// It is nil outside a window, which is what a test or a tool that renders
+	// one frame leaves it, and [Context.ChangeScheme] then does nothing: there is
+	// no window whose palette could change.
+	SetScheme func(theme.Scheme)
+}
+
+// ChangeScheme asks the window to draw in another palette. It is what the theme
+// toggle does, and what a screen that follows the platform's own setting would.
+func (c Context) ChangeScheme(scheme theme.Scheme) {
+	if c.SetScheme != nil {
+		c.SetScheme(scheme)
+	}
 }
 
 // Fill paints the whole area this context was given.

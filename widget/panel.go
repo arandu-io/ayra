@@ -41,6 +41,11 @@ func (s Side) String() string {
 // difference is what it is for: a dialog asks something and is answered, and a
 // drawer holds a place somebody works in while the screen stays behind it.
 type DrawerProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Side is the edge it comes from. Zero is the right.
 	Side Side
 	// Size is how wide it is, or how tall from the bottom. Zero takes a width
@@ -54,8 +59,19 @@ type DrawerProps struct {
 	Dismissible bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p DrawerProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the drawer over the screen and returns the room it took.
 func (p DrawerProps) Layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
+	return withRoot(c, "drawer", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state, content)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) ayra.Dimensions {
 	if !state.Showing() {
 		return ayra.Dimensions{}
 	}
@@ -123,6 +139,11 @@ func (p DrawerProps) bounds(c ayra.Context, area image.Point, size unit.Dp) imag
 // behind the second half. A menu with the common action inside it makes the
 // common action the slowest one.
 type SplitProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Label is the main action.
 	Label string
 	// Variant is what the pair is for. Zero is the ordinary one.
@@ -132,6 +153,10 @@ type SplitProps struct {
 	// Disabled draws both as unavailable.
 	Disabled bool
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SplitProps) PartNames() []string { return []string{"root"} }
 
 // Split is the state half: the press on each side.
 type Split struct {
@@ -147,6 +172,13 @@ func (s *Split) Opened(c ayra.Context) bool { return s.more.Clicked(c) }
 
 // Layout draws the pair as one object.
 func (p SplitProps) Layout(c ayra.Context, state *Split) ayra.Dimensions {
+	return withRoot(c, "split", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SplitProps) layout(c ayra.Context, state *Split) ayra.Dimensions {
 	c.Constraints.Min = image.Point{}
 
 	measure := op.Record(c.Ops)

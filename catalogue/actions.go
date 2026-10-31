@@ -16,6 +16,7 @@ func actions() []Entry {
 		linkEntry(),
 		menuEntry(),
 		menubarEntry(),
+		loadMoreEntry(),
 	}
 }
 

@@ -194,6 +194,11 @@ func (f *FilePicker) relist(entries []FileEntry) {
 // wanted to be modal is this inside a [DialogProps], which already owns the
 // scrim, the escape key and the press outside.
 type FilePickerProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Entries are the listing of the directory currently open, in the order
 	// they should be read. The order inside each kind is kept as it arrives,
 	// because a caller that sorted by date already made that decision and a
@@ -212,6 +217,10 @@ type FilePickerProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p FilePickerProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the picker and returns the room it took, which is the width it
 // was given.
 //
@@ -220,6 +229,13 @@ type FilePickerProps struct {
 // somebody went into a directory -- and the sizes on the right would move with
 // it.
 func (p FilePickerProps) Layout(c ayra.Context, state *FilePicker) ayra.Dimensions {
+	return withRoot(c, "filepicker", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p FilePickerProps) layout(c ayra.Context, state *FilePicker) ayra.Dimensions {
 	entries := p.visible(state.Filter())
 	state.relist(entries)
 

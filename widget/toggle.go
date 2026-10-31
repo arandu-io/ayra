@@ -56,6 +56,11 @@ func (t *Toggle) Hovered() bool { return t.click.Hovered() }
 
 // CheckboxProps is what a box somebody ticks is drawn from.
 type CheckboxProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Label is the text beside it. A checkbox with no label is a checkbox
 	// nobody can describe, so it is drawn but the caller has said something
 	// about it elsewhere.
@@ -64,8 +69,19 @@ type CheckboxProps struct {
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p CheckboxProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the checkbox and its label, and returns the room they took.
 func (p CheckboxProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
+	return withRoot(c, "checkbox", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p CheckboxProps) layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 	return layoutToggle(c, state, p.Disabled, p.Label, drawBox)
 }
 
@@ -76,14 +92,30 @@ func (p CheckboxProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 // here would own the options, and a screen whose options come from a server
 // would then have to build one every frame.
 type RadioProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Label is the text beside it.
 	Label string
 	// Disabled draws it as unavailable and stops it answering.
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p RadioProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the option and its label.
 func (p RadioProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
+	return withRoot(c, "radio", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p RadioProps) layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 	return layoutToggle(c, state, p.Disabled, p.Label, drawDot)
 }
 
@@ -93,14 +125,30 @@ func (p RadioProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 // checkbox is a value in a form that is submitted later, and the difference is
 // what somebody expects to happen when they let go.
 type SwitchProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Label is the text beside it.
 	Label string
 	// Disabled draws it as unavailable and stops it answering.
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SwitchProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the switch and its label.
 func (p SwitchProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
+	return withRoot(c, "switch", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SwitchProps) layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 	return layoutToggle(c, state, p.Disabled, p.Label, drawTrack)
 }
 

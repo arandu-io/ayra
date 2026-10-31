@@ -344,6 +344,11 @@ func (p *Palette) Chosen() int {
 
 // PaletteProps is a searchable list of what an application can do.
 type PaletteProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Commands are what can be run, in the order they are offered.
 	Commands []string
 	// Placeholder is shown in the search field while it is empty.
@@ -354,8 +359,19 @@ type PaletteProps struct {
 	Width unit.Dp
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p PaletteProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the palette while it is open, and nothing while it is not.
 func (p PaletteProps) Layout(c ayra.Context, state *Palette) ayra.Dimensions {
+	return withRoot(c, "palette", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p PaletteProps) layout(c ayra.Context, state *Palette) ayra.Dimensions {
 	if !state.dialog.Showing() {
 		return ayra.Dimensions{}
 	}

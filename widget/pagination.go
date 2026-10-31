@@ -36,6 +36,11 @@ func (p *Pages) Show(page int) { p.current = page }
 // are many, which is the only part of a pager with any logic in it: a row of
 // two hundred numbers is not navigation.
 type PaginationProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Total is how many pages there are.
 	Total int
 	// Window is how many numbers to show either side of the current one, at
@@ -44,8 +49,19 @@ type PaginationProps struct {
 	Window int
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p PaginationProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the pager and returns the room it took.
 func (p PaginationProps) Layout(c ayra.Context, state *Pages) ayra.Dimensions {
+	return withRoot(c, "pagination", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p PaginationProps) layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	if state.current < 1 {
 		state.current = 1
 	}

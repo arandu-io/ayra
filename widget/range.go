@@ -34,12 +34,28 @@ func (s *Slider) SetValue(value float32) { s.value.Value = min(max(value, 0), 1)
 // pounds, pixels or minutes is a decision with a unit attached, which is not
 // something a control should hold.
 type SliderProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Disabled draws it as unavailable and refuses to move.
 	Disabled bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p SliderProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the track, the filled part and the handle.
 func (p SliderProps) Layout(c ayra.Context, state *Slider) ayra.Dimensions {
+	return withRoot(c, "slider", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p SliderProps) layout(c ayra.Context, state *Slider) ayra.Dimensions {
 	if p.Disabled {
 		c.Context = c.Context.Disabled()
 	}
@@ -92,6 +108,11 @@ func (r *Rating) SetValue(value int) { r.value = value }
 
 // RatingProps is a row of marks.
 type RatingProps struct {
+	// ComponentProps is what the caller changes on this one instance: a variant
+	// of the product's own, and the style of each named part. The widget
+	// publishes "root", the outermost shape it draws, and the parts its
+	// PartNames lists.
+	ComponentProps
 	// Of is how many marks there are. Zero is five.
 	Of int
 	// ReadOnly draws the value without accepting a press, for a rating
@@ -99,8 +120,19 @@ type RatingProps struct {
 	ReadOnly bool
 }
 
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p RatingProps) PartNames() []string { return []string{"root"} }
+
 // Layout draws the marks and returns the room they took.
 func (p RatingProps) Layout(c ayra.Context, state *Rating) ayra.Dimensions {
+	return withRoot(c, "rating", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
+		return p.layout(c, state)
+	})
+}
+
+// layout is Layout without the root part around it.
+func (p RatingProps) layout(c ayra.Context, state *Rating) ayra.Dimensions {
 	of := p.Of
 	if of == 0 {
 		of = 5
