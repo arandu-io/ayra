@@ -11,6 +11,7 @@ import (
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/mask"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // DateTimeFormat is how a chosen day and time are written on the control: the ISO
@@ -189,6 +190,12 @@ func (p DateTimePickerProps) layoutFor() string {
 // Text writes the value the way the field shows it: the ISO week for a week, and
 // the format of the kind for the others. It is empty when nothing was chosen.
 func (p DateTimePickerProps) Text(state *DateTime) string {
+	return p.text(theme.Locale{}, state)
+}
+
+// text is Text with the months of the application's locale, for a month the
+// caller gave no names for.
+func (p DateTimePickerProps) text(locale theme.Locale, state *DateTime) string {
 	value := state.Value(p.Kind, p.Seconds)
 	if value.IsZero() {
 		return ""
@@ -197,20 +204,30 @@ func (p DateTimePickerProps) Text(state *DateTime) string {
 		year, week := value.ISOWeek()
 		return fmt.Sprintf("%d-W%02d", year, week)
 	}
-	if p.Kind == MonthOnly && len(p.MonthNames) == 12 {
-		return p.MonthNames[value.Month()-1] + " " + strconv.Itoa(value.Year())
+	if p.Kind == MonthOnly {
+		names := p.MonthNames
+		if len(names) != 12 {
+			names = locale.MonthNames()
+		}
+		if len(names) == 12 {
+			return names[value.Month()-1] + " " + strconv.Itoa(value.Year())
+		}
 	}
 	return value.Format(p.layoutFor())
 }
 
 // Layout draws the field and, while it is open, the panel under it.
 func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimensions {
+	locale := c.Theme.Locale
 	placeholder := map[DateTimeKind]string{
-		DateAndTime: "Pick a date and time", DateOnly: "Pick a date", TimeOnly: "Pick a time",
-		MonthOnly: "Pick a month", WeekOnly: "Pick a week",
+		DateAndTime: orDefault(locale.PickDateTime, "Pick a date and time"),
+		DateOnly:    orDefault(locale.PickDate, "Pick a date"),
+		TimeOnly:    orDefault(locale.PickTime, "Pick a time"),
+		MonthOnly:   orDefault(locale.PickMonth, "Pick a month"),
+		WeekOnly:    orDefault(locale.PickWeek, "Pick a week"),
 	}[p.Kind]
 	label, ink := orDefault(p.Placeholder, placeholder), c.Theme.Colours.MutedForeground
-	if text := p.Text(state); text != "" {
+	if text := p.text(locale, state); text != "" {
 		label, ink = text, c.Theme.Colours.Foreground
 	}
 
@@ -255,7 +272,7 @@ func (p DateTimePickerProps) panel(c ayra.Context, state *DateTime) ayra.Dimensi
 		}.Layout(c.With(gtx), &state.month)
 	}
 	clock := func(gtx layout.Context) layout.Dimensions {
-		return FieldProps{Label: orDefault(p.TimeLabel, "Time")}.Layout(c.With(gtx), func(c ayra.Context) ayra.Dimensions {
+		return FieldProps{Label: orDefault(p.TimeLabel, orDefault(c.Theme.Locale.Time, "Time"))}.Layout(c.With(gtx), func(c ayra.Context) ayra.Dimensions {
 			_, _, _, valid := parseClock(state.clock.Text(), p.Seconds)
 			return MaskedProps{
 				Mask: clockMask(p.Seconds), Kind: Number, Placeholder: "00:00",
@@ -266,7 +283,7 @@ func (p DateTimePickerProps) panel(c ayra.Context, state *DateTime) ayra.Dimensi
 	done := func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
 		inner.Constraints.Min.X = inner.Constraints.Max.X
-		return ButtonProps{Label: orDefault(p.DoneLabel, "Done")}.Layout(inner, &state.done)
+		return ButtonProps{Label: orDefault(p.DoneLabel, orDefault(c.Theme.Locale.Done, "Done"))}.Layout(inner, &state.done)
 	}
 
 	rows := []layout.FlexChild{}
@@ -309,13 +326,13 @@ func (p DateTimePickerProps) months(c ayra.Context, state *DateTime) ayra.Dimens
 			inner := c.With(gtx)
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return innerButton(inner.With(gtx), &state.earlier, innerIcon("date-time-picker", "CaretLeft"), "Previous year", Ghost, false)
+					return innerButton(inner.With(gtx), &state.earlier, innerIcon("date-time-picker", "CaretLeft"), orDefault(c.Theme.Locale.PreviousYear, "Previous year"), Ghost, false)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return drawText(inner.With(gtx), strconv.Itoa(state.year), unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Middle, semibold())
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return innerButton(inner.With(gtx), &state.later, innerIcon("date-time-picker", "CaretRight"), "Next year", Ghost, false)
+					return innerButton(inner.With(gtx), &state.later, innerIcon("date-time-picker", "CaretRight"), orDefault(c.Theme.Locale.NextYear, "Next year"), Ghost, false)
 				}),
 			)
 		}),
@@ -329,8 +346,12 @@ func (p DateTimePickerProps) months(c ayra.Context, state *DateTime) ayra.Dimens
 				index := row*3 + col
 				cells = append(cells, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					name := time.Month(index + 1).String()[:3]
-					if len(p.MonthNames) == 12 {
-						name = p.MonthNames[index]
+					names := p.MonthNames
+					if len(names) != 12 {
+						names = c.Theme.Locale.MonthNames()
+					}
+					if len(names) == 12 {
+						name = names[index]
 						if r := []rune(name); len(r) > 4 {
 							name = string(r[:3])
 						}

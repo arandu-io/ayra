@@ -23,10 +23,16 @@ import (
 type Hover struct {
 	hover  gesture.Hover
 	inside bool
+	held   bool
 }
 
-// Hovering reports whether the pointer is resting on it.
-func (h *Hover) Hovering() bool { return h.inside }
+// Hovering reports whether the pointer is resting on it, or it is held.
+func (h *Hover) Hovering() bool { return h.inside || h.held }
+
+// Hold keeps what appears on hover showing without a pointer, and Hold(false)
+// lets go. It is for a screen that shows the tooltip on a keyboard focus or on a
+// long press, and for a picture of one: a pointer cannot be drawn.
+func (h *Hover) Hold(held bool) { h.held = held }
 
 // TooltipProps is a short line that appears beside a control.
 type TooltipProps struct {
@@ -61,12 +67,17 @@ func (p TooltipProps) layout(c ayra.Context, state *Hover, control ayra.Widget) 
 	// The area is registered after the control is drawn and over exactly its
 	// size, so a tooltip belongs to what it describes rather than to the row
 	// that happens to contain it.
-	defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(c.Ops).Pop()
+	//
+	// The clip is closed before the bubble is drawn. The bubble sits outside the
+	// control's rectangle, above or below it, and drawn inside the clip it was
+	// cut away entirely: a tooltip that never showed.
+	area := clip.Rect(image.Rectangle{Max: dims.Size}).Push(c.Ops)
 	state.hover.Add(c.Ops)
 	event.Op(c.Ops, state)
+	area.Pop()
 	state.inside = state.hover.Update(c.Source)
 
-	if !state.inside || p.Text == "" {
+	if !state.Hovering() || p.Text == "" {
 		return dims
 	}
 

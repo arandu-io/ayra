@@ -49,6 +49,9 @@ func (d *DatePicker) Changed() bool {
 	return picked
 }
 
+// Open puts the month up, as a press on the field does.
+func (d *DatePicker) Open() { d.popover.Open() }
+
 // Showing reports whether the month is on screen.
 func (d *DatePicker) Showing() bool { return d.popover.Showing() }
 
@@ -87,7 +90,7 @@ func (p DatePickerProps) Layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensions {
 	label := p.Placeholder
 	if label == "" {
-		label = "Pick a date"
+		label = orDefault(c.Theme.Locale.PickDate, "Pick a date")
 	}
 	ink := c.Theme.Colours.MutedForeground
 	if day := state.month.Selected(); !day.IsZero() {

@@ -24,11 +24,15 @@ type Locale struct {
 	// Monday starts the week on Monday. Brazil's calendar starts on Sunday, as
 	// the web panel's does.
 	Monday bool
-	// Today, Clear, Previous and Next are the words on the calendar's controls:
-	// the two under the grid and the two steps either side of the month. Empty
-	// leaves the control as it was -- the arrows for the steps, and no controls
-	// under the grid.
-	Today, Clear, Previous, Next string
+	// Today and Clear are the words on the two controls under the grid. Empty
+	// draws neither.
+	Today, Clear string
+	// Previous and Next name the two steps either side of the month, and
+	// PreviousYear and NextYear the two of the month picker. They are the names
+	// a screen reader says: the steps are drawn as Kyse's carets, so the words
+	// are not on screen. Empty says the English of the widget, "Previous month"
+	// and "Next month".
+	Previous, Next, PreviousYear, NextYear string
 
 	// The words of the pickers that open a calendar. Each is what a Props field
 	// of the same meaning says when the caller left it empty: the placeholder of
@@ -67,10 +71,9 @@ func (l Locale) WeekdayNames() []string {
 
 // PortugueseBrazil is pt-BR, with the same words the web panel's date pickers
 // carry: the month and weekday names of the Kyse calendar, "Hoje" and "Limpar"
-// under the grid, and "Anterior" and "Próximo" for the two steps -- short,
-// because here the label is the text on the button and not an aria-label, as it
-// is on the web where Kyse says "Mês anterior" and "Próximo mês". The week
-// starts on Sunday, as the web panel's does.
+// under the grid, and "Mês anterior" and "Próximo mês" as the names of the two
+// steps, which is what the web panel's calendar says. The week starts on
+// Sunday, as the web panel's does.
 func PortugueseBrazil() Locale {
 	return Locale{
 		Tag: "pt-BR",
@@ -78,11 +81,13 @@ func PortugueseBrazil() Locale {
 			"Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
 			"Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 		},
-		Weekdays: [7]string{"Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"},
-		Today:    "Hoje",
-		Clear:    "Limpar",
-		Previous: "Anterior",
-		Next:     "Próximo",
+		Weekdays:     [7]string{"Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"},
+		Today:        "Hoje",
+		Clear:        "Limpar",
+		Previous:     "Mês anterior",
+		Next:         "Próximo mês",
+		PreviousYear: "Ano anterior",
+		NextYear:     "Próximo ano",
 
 		PickDate:     "Escolher data",
 		PickPeriod:   "Escolher período",

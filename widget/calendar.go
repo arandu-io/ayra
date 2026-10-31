@@ -19,6 +19,8 @@ type Calendar struct {
 	previous Button
 	next     Button
 	days     [42]Button
+	today    Button
+	clear    Button
 	// pressed is the day the last press landed on, held until it is read. The
 	// selection moves with it, but a press on the day that is already selected
 	// moves nothing -- and a period is chosen by pressing the same day twice.
@@ -99,11 +101,40 @@ type CalendarProps struct {
 	// PreviousLabel and NextLabel are what the two steps say. Empty says the
 	// arrows.
 	PreviousLabel, NextLabel string
+	// TodayLabel and ClearLabel are the two controls under the grid: one chooses
+	// Today, the other empties the choice. Empty draws neither.
+	TodayLabel, ClearLabel string
 
 	// owned is the component that draws this calendar as a part of itself, by
 	// the name of its Kyse pair. Kyse's date-range-picker lays out two arrows of
 	// its own over a month, and the arrows are then that component's.
 	owned string
+
+	// bare says the calendar sits in a widget that has its own controls under
+	// it, as the date range does, and draws none.
+	bare bool
+}
+
+// localised fills what the caller left empty from the application's locale, in
+// the theme: the names, the first day of the week and the words on the
+// controls. What the caller set is kept, so a locale is a default and never an
+// override; with no locale the calendar is the English it always was.
+func (p CalendarProps) localised(c ayra.Context) CalendarProps {
+	locale := c.Theme.Locale
+	if len(p.MonthNames) != 12 {
+		p.MonthNames = locale.MonthNames()
+	}
+	if len(p.WeekdayNames) != 7 {
+		p.WeekdayNames = locale.WeekdayNames()
+	}
+	p.Monday = p.Monday || locale.Monday
+	p.PreviousLabel = orDefault(p.PreviousLabel, locale.Previous)
+	p.NextLabel = orDefault(p.NextLabel, locale.Next)
+	if !p.bare {
+		p.TodayLabel = orDefault(p.TodayLabel, locale.Today)
+		p.ClearLabel = orDefault(p.ClearLabel, locale.Clear)
+	}
+	return p
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -122,6 +153,7 @@ func (p CalendarProps) Layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 
 // layout is Layout without the root part around it.
 func (p CalendarProps) layout(c ayra.Context, state *Calendar) ayra.Dimensions {
+	p = p.localised(c)
 	month := state.Showing(p.Today)
 	if month.IsZero() {
 		// Nothing chosen, nothing shown, and no day passed in. Drawing a fixed
@@ -152,7 +184,7 @@ func (p CalendarProps) layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 		}
 	}
 
-	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+	rows := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return p.header(c.With(gtx), state, month)
 		}),
@@ -163,6 +195,47 @@ func (p CalendarProps) layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return p.weeks(c.With(gtx), state, days)
 		}),
+	}
+	if p.TodayLabel != "" || p.ClearLabel != "" {
+		rows = append(rows,
+			layout.Rigid(layout.Spacer{Height: 8}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return p.controls(c.With(gtx), state)
+			}),
+		)
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
+}
+
+// controls draws the two buttons under the grid, the clear one on the left and
+// the today one on the right, as Kyse's calendar has them.
+func (p CalendarProps) controls(c ayra.Context, state *Calendar) ayra.Dimensions {
+	if p.ClearLabel != "" && state.clear.Clicked(c) {
+		state.selected = time.Time{}
+		state.pressed = time.Time{}
+	}
+	if p.TodayLabel != "" && state.today.Clicked(c) && !p.Today.IsZero() && p.allowed(p.Today) {
+		state.selected = p.Today
+		state.shown = p.Today
+		state.pressed = p.Today
+	}
+
+	button := func(label string, state *Button, disabled bool) layout.FlexChild {
+		return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if label == "" {
+				return layout.Dimensions{}
+			}
+			inner := c.With(gtx)
+			inner.Constraints.Min = image.Point{}
+			return ButtonProps{Label: label, Variant: Ghost, Size: Small, Disabled: disabled}.Layout(inner, state)
+		})
+	}
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
+		button(p.ClearLabel, &state.clear, false),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 0)}
+		}),
+		button(p.TodayLabel, &state.today, p.Today.IsZero() || !p.allowed(p.Today)),
 	)
 }
 

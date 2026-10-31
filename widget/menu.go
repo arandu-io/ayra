@@ -263,6 +263,19 @@ type Menubar struct {
 	menus []Menu
 }
 
+// Open puts one menu up, as a press on its title does. The others come down on
+// the next frame: one is open at a time. It is for a screen that restores a
+// menu and for a picture of one open.
+func (m *Menubar) Open(index int) {
+	if index < 0 {
+		return
+	}
+	for len(m.menus) <= index {
+		m.menus = append(m.menus, Menu{})
+	}
+	m.menus[index].Open()
+}
+
 // Chosen reports which menu and which entry were picked, and -1, -1 when
 // nothing was.
 func (m *Menubar) Chosen() (menu, entry int) {

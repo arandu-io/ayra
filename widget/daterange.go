@@ -134,7 +134,7 @@ func (p DateRangePickerProps) PartNames() []string { return []string{"root"} }
 func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dimensions {
 	layoutName := orDefault(p.DateFormat, DateFormat)
 
-	label, ink := orDefault(p.Placeholder, "Choose a period"), c.Theme.Colours.MutedForeground
+	label, ink := orDefault(p.Placeholder, orDefault(c.Theme.Locale.PickPeriod, "Choose a period")), c.Theme.Colours.MutedForeground
 	if from, to := state.Range(); !from.IsZero() {
 		label = from.Format(layoutName) + " – " + to.Format(layoutName)
 		ink = c.Theme.Colours.Foreground
@@ -237,7 +237,7 @@ func (p DateRangePickerProps) panel(c ayra.Context, state *DateRange) ayra.Dimen
 				Today: p.Today, Min: p.Min, Max: p.Max, Monday: p.Monday,
 				Range:      [2]time.Time{state.from, to},
 				MonthNames: p.MonthNames, WeekdayNames: p.WeekdayNames,
-				owned: "date-range-picker",
+				owned: "date-range-picker", bare: true,
 			}.Layout(c.With(gtx), &state.month)
 		}),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),
@@ -247,12 +247,12 @@ func (p DateRangePickerProps) panel(c ayra.Context, state *DateRange) ayra.Dimen
 					if !state.waiting {
 						return layout.Dimensions{}
 					}
-					return drawText(c.With(gtx), orDefault(p.PendingLabel, "Choose the end date"), unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
+					return drawText(c.With(gtx), orDefault(p.PendingLabel, orDefault(c.Theme.Locale.PendingEnd, "Choose the end date")), unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					inner := c.With(gtx)
 					inner.Constraints.Min = image.Point{}
-					return ButtonProps{Label: orDefault(p.ClearLabel, "Clear"), Variant: Ghost, Size: Small}.Layout(inner, &state.clear)
+					return ButtonProps{Label: orDefault(p.ClearLabel, orDefault(c.Theme.Locale.Clear, "Clear")), Variant: Ghost, Size: Small}.Layout(inner, &state.clear)
 				}),
 			)
 		}),
