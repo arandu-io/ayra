@@ -13,6 +13,7 @@ import (
 func data() []Entry {
 	return []Entry{
 		tableEntry(),
+		dataTableEntry(),
 		feedEntry(),
 		calendarEntry(),
 		datePickerEntry(),

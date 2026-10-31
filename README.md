@@ -175,6 +175,13 @@ The API reference is generated from the doc comments and lives on
 symbol carries one, and that is deliberate: it is the documentation that cannot
 drift from the code, because it sits in the same file.
 
+A listing is one control that is two layouts. `widget.DataTable` asks a server
+for a page the way Kyse's DataTable does -- the same state, the same parameter
+names, so the route that draws the table in the browser answers the app -- and
+draws a table on a wide screen and cards on a phone, with the filters in a sheet,
+an endless list and pull to refresh. It owns no data: it asks a `DataSource`, and
+`ServerSource` is the one that speaks an Arandu route.
+
 The controls are the part worth reading first. Each one is a `Props` value you
 fill in and a state value you hold, and the doc comment on each says what the
 control guarantees and, where it matters, the fault the shape prevents.

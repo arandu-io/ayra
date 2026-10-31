@@ -87,6 +87,12 @@ func everyWidget() []each {
 		{"datetimepicker", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.DateTimePickerProps{Today: day, ComponentProps: i}.Layout(c, new(widget.DateTime))
 		}},
+		{"datatable", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.DataTableProps{
+				ComponentProps: i, Searchable: true, Mode: widget.ModeTable, // the cards fill the room they are given, which hides a padding
+				Columns: []widget.DataColumn{{Key: "plate", Title: "Plate"}},
+			}.Layout(c, new(widget.DataTable))
+		}},
 		{"combobox", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.ComboboxProps{ComponentProps: i}.Layout(c, new(widget.Combobox))
 		}},
