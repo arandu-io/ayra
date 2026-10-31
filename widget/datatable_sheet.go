@@ -249,11 +249,9 @@ func (p DataTableProps) sheetLayout(c ayra.Context, state *DataTable) {
 
 	content := func(c ayra.Context) ayra.Dimensions { return p.sheet(c, state) }
 	if c.Constraints.Max.Y < boundedHeight {
-		// Not dismissible by a press outside: on a touch screen the drawer reads the
-		// press that lands on its own buttons as one outside it and closes before
-		// the button answers (found on Android; the drawer is the library's and
-		// is reported, not worked around here). The sheet has its own Close.
-		DrawerProps{Side: Bottom, Size: 460, Modal: true}.Layout(c, &state.m.sheet, content)
+		// A press on the scrim outside the sheet closes it, and one on the sheet
+		// reaches the sheet's own buttons.
+		DrawerProps{Side: Bottom, Size: 460, Modal: true, Dismissible: true}.Layout(c, &state.m.sheet, content)
 		return
 	}
 	content(c)

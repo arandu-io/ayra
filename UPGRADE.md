@@ -24,7 +24,7 @@ the Kyse component draws, where they drew a path of their own or a word.
 
 ## v0.5.0 -- the data table
 
-`widget.DataTable` is new and nothing that compiled changes. Three things are
+`widget.DataTable` is new and nothing that compiled changes. Two things are
 worth knowing before writing a screen with it:
 
 - `Result.Total` is negative for a source that does not count (a route that pages
@@ -33,10 +33,6 @@ worth knowing before writing a screen with it:
 - The words default to Kyse's: `"{total} row(s)."` and `"Page {n} of {total}"`.
   A sentence copied from the web half's catalogue works unchanged; `{n}` and
   `{page}` and `{pages}` are still read.
-- The sheet of filters is not dismissed by a press outside it: on a touch screen
-  `Drawer` closes on the press that lands on its own buttons. It closes with its
-  own button, and `DrawerProps.Dismissible` should not be set on a touch screen
-  until that is fixed in `Drawer`.
 
 ## v0.4.0 -- restylable widgets
 

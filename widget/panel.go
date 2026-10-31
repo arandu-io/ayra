@@ -7,7 +7,6 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
@@ -77,16 +76,7 @@ func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	}
 
 	area := c.Constraints.Max
-	defer clip.Rect{Max: area}.Push(c.Ops).Pop()
-
-	if p.Modal {
-		paint.FillShape(c.Ops, scrim(), clip.Rect{Max: area}.Op())
-		state.outside.Add(c.Ops)
-		registerTarget(c, &state.outside)
-	}
-	if p.Dismissible {
-		DialogProps{Dismissible: true}.readDismissal(c, state)
-	}
+	state.overlay(c, area, p.Modal, p.Dismissible)
 
 	size := p.Size
 	if size == 0 {

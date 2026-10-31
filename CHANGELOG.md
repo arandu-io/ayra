@@ -1,5 +1,23 @@
 # Release Notes
 
+## Unreleased
+
+### Fixed
+
+- `widget`: a press on a `Drawer` or a `Dialog` no longer counts as a press outside
+  it. The barrier behind the panel was an enclosing area of the panel, and the
+  walk that routes a press goes out through every enclosing handler, so a tap on
+  the panel's own button reached the barrier too and closed the panel before the
+  button answered. The scrim now closes its own clip before the panel is drawn;
+  a tap on the scrim closes, a tap on the panel and its buttons does not. The
+  regression is tested with a simulated touch pointer. The data table's sheet of
+  filters is dismissible again, and the note about that limitation is gone from
+  the upgrade guide.
+- `widget`: a dismissible `Dialog` or `Drawer` took the keyboard on every frame, so
+  a text field inside it lost the focus the moment it was touched and received
+  nothing typed. It takes the keyboard once, when it opens, and escape is read
+  whatever holds the focus.
+
 ## [v0.6.0](https://github.com/arandu-io/ayra/compare/v0.5.0...v0.6.0) - 2026-10-31
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.5.0...v0.6.0

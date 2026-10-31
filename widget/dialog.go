@@ -23,6 +23,11 @@ type Dialog struct {
 	// after the draw is told about it once.
 	dismissed bool
 
+	// focused records that the keyboard was taken when the dialog opened, so it
+	// is taken once and not on every frame: a field inside the dialog that is
+	// given the focus has to be allowed to keep it.
+	focused bool
+
 	// outside is the barrier under the scrim and inside is the panel. Two
 	// separate targets, because "was this press outside the dialog" is a
 	// question only the two of them together can answer: the panel is drawn
@@ -34,14 +39,23 @@ type Dialog struct {
 // close marks the dialog closed by the person rather than by the screen.
 func (d *Dialog) close() {
 	d.open = false
+	d.focused = false
 	d.dismissed = true
 }
 
 // Open shows the dialog.
-func (d *Dialog) Open() { d.open = true }
+func (d *Dialog) Open() {
+	if !d.open {
+		d.focused = false
+	}
+	d.open = true
+}
 
 // Close hides it.
-func (d *Dialog) Close() { d.open = false }
+func (d *Dialog) Close() {
+	d.open = false
+	d.focused = false
+}
 
 // Showing reports whether it is on screen.
 func (d *Dialog) Showing() bool { return d.open }
@@ -108,20 +122,7 @@ func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	}
 
 	area := c.Constraints.Max
-	defer clip.Rect{Max: area}.Push(c.Ops).Pop()
-
-	if p.Modal {
-		// The scrim, and the barrier behind it. Painting one without the other
-		// is the mistake that produces a dialog somebody can click straight
-		// through: it looks modal and is not.
-		paint.FillShape(c.Ops, scrim(), clip.Rect{Max: area}.Op())
-		state.outside.Add(c.Ops)
-		event.Op(c.Ops, &state.outside)
-	}
-
-	if p.Dismissible {
-		p.readDismissal(c, state)
-	}
+	state.overlay(c, area, p.Modal, p.Dismissible)
 
 	width := p.Width
 	if width == 0 {
@@ -156,17 +157,51 @@ func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	})
 }
 
+// overlay is what a panel that dims the screen puts behind itself: the scrim,
+// the barrier that reads a press outside the panel, and the keyboard target for
+// escape.
+//
+// It is its own clip, closed before the panel is drawn, and that is the whole
+// point of the function. A pointer handler contains the handlers declared
+// inside its area -- the walk that routes a press goes from the innermost
+// handler out through every one that encloses it. A panel opened inside the
+// barrier's area is therefore a control inside the barrier, and a press on it
+// reached the barrier too, as a press outside: the dialog closed on the tap that
+// was meant for its own button, before the button answered. Drawn as a sibling,
+// the panel is not enclosed by the barrier, and a press on it never reaches it.
+func (d *Dialog) overlay(c ayra.Context, area image.Point, modal, dismissible bool) {
+	defer clip.Rect{Max: area}.Push(c.Ops).Pop()
+
+	if modal {
+		// The scrim, and the barrier behind it. Painting one without the other
+		// is the mistake that produces a dialog somebody can click straight
+		// through: it looks modal and is not.
+		paint.FillShape(c.Ops, scrim(), clip.Rect{Max: area}.Op())
+		d.outside.Add(c.Ops)
+		event.Op(c.Ops, &d.outside)
+	}
+	if dismissible {
+		DialogProps{}.readDismissal(c, d)
+	}
+}
+
 // readDismissal closes the dialog on escape, or on a press that landed on the
 // barrier rather than on the panel.
 func (p DialogProps) readDismissal(c ayra.Context, state *Dialog) {
-	// The dialog takes the keyboard while it is up, which is both halves of
-	// being modal: escape reaches it, and nothing behind it reads a keystroke.
-	c.Execute(key.FocusCmd{Tag: state})
+	// The dialog takes the keyboard when it opens, so nothing behind it reads a
+	// keystroke. It takes it once: every frame would take it back from the field
+	// the person just touched inside the sheet, and the field would never keep
+	// what is typed. Escape is read whatever holds the focus, for the same
+	// reason -- it has to close the dialog from inside a field as well.
+	if !state.focused {
+		state.focused = true
+		c.Execute(key.FocusCmd{Tag: state})
+	}
 	event.Op(c.Ops, state)
 
 	for {
 		e, ok := c.Event(
-			key.Filter{Focus: state, Name: key.NameEscape},
+			key.Filter{Name: key.NameEscape},
 		)
 		if !ok {
 			break
