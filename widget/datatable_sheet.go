@@ -316,7 +316,11 @@ func (p DataTableProps) sheet(c ayra.Context, state *DataTable) ayra.Dimensions 
 								if state.query.Sort.Key != column.Key {
 									return layout.Dimensions{}
 								}
-								return sortMark(c.With(gtx), state.query.Sort.Descending, t.Colours.Foreground)
+								arrow := innerIcon("data-table", "ArrowUp")
+								if state.query.Sort.Descending {
+									arrow = innerIcon("data-table", "ArrowDown")
+								}
+								return drawInner(c.With(gtx), arrow, innerPixels(c, innerSide), t.Colours.Foreground, 0)
 							}),
 						)
 					})

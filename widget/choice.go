@@ -106,7 +106,7 @@ func (p SelectProps) layout(c ayra.Context, state *Select) ayra.Dimensions {
 	return dims
 }
 
-// closed draws the control itself: the chosen value and the marker.
+// closed draws the control itself: the chosen value and the caret.
 func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 	label, picked := p.label(state)
 	ink := c.Theme.Colours.MutedForeground
@@ -132,7 +132,9 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 						return drawText(row.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Start, plain())
 					}),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return marker(row.With(gtx), state.open.Showing())
+						// Kyse's native select draws the chevron from the stylesheet, and
+						// the nearest in its icon set is CaretDown, which does not turn.
+						return drawInner(row.With(gtx), innerIcon("select", "CaretDown"), innerPixels(row, innerSide), c.Theme.Colours.MutedForeground, 0)
 					}),
 				)
 			})
@@ -214,6 +216,10 @@ type NumberProps struct {
 	Min, Max int
 	// Step is how much a press changes it. Zero is one.
 	Step int
+	// DecrementLabel and IncrementLabel name the two buttons for a screen
+	// reader, which is all that names them: they draw an icon. Empty says
+	// "Decrease" and "Increase", as Kyse's do.
+	DecrementLabel, IncrementLabel string
 	// Disabled draws it as unavailable.
 	Disabled bool
 }
@@ -267,7 +273,7 @@ func (p NumberProps) layout(c ayra.Context, state *Stepper) ayra.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: "-", Variant: Outline, Size: Small, Disabled: p.Disabled || atFloor}.Layout(inner, &state.down)
+			return innerButton(inner, &state.down, innerIcon("number-input", "Minus"), orDefault(p.DecrementLabel, "Decrease"), Outline, p.Disabled || atFloor)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
@@ -282,7 +288,7 @@ func (p NumberProps) layout(c ayra.Context, state *Stepper) ayra.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: "+", Variant: Outline, Size: Small, Disabled: p.Disabled || atCeiling}.Layout(inner, &state.up)
+			return innerButton(inner, &state.up, innerIcon("number-input", "Plus"), orDefault(p.IncrementLabel, "Increase"), Outline, p.Disabled || atCeiling)
 		}),
 	)
 }

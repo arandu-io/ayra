@@ -4,6 +4,24 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- Kyse's icons
+
+Nothing that compiled stops compiling, and the pictures of an application that
+keeps its own goldens will change: the widgets draw inside themselves the icons
+the Kyse component draws, where they drew a path of their own or a word.
+
+- `DeleteRow` drew a trash and `EditInPlace` a pencil. Kyse's draw neither, so
+  `DeleteRow` is now a button that says "Delete" (`Label` changes the word) and
+  `EditInPlace` shows the value and "Edit" (`EditLabel`). To keep an icon on the
+  first, pass it: `widget.DeleteRowProps{Icon: icons.Trash(), IconOnly: true, Label: "Delete invoice 114"}`.
+- The two steps of a calendar and the buttons of a number input were named by
+  their text, `<`, `>`, `-` and `+`. They draw an icon now and are named for a
+  screen reader by `PreviousLabel` and `NextLabel` ("Previous month", "Next
+  month" when empty) and by `DecrementLabel` and `IncrementLabel`.
+- A rating's stars are 24 points and lit in the primary colour, as Kyse's are.
+- A `ButtonProps` whose `Icon` is set and whose `Label` is empty was a button
+  with no name. Set `IconOnly: true` and `Label` to the name.
+
 ## v0.5.0 -- the data table
 
 `widget.DataTable` is new and nothing that compiled changes. Three things are

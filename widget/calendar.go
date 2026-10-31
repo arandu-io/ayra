@@ -99,11 +99,19 @@ type CalendarProps struct {
 	// PreviousLabel and NextLabel are what the two steps say. Empty says the
 	// arrows.
 	PreviousLabel, NextLabel string
+
+	// owned is the component that draws this calendar as a part of itself, by
+	// the name of its Kyse pair. Kyse's date-range-picker lays out two arrows of
+	// its own over a month, and the arrows are then that component's.
+	owned string
 }
 
 // PartNames are the parts this widget publishes, by the names the web
 // component publishes in data-part.
 func (p CalendarProps) PartNames() []string { return []string{"root"} }
+
+// owner is the component whose icons the month's two arrows are.
+func (p CalendarProps) owner() string { return orDefault(p.owned, "calendar") }
 
 // Layout draws the month and returns the room it took.
 func (p CalendarProps) Layout(c ayra.Context, state *Calendar) ayra.Dimensions {
@@ -162,9 +170,7 @@ func (p CalendarProps) layout(c ayra.Context, state *Calendar) ayra.Dimensions {
 func (p CalendarProps) header(c ayra.Context, state *Calendar, month time.Time) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: orDefault(p.PreviousLabel, "<"), Variant: Ghost, Size: Small}.Layout(inner, &state.previous)
+			return innerButton(c.With(gtx), &state.previous, innerIcon(p.owner(), "CaretLeft"), orDefault(p.PreviousLabel, "Previous month"), Ghost, false)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			label := month.Format("January 2006")
@@ -174,9 +180,7 @@ func (p CalendarProps) header(c ayra.Context, state *Calendar, month time.Time) 
 			return drawText(c.With(gtx), label, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Middle, semibold())
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			inner.Constraints.Min = image.Point{}
-			return ButtonProps{Label: orDefault(p.NextLabel, ">"), Variant: Ghost, Size: Small}.Layout(inner, &state.next)
+			return innerButton(c.With(gtx), &state.next, innerIcon(p.owner(), "CaretRight"), orDefault(p.NextLabel, "Next month"), Ghost, false)
 		}),
 	)
 }

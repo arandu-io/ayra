@@ -2,7 +2,6 @@ package widget
 
 import (
 	"fmt"
-	"image"
 	"strconv"
 	"strings"
 	"time"
@@ -216,7 +215,7 @@ func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimens
 	}
 
 	field := func(c ayra.Context) ayra.Dimensions {
-		return dateField(c, p.ComponentProps, "datetimepicker", label, ink, p.Disabled)
+		return dateField(c, p.ComponentProps, "datetimepicker", "date-time-picker", label, ink, p.Disabled)
 	}
 	if p.Disabled {
 		state.popover.Close()
@@ -310,17 +309,13 @@ func (p DateTimePickerProps) months(c ayra.Context, state *DateTime) ayra.Dimens
 			inner := c.With(gtx)
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					i := inner.With(gtx)
-					i.Constraints.Min = image.Point{}
-					return ButtonProps{Label: "<", Variant: Ghost, Size: Small}.Layout(i, &state.earlier)
+					return innerButton(inner.With(gtx), &state.earlier, innerIcon("date-time-picker", "CaretLeft"), "Previous year", Ghost, false)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return drawText(inner.With(gtx), strconv.Itoa(state.year), unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Middle, semibold())
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					i := inner.With(gtx)
-					i.Constraints.Min = image.Point{}
-					return ButtonProps{Label: ">", Variant: Ghost, Size: Small}.Layout(i, &state.later)
+					return innerButton(inner.With(gtx), &state.later, innerIcon("date-time-picker", "CaretRight"), "Next year", Ghost, false)
 				}),
 			)
 		}),

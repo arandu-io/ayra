@@ -3,7 +3,6 @@ package widget
 import (
 	"context"
 	"image"
-	"image/color"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,11 +10,8 @@ import (
 	"time"
 
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/theme"
@@ -620,20 +616,18 @@ func (p DataTableProps) toolbar(c ayra.Context, state *DataTable) ayra.Dimension
 				inner.Constraints.Min = image.Point{}
 				entries := make([]string, len(facet.Options))
 				for i, option := range facet.Options {
-					mark := "[ ] "
-					for _, v := range state.query.Filters[facet.Key] {
-						if v == option.Value {
-							mark = "[x] "
-						}
-					}
-					entries[i] = mark + orDefault(option.Label, option.Value)
+					entries[i] = orDefault(option.Label, option.Value)
+				}
+				on := state.query.Filters[facet.Key]
+				ticked := func(index int) bool {
+					return index < len(facet.Options) && slices.Contains(on, facet.Options[index].Value)
 				}
 				label := facet.Title
 				if n := len(state.query.Filters[facet.Key]); n > 0 {
 					label += " (" + strconv.Itoa(n) + ")"
 				}
-				return MenuProps{Entries: entries, Width: 220}.Layout(inner, &state.facets[index], func(c ayra.Context) ayra.Dimensions {
-					return ButtonProps{Label: label, Variant: Outline, Size: Small}.Layout(c, &state.triggers[index])
+				return MenuProps{Entries: entries, Width: 220, ticked: ticked, tickOwner: "data-table"}.Layout(inner, &state.facets[index], func(c ayra.Context) ayra.Dimensions {
+					return ButtonProps{Label: label, Icon: innerIcon("data-table", "PlusCircle"), Variant: Outline, Size: Small}.Layout(c, &state.triggers[index])
 				})
 			}), layout.Rigid(layout.Spacer{Width: 6}.Layout))
 		}
@@ -641,7 +635,7 @@ func (p DataTableProps) toolbar(c ayra.Context, state *DataTable) ayra.Dimension
 			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				inner := c.With(gtx)
 				inner.Constraints.Min = image.Point{}
-				return ButtonProps{Label: orDefault(p.Words.Clear, "Clear filters"), Variant: Ghost, Size: Small}.Layout(inner, &state.clear)
+				return ButtonProps{Label: orDefault(p.Words.Clear, "Clear filters"), Icon: innerIcon("data-table", "X"), Trailing: true, Variant: Ghost, Size: Small}.Layout(inner, &state.clear)
 			}))
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
@@ -751,20 +745,16 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 				})
 			}
 			inner.Constraints.Min = image.Point{}
-			sorted := state.query.Sort.Key == column.Key && column.Key != ""
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return ButtonProps{Label: column.Title, Variant: Ghost, Size: ExtraSmall}.Layout(inner.With(gtx), &state.headers[index])
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if !sorted {
-						return layout.Dimensions{}
-					}
-					return layout.Inset{Left: 2}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return sortMark(inner.With(gtx), state.query.Sort.Descending, t.Colours.Foreground)
-					})
-				}),
-			)
+			// The arrow Kyse puts after a sortable heading: both ways while the
+			// column is not the one in order, then the way it is.
+			arrow := innerIcon("data-table", "ArrowsDownUp")
+			if state.query.Sort.Key == column.Key && column.Key != "" {
+				arrow = innerIcon("data-table", "ArrowUp")
+				if state.query.Sort.Descending {
+					arrow = innerIcon("data-table", "ArrowDown")
+				}
+			}
+			return ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(inner.With(gtx), &state.headers[index])
 		}))
 	}
 	if len(p.Actions) > 0 {
@@ -857,7 +847,7 @@ func (p DataTableProps) footer(c ayra.Context, state *DataTable, result Result, 
 					labels[i] = strconv.Itoa(s)
 				}
 				return MenuProps{Entries: labels, Above: true, Width: 80}.Layout(inner, &state.sizes, func(c ayra.Context) ayra.Dimensions {
-					return ButtonProps{Label: strconv.Itoa(size) + " / page", Variant: Outline, Size: Small}.Layout(c, &state.sizeBtn)
+					return ButtonProps{Label: strconv.Itoa(size) + " / page", Icon: innerIcon("data-table", "CaretUpDown"), Trailing: true, Variant: Outline, Size: Small}.Layout(c, &state.sizeBtn)
 				})
 			}),
 			layout.Rigid(layout.Spacer{Width: 12}.Layout),
@@ -879,25 +869,6 @@ func (p DataTableProps) footer(c ayra.Context, state *DataTable, result Result, 
 			}),
 		)
 	})
-}
-
-// sortMark draws the small triangle that says which way a column is ordered.
-func sortMark(c ayra.Context, descending bool, ink color.NRGBA) ayra.Dimensions {
-	side := c.Dp(unit.Dp(8))
-	var path clip.Path
-	path.Begin(c.Ops)
-	if descending {
-		path.MoveTo(f32.Pt(0, 0))
-		path.LineTo(f32.Pt(float32(side), 0))
-		path.LineTo(f32.Pt(float32(side)/2, float32(side)*0.8))
-	} else {
-		path.MoveTo(f32.Pt(0, float32(side)*0.8))
-		path.LineTo(f32.Pt(float32(side), float32(side)*0.8))
-		path.LineTo(f32.Pt(float32(side)/2, 0))
-	}
-	path.Close()
-	paint.FillShape(c.Ops, ink, clip.Outline{Path: path.End()}.Op())
-	return ayra.Dimensions{Size: image.Pt(side, side)}
 }
 
 // SetSearch types into the search field, for a screen that fills it from

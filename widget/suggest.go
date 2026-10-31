@@ -12,6 +12,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/icons"
 )
 
 // matches answers the entries a query matches, by index, in the order they
@@ -131,6 +132,8 @@ type AutocompleteProps struct {
 	// widget is the name the field is restyled under when another widget draws
 	// it: the combobox, which is this with a server behind it.
 	widget string
+	// tail is an icon drawn at the end of the box: the combobox's caret.
+	tail icons.Icon
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -182,6 +185,7 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 		widget:         orDefault(p.widget, "autocomplete"),
 		Placeholder:    p.Placeholder,
 		Disabled:       p.Disabled,
+		tail:           p.tail,
 	}.Layout(c, &state.input)
 
 	if !state.open.Showing() {
@@ -391,7 +395,7 @@ func (p PaletteProps) layout(c ayra.Context, state *Palette) ayra.Dimensions {
 	return DialogProps{Width: width, Modal: true, Dismissible: true}.Layout(c, &state.dialog, func(c ayra.Context) ayra.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return InputProps{Placeholder: p.placeholder()}.Layout(c.With(gtx), &state.input)
+				return InputProps{Placeholder: p.placeholder(), lead: innerIcon("command", "MagnifyingGlass")}.Layout(c.With(gtx), &state.input)
 			}),
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {

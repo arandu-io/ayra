@@ -276,7 +276,7 @@ func (p TreeProps) row(c ayra.Context, state *Tree, node TreeNode, path []int) a
 // The height is the marker's own and decides nothing: the row is as tall as the
 // label beside it, which is taller.
 func (p TreeProps) turn(c ayra.Context, state *Tree, row *treeRow, node TreeNode, path []int) ayra.Dimensions {
-	side := c.Dp(unit.Dp(10))
+	side := innerPixels(c, innerSideSmall)
 	if len(node.Children) == 0 {
 		return ayra.Dimensions{Size: image.Pt(side, side)}
 	}
@@ -289,10 +289,10 @@ func (p TreeProps) turn(c ayra.Context, state *Tree, row *treeRow, node TreeNode
 		// enabled again -- a press somebody made on a control they could see
 		// was unavailable, acted on later, with nothing on screen to connect
 		// the two.
-		return marker(c, open)
+		return treeToggle(c, open)
 	}
 	return row.turn.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return marker(c.With(gtx), open)
+		return treeToggle(c.With(gtx), open)
 	})
 }
 
@@ -307,4 +307,14 @@ func samePath(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+// treeToggle draws the caret that opens a branch: Kyse's CaretRight, which the
+// stylesheet turns a quarter when the branch is open.
+func treeToggle(c ayra.Context, open bool) ayra.Dimensions {
+	quarters := 0
+	if open {
+		quarters = 1
+	}
+	return drawInner(c, innerIcon("tree", "CaretRight"), innerPixels(c, innerSideSmall), c.Theme.Colours.MutedForeground, quarters)
 }

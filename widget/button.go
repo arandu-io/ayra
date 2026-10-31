@@ -60,6 +60,13 @@ type ButtonProps struct {
 	// Icon is drawn before the label, and alone when there is none -- the
 	// icon-only button, which wants a Size of Icon. The zero Icon draws nothing.
 	Icon icons.Icon
+	// IconOnly draws the icon alone and keeps Label as the name a screen reader
+	// says, as Kyse's IconOnly does: an icon-only button with no name is
+	// announced as "button" and nothing on the screen says which one.
+	IconOnly bool
+	// Trailing draws the icon after the label instead of before it, where Kyse
+	// puts the caret of a menu and the arrow of a sortable heading.
+	Trailing bool
 	// Variant is what the button is for. Zero is the ordinary one.
 	Variant Variant
 	// Size is how much room it takes. Zero is the one a form is built from.
@@ -113,7 +120,11 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		return p.surface(inner, style, func(inner ayra.Context) ayra.Dimensions {
 			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
-				dims := buttonContent(content, p.Label, p.Icon, style)
+				shown := p.Label
+				if p.IconOnly && !p.Icon.IsZero() {
+					shown = ""
+				}
+				dims := buttonContent(content, shown, p.Icon, p.Trailing, style)
 				if p.Variant == Link && p.Custom == "" && p.Icon.IsZero() {
 					underline(content, dims, p.Label, style)
 				}
@@ -242,7 +253,7 @@ func (p ButtonProps) surface(c ayra.Context, style theme.Style, content ayra.Wid
 // buttonContent draws what is on a button: the label, and the icon before it. An
 // icon and a label are centred together as one, and an icon alone is centred in
 // the room it is given.
-func buttonContent(c ayra.Context, label string, icon icons.Icon, style theme.Style) ayra.Dimensions {
+func buttonContent(c ayra.Context, label string, icon icons.Icon, trailing bool, style theme.Style) ayra.Dimensions {
 	if icon.IsZero() {
 		return buttonLabel(c, label, style)
 	}
@@ -267,12 +278,16 @@ func buttonContent(c ayra.Context, label string, icon icons.Icon, style theme.St
 	height := max(side, text.Size.Y)
 	left := max((c.Constraints.Min.X-width)/2, 0)
 
-	icon0 := op.Offset(image.Pt(left, (height-side)/2)).Push(c.Ops)
+	iconAt, labelAt := left, left+side+gap
+	if trailing {
+		iconAt, labelAt = left+text.Size.X+gap, left
+	}
+	icon0 := op.Offset(image.Pt(iconAt, (height-side)/2)).Push(c.Ops)
 	DrawIcon(c, icon, side, style.Foreground.NRGBA())
 	icon0.Pop()
 
 	if label != "" {
-		shifted := op.Offset(image.Pt(left+side+gap, 0)).Push(c.Ops)
+		shifted := op.Offset(image.Pt(labelAt, 0)).Push(c.Ops)
 		measuring := c
 		measuring.Constraints.Min = image.Point{}
 		buttonLabel(measuring, label, style)

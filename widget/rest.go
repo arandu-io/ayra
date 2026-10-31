@@ -229,16 +229,21 @@ type DeleteRowProps struct {
 	// ComponentProps is what the caller changes on this one instance. It
 	// publishes one part, "root".
 	ComponentProps
-	// Label names the action for a screen reader, and ConfirmLabel and
-	// CancelLabel are the two buttons of the question.
+	// Label is the text on the button, and ConfirmLabel and CancelLabel are the
+	// two buttons of the question. Empty says "Delete", as Kyse's does.
 	Label, ConfirmLabel, CancelLabel string
+	// Icon is drawn before the label, and IconOnly keeps Label as the name a
+	// screen reader says and draws the icon alone. Kyse's DeleteRow draws no
+	// icon of its own -- the product passes one -- and neither does this.
+	Icon     icons.Icon
+	IconOnly bool
 }
 
 // PartNames are the parts this widget publishes, by the names the web
 // component publishes in data-part.
 func (p DeleteRowProps) PartNames() []string { return []string{"root"} }
 
-// Layout draws the trash, or the question once it was pressed.
+// Layout draws the button, or the question once it was pressed.
 func (p DeleteRowProps) Layout(c ayra.Context, state *DeleteRow) ayra.Dimensions {
 	switch {
 	case state.trigger.Clicked(c):
@@ -251,8 +256,14 @@ func (p DeleteRowProps) Layout(c ayra.Context, state *DeleteRow) ayra.Dimensions
 
 	return withRoot(c, "deleterow", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
 		if !state.armed {
+			size := Small
+			if p.IconOnly && !p.Icon.IsZero() {
+				size = Icon
+			}
+			c.Constraints.Min = image.Point{}
 			return ButtonProps{
-				Icon: icons.Trash(), Size: Icon, Variant: Ghost, Label: "",
+				Label: orDefault(p.Label, "Delete"), Icon: p.Icon, IconOnly: p.IconOnly,
+				Size: size, Variant: Ghost,
 			}.Layout(c, &state.trigger)
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
@@ -690,6 +701,7 @@ type FormDialog struct {
 	opened    bool
 	submit    Button
 	cancel    Button
+	close     Button
 	submitted bool
 	values    map[string]string
 }
@@ -750,7 +762,10 @@ type FormDialogProps struct {
 	// SubmitLabel and CancelLabel are the two buttons. SubmitVariant is the
 	// first one's look: Destructive for a form that removes something.
 	SubmitLabel, CancelLabel string
-	SubmitVariant            Variant
+	// CloseLabel names the X in the corner for a screen reader, which is all
+	// that names it. Empty says "Close", as Kyse's does.
+	CloseLabel    string
+	SubmitVariant Variant
 	// Busy draws the submit button as waiting and refuses a second press, for
 	// the time the server takes to answer.
 	Busy bool
@@ -779,7 +794,7 @@ func (p FormDialogProps) Layout(c ayra.Context, state *FormDialog) ayra.Dimensio
 
 	if state.dialog.Showing() {
 		switch {
-		case state.cancel.Clicked(c):
+		case state.cancel.Clicked(c), !p.Alert && state.close.Clicked(c):
 			state.dialog.close()
 		case state.submit.Clicked(c) && !p.Busy:
 			state.collect(p)
@@ -791,9 +806,20 @@ func (p FormDialogProps) Layout(c ayra.Context, state *FormDialog) ayra.Dimensio
 		ComponentProps: ComponentProps{Style: root}, Modal: true, Dismissible: !p.Alert, Width: p.Width,
 	}.Layout(c, &state.dialog, func(c ayra.Context) ayra.Dimensions {
 		t := c.Theme
+		heading := []layout.FlexChild{
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return drawText(c.With(gtx), p.Title, unit.Sp(t.Type.Heading), t.Colours.Foreground, 0, text.Start, semibold())
+			}),
+		}
+		if !p.Alert {
+			// The X in the corner Kyse draws unless the dialog must be answered.
+			heading = append(heading, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return innerButton(c.With(gtx), &state.close, innerIcon("form-dialog", "X"), orDefault(p.CloseLabel, "Close"), Ghost, false)
+			}))
+		}
 		rows := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return drawText(c.With(gtx), p.Title, unit.Sp(t.Type.Heading), t.Colours.Foreground, 0, text.Start, semibold())
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(gtx, heading...)
 			}),
 		}
 		if p.Description != "" {

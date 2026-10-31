@@ -5,8 +5,8 @@ import (
 	"image/color"
 
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
@@ -210,23 +210,17 @@ func drawBox(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
 	return ayra.Dimensions{Size: box.Max}
 }
 
-// drawTick draws the mark inside a ticked box.
+// drawTick draws the mark inside a ticked box: Kyse's Check, at the size its
+// stylesheet gives the tick of a checkbox, 0.875rem in a box of 1rem, centred.
 //
-// A stroked path of two segments, and not the pair of rectangles this had
-// first: two rectangles meeting at a right angle draw a letter L, which is
-// what it looked like -- correct in every dimension and wrong to every eye.
+// The browser draws that tick from the stylesheet, as a Lucide check; the one in
+// Kyse's own icon set is Check, and this is the same one the Kyse components
+// that draw a tick themselves use.
 func drawTick(c ayra.Context, side int, ink color.NRGBA) {
-	width := float32(side)
-	thickness := float32(side) / 8
-
-	var tick clip.Path
-	tick.Begin(c.Ops)
-	tick.MoveTo(f32.Pt(width*0.26, width*0.52))
-	tick.LineTo(f32.Pt(width*0.43, width*0.70))
-	tick.LineTo(f32.Pt(width*0.76, width*0.32))
-
-	stroke := clip.Stroke{Path: tick.End(), Width: thickness}
-	paint.FillShape(c.Ops, ink, stroke.Op())
+	mark := side * innerSideSmall / innerSide
+	shift := op.Offset(image.Pt((side-mark)/2, (side-mark)/2)).Push(c.Ops)
+	drawInner(c, innerIcon("checkbox", "Check"), mark, ink, 0)
+	shift.Pop()
 }
 
 // drawDot draws a radio option: a circle with a smaller one inside when set.

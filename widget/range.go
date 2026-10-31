@@ -3,10 +3,8 @@ package widget
 import (
 	"image"
 	"image/color"
-	"math"
 
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/gesture"
 	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/layout"
@@ -138,7 +136,7 @@ func (p RatingProps) layout(c ayra.Context, state *Rating) ayra.Dimensions {
 		of = 5
 	}
 
-	side := c.Dp(unit.Dp(20))
+	side := innerPixels(c, innerSideStar)
 	width := side * of
 	area := image.Pt(width, side)
 
@@ -163,9 +161,12 @@ func (p RatingProps) layout(c ayra.Context, state *Rating) ayra.Dimensions {
 	}
 
 	for index := 0; index < of; index++ {
-		ink := c.Theme.Colours.Border
+		// Kyse's stylesheet: text-primary up to the chosen star, and the muted
+		// foreground at 40% beyond it.
+		ink := c.Theme.Colours.MutedForeground
+		ink.A = uint8(int(ink.A) * 2 / 5)
 		if index < state.value {
-			ink = c.Theme.Colours.Foreground
+			ink = c.Theme.Colours.Primary
 		}
 		// Offset, not a clip: a clip restricts where the drawing may land and
 		// moves nothing, so five stars drawn this way are five stars at the
@@ -178,39 +179,8 @@ func (p RatingProps) layout(c ayra.Context, state *Rating) ayra.Dimensions {
 	return ayra.Dimensions{Size: area}
 }
 
-// star draws one mark, filled.
-//
-// A five-pointed outline rather than a glyph, because a glyph comes from
-// whichever font the screen happens to carry, and on a platform missing it the
-// rating renders as five empty boxes.
+// star draws one mark: Kyse's Star, the same picture lit and unlit, which differ
+// only in the ink.
 func star(c ayra.Context, side int, ink color.NRGBA) {
-	centre := float32(side) / 2
-	outer := float32(side) * 0.42
-	inner := outer * 0.42
-
-	var shape clip.Path
-	shape.Begin(c.Ops)
-
-	for point := 0; point < 10; point++ {
-		radius := outer
-		if point%2 == 1 {
-			radius = inner
-		}
-		// Ten points alternating between the two radii, starting at the top:
-		// that is what a five-pointed star is, and the half-turn offset is what
-		// puts a point upwards rather than an edge.
-		angle := float64(point)*math.Pi/5 - math.Pi/2
-		at := f32.Pt(
-			centre+radius*float32(math.Cos(angle)),
-			centre+radius*float32(math.Sin(angle)),
-		)
-		if point == 0 {
-			shape.MoveTo(at)
-			continue
-		}
-		shape.LineTo(at)
-	}
-	shape.Close()
-
-	paint.FillShape(c.Ops, ink, clip.Outline{Path: shape.End()}.Op())
+	drawInner(c, innerIcon("rating", "Star"), side, ink, 0)
 }

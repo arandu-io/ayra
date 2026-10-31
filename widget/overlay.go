@@ -204,7 +204,14 @@ func (p ToastProps) layout(c ayra.Context, state *Toasts) ayra.Dimensions {
 			inner.Constraints.Min.X = inner.Constraints.Max.X
 
 			measure := op.Record(inner.Ops)
-			dims := AlertProps{Title: message.Title, Severity: message.Severity}.Layout(inner)
+			dims := AlertProps{Title: message.Title, Severity: message.Severity, endRoom: innerSide + 8}.Layout(inner)
+			// Kyse's close button is an X in the corner, and pressing anywhere on
+			// the message closes it: the mark says so.
+			side := innerPixels(inner, innerSide)
+			margin := inner.Dp(unit.Dp(12))
+			at := op.Offset(image.Pt(dims.Size.X-margin-side, margin)).Push(inner.Ops)
+			drawInner(inner, innerIcon("toast", "X"), side, inner.Theme.Colours.MutedForeground, 0)
+			at.Pop()
 			drawn := measure.Stop()
 
 			defer clip.Rect(image.Rectangle{Max: dims.Size}).Push(inner.Ops).Pop()

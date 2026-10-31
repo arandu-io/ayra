@@ -172,6 +172,7 @@ func (p ComboboxProps) Layout(c ayra.Context, state *Combobox) ayra.Dimensions {
 		ComponentProps: p.ComponentProps, widget: "combobox",
 		Entries: entries, Placeholder: p.Placeholder, Limit: p.Limit,
 		Empty: empty, Disabled: p.Disabled, Unfiltered: true,
+		tail: innerIcon("combobox", "CaretDown"),
 	}.Layout(c, &state.field)
 
 	if chosen := state.field.Chosen(); chosen >= 0 && chosen < len(options) {

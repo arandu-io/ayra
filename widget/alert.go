@@ -52,6 +52,10 @@ type AlertProps struct {
 	Body string
 	// Severity is how bad the news is. Zero is context.
 	Severity Severity
+
+	// endRoom is room kept free at the end of the band, in points, for a mark a
+	// widget draws over it: the toast's close.
+	endRoom float32
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -72,6 +76,7 @@ func (p AlertProps) Layout(c ayra.Context) ayra.Dimensions {
 		Border:     theme.Colour(border),
 		Padding:    theme.Uniform(12),
 	}, p.ComponentProps)
+	root.Padding.Right += p.endRoom
 	title := c.Theme.Resolve("alert", "title", variant, theme.Style{
 		Foreground: theme.Colour(ink),
 		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Body)},

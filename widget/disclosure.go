@@ -1,13 +1,8 @@
 package widget
 
 import (
-	"image"
-
 	"github.com/arandu-io/ayra"
-	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/layout"
-	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
@@ -83,56 +78,32 @@ func (p CollapsibleProps) layout(c ayra.Context, state *Disclosure, content ayra
 				// content nobody can see.
 				return layout.Dimensions{}
 			}
-			return layout.Inset{Top: 8, Left: 22}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return content(c.With(gtx))
 			})
 		}),
 	)
 }
 
-// summaryRow draws the pressable line: a marker that turns, and the text.
+// summaryRow draws the pressable line: the text, and the caret at its end.
+//
+// The caret is Kyse's, CaretDown, and the collapsible's does not turn: Kyse
+// writes the same caret whether the section is open or closed.
 func summaryRow(c ayra.Context, state *Disclosure, summary string) ayra.Dimensions {
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
 		return layout.Inset{Top: 8, Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return marker(inner.With(gtx), state.open)
-				}),
-				layout.Rigid(layout.Spacer{Width: 8}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, semibold())
+				}),
+				layout.Rigid(layout.Spacer{Width: 8}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return drawInner(inner.With(gtx), innerIcon("collapsible", "CaretDown"), innerPixels(inner, innerSide), inner.Theme.Colours.MutedForeground, 0)
 				}),
 			)
 		})
 	})
-}
-
-// marker draws the triangle that says which way the section is.
-//
-// It points right when closed and down when open, which is the one convention
-// every platform shares -- and the reason it is drawn rather than written as a
-// character is that a glyph would come from whichever font the screen happens
-// to carry.
-func marker(c ayra.Context, open bool) ayra.Dimensions {
-	side := c.Dp(unit.Dp(10))
-	width := float32(side)
-
-	var arrow clip.Path
-	arrow.Begin(c.Ops)
-	if open {
-		arrow.MoveTo(f32.Pt(0, width*0.3))
-		arrow.LineTo(f32.Pt(width, width*0.3))
-		arrow.LineTo(f32.Pt(width/2, width*0.8))
-	} else {
-		arrow.MoveTo(f32.Pt(width*0.3, 0))
-		arrow.LineTo(f32.Pt(width*0.8, width/2))
-		arrow.LineTo(f32.Pt(width*0.3, width))
-	}
-	arrow.Close()
-
-	paint.FillShape(c.Ops, c.Theme.Colours.MutedForeground, clip.Outline{Path: arrow.End()}.Op())
-	return ayra.Dimensions{Size: image.Pt(side, side)}
 }
 
 // AccordionProps is a set of sections where the open one is the only one.
@@ -207,12 +178,18 @@ func (p AccordionProps) layout(c ayra.Context, state *Accordion, content func(in
 			return state.clicks[index].Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: 10, Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return marker(inner.With(gtx), state.open == index)
-						}),
-						layout.Rigid(layout.Spacer{Width: 8}.Layout),
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, semibold())
+						}),
+						layout.Rigid(layout.Spacer{Width: 8}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							// Half a turn when open: the stylesheet's rotate-180 on the
+							// last svg of an open section.
+							quarters := 0
+							if state.open == index {
+								quarters = 2
+							}
+							return drawInner(inner.With(gtx), innerIcon("accordion", "CaretDown"), innerPixels(inner, innerSide), inner.Theme.Colours.MutedForeground, quarters)
 						}),
 					)
 				})
@@ -226,7 +203,7 @@ func (p AccordionProps) layout(c ayra.Context, state *Accordion, content func(in
 			if body == nil {
 				return layout.Dimensions{}
 			}
-			return layout.Inset{Bottom: 10, Left: 18}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return body(c.With(gtx))
 			})
 		}))

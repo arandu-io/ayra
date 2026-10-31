@@ -39,6 +39,11 @@ func (i Icon) Shade() string { return i.shade }
 // Body is the path of the main half.
 func (i Icon) Body() string { return i.body }
 
+// WithoutShade is the icon with its lighter half left out, for the places Kyse
+// hides it: the tick in a menu row is drawn with `[&_path[opacity]]:hidden`, and
+// the shade of Check is a whole square that would turn a tick into a box.
+func (i Icon) WithoutShade() Icon { return Icon{body: i.body} }
+
 // IsZero reports whether the icon has no geometry, which is what the zero value
 // is and what an icon an application forgot to set draws as: nothing.
 func (i Icon) IsZero() bool { return i.body == "" && i.shade == "" }

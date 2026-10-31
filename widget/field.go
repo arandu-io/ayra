@@ -97,6 +97,10 @@ type PasswordProps struct {
 	ComponentProps
 	// Placeholder is shown while the field is empty.
 	Placeholder string
+	// ShowLabel and HideLabel name the reveal control for a screen reader, which
+	// is all that names it: it draws an eye. Empty says "Show" and "Hide", as
+	// Kyse's does.
+	ShowLabel, HideLabel string
 	// Disabled draws the field as unavailable and refuses input.
 	Disabled bool
 	// Invalid draws the field as rejected. What was wrong is said beside it by
@@ -122,6 +126,10 @@ type Secret struct {
 
 // Shown reports whether the value is currently visible.
 func (p *Secret) Shown() bool { return p.shown }
+
+// Reveal shows the value or hides it, for a screen that arrives with it one way
+// and for a test.
+func (p *Secret) Reveal(shown bool) { p.shown = shown }
 
 // Layout draws the field with the control that reveals it.
 func (p PasswordProps) Layout(c ayra.Context, state *Secret) ayra.Dimensions {
@@ -155,17 +163,21 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 			}.Layout(c.With(gtx), &state.Input)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			inner.Constraints.Min = image.Point{}
-
-			label := "Show"
+			// The eye while the value is hidden, the crossed eye once it shows:
+			// the two pictures Kyse swaps in its reveal control. What they say
+			// is the label.
+			name, icon := orDefault(p.ShowLabel, "Show"), innerIcon("password", "Eye")
 			if state.shown {
-				label = "Hide"
+				name, icon = orDefault(p.HideLabel, "Hide"), innerIcon("password", "EyeSlash")
 			}
 			return layout.Inset{Left: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return state.reveal.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.Inset{Top: 6, Bottom: 6, Left: 8, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return drawText(c.With(gtx), label, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Middle, plain())
+						inside := c.With(gtx)
+						side := innerPixels(inside, innerSide)
+						close := announce(inside, image.Pt(side, side), Announcement{Label: name, Class: Pressable, Disabled: p.Disabled})
+						defer close()
+						return drawInner(inside, icon, side, c.Theme.Colours.MutedForeground, 0)
 					})
 				})
 			})

@@ -17,6 +17,7 @@ import (
 	engine "github.com/arandu-io/ayra/engine/widget"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/icons"
 	"github.com/arandu-io/ayra/theme"
 )
 
@@ -142,6 +143,12 @@ type InputProps struct {
 	// widget is the name the field is restyled under: "input", or "textarea"
 	// for the field that wraps it.
 	widget string
+	// lead and tail are icons drawn inside the box, before and after the text,
+	// for the widgets that put one there: the command palette's magnifying
+	// glass and the combobox's caret. They are not part of the public field --
+	// a plain field has none, and a product that wants one composes an
+	// [InputGroupProps].
+	lead, tail icons.Icon
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -219,9 +226,43 @@ func (p InputProps) Layout(c ayra.Context, state *Input) ayra.Dimensions {
 	return p.surface(c, state, box, func(inner ayra.Context) ayra.Dimensions {
 		return insetOf(box.Padding).Layout(inner.Context,
 			func(gtx layout.Context) layout.Dimensions {
-				return p.content(inner.With(gtx), state, box, hint)
+				return p.withIcons(inner.With(gtx), box, func(c ayra.Context) ayra.Dimensions {
+					return p.content(c, state, box, hint)
+				})
 			})
 	})
+}
+
+// withIcons lays the editor between the icons the widget put in the box, at the
+// side Kyse gives them. With none it is the editor.
+func (p InputProps) withIcons(c ayra.Context, box theme.Style, content ayra.Widget) ayra.Dimensions {
+	if p.lead.IsZero() && p.tail.IsZero() {
+		return content(c)
+	}
+
+	side := innerPixels(c, innerSide)
+	draw := func(icon icons.Icon, ink color.NRGBA) layout.FlexChild {
+		return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if icon.IsZero() {
+				return layout.Dimensions{}
+			}
+			return drawInner(c.With(gtx), icon, side, ink, 0)
+		})
+	}
+
+	// The search mark is the foreground at half strength, and the caret the
+	// muted foreground, as Kyse's stylesheet has them.
+	faint := box.Foreground.NRGBA()
+	faint.A /= 2
+	children := []layout.FlexChild{}
+	if !p.lead.IsZero() {
+		children = append(children, draw(p.lead, faint), layout.Rigid(layout.Spacer{Width: 8}.Layout))
+	}
+	children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return content(c.With(gtx)) }))
+	if !p.tail.IsZero() {
+		children = append(children, layout.Rigid(layout.Spacer{Width: 8}.Layout), draw(p.tail, c.Theme.Colours.MutedForeground))
+	}
+	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
 }
 
 // content draws the editor, with the placeholder behind it while it is empty.

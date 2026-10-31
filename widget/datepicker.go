@@ -1,14 +1,11 @@
 package widget
 
 import (
-	"image"
 	"image/color"
 	"time"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
-	"github.com/arandu-io/ayra/engine/op/clip"
-	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 )
@@ -155,35 +152,16 @@ func (p DatePickerProps) field(c ayra.Context, label string, ink color.NRGBA) ay
 					return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Start, plain())
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return calendarMark(inner.With(gtx), ink)
+					return calendarMark(inner.With(gtx), "date-time-picker", ink)
 				}),
 			)
 		})
 	})
 }
 
-// calendarMark draws the small grid that says this field opens a month.
-//
-// Drawn rather than set in text: the glyph for it is not in every font, and a
-// missing glyph is a hollow box in the corner of a form.
-func calendarMark(c ayra.Context, ink color.NRGBA) ayra.Dimensions {
-	size := c.Dp(unit.Dp(14))
-	line := c.Dp(unit.Dp(1))
-	if line < 1 {
-		line = 1
-	}
-
-	// The page, the rule across its head, and the two posts above it.
-	head := size / 3
-	page := image.Rect(0, head, size, size)
-	paint.FillShape(c.Ops, ink, clip.Stroke{
-		Path:  clip.UniformRRect(page, line).Path(c.Ops),
-		Width: float32(line),
-	}.Op())
-	paint.FillShape(c.Ops, ink, clip.Rect(image.Rect(0, head, size, head+line*2)).Op())
-	for _, at := range []int{size / 4, size - size/4 - line} {
-		paint.FillShape(c.Ops, ink, clip.Rect(image.Rect(at, 0, at+line, head)).Op())
-	}
-
-	return ayra.Dimensions{Size: image.Pt(size, size)}
+// calendarMark draws the icon that says this field opens a month: Kyse's
+// CalendarBlank, in the ink of the text beside it. owner is the Kyse component
+// whose icon it is.
+func calendarMark(c ayra.Context, owner string, ink color.NRGBA) ayra.Dimensions {
+	return drawInner(c, innerIcon(owner, "CalendarBlank"), innerPixels(c, innerSide), ink, 0)
 }

@@ -150,6 +150,9 @@ type SplitProps struct {
 	Variant Variant
 	// Size is how much room they take.
 	Size Size
+	// MenuLabel names the second button for a screen reader, which is all that
+	// names it: it draws a caret. Empty says "More options".
+	MenuLabel string
 	// Disabled draws both as unavailable.
 	Disabled bool
 }
@@ -186,7 +189,10 @@ func (p SplitProps) layout(c ayra.Context, state *Split) ayra.Dimensions {
 	mainDrawn := measure.Stop()
 
 	measure = op.Record(c.Ops)
-	more := ButtonProps{Label: "...", Variant: p.Variant, Size: p.Size, Disabled: p.Disabled}.Layout(c, &state.more)
+	more := ButtonProps{
+		Label: orDefault(p.MenuLabel, "More options"), Icon: innerIcon("split-button", "CaretDown"), IconOnly: true,
+		Variant: p.Variant, Size: p.Size, Disabled: p.Disabled,
+	}.Layout(c, &state.more)
 	moreDrawn := measure.Stop()
 
 	thickness := hairline(c)

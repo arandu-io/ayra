@@ -1,5 +1,66 @@
 # Release Notes
 
+## Unreleased
+
+### Added
+
+- `widget`: each component draws, inside itself, the icons the Kyse component
+  draws. The caret of the accordion, the collapsible, the combobox, the select
+  and the split button is Kyse's `CaretDown`, and the accordion's turns half a
+  turn when it opens; the tree's is `CaretRight`, turned a quarter; the
+  breadcrumb's separator is `CaretRight`; the calendar's two steps and the date
+  range picker's are `CaretLeft` and `CaretRight`; the date fields carry
+  `CalendarBlank`; the number input's steps are `Minus` and `Plus`; the password
+  field's reveal is `Eye` and `EyeSlash`; the rating's marks are `Star`, lit in
+  the primary and unlit in the muted foreground at 40%, at the 24 points Kyse's
+  stylesheet gives them; the checkbox's tick is `Check`; the command palette's
+  field starts with `MagnifyingGlass`; the toast and the form dialog close with
+  `X`; and the data table's sortable headings end in `ArrowsDownUp`, `ArrowUp`
+  or `ArrowDown`, its filter button begins with `PlusCircle`, its filter menu
+  marks the chosen options with `Check`, its clear button ends in `X` and its
+  page-size button in `CaretUpDown`. The colour is the theme's in both schemes.
+- `widget.InnerIcons` answers, by the name of the Kyse component each widget
+  pairs with, the Kyse function names of the icons it draws inside itself. The
+  widgets get these from one table (`widget/inner.go`), and a test fails on an
+  `icons.Something()` anywhere else in the package.
+- `icons_parity_test.go` reads Kyse's source, through `AYRA_KYSE` as
+  `parity_test.go` does, and fails when a component's icons are not the ones its
+  Kyse component draws. What cannot match is written down with its reason: the
+  icons the browser draws from its stylesheet (the checkbox's tick, the select's
+  chevron) are Lucide strokes behind a CSS variable that `theme/basecoat/base.css`
+  defines, and the test pairs each with the nearest of Kyse's own set; the
+  icons of a feature the native half does not have (the table's column menu,
+  the password requirements, the sidebar's groups, the theme toggle's system
+  mode) are listed under `withoutIcons`.
+- `ButtonProps.IconOnly` draws the icon alone and keeps `Label` as the name a
+  screen reader says, and `ButtonProps.Trailing` draws the icon after the label.
+  `icons.Icon.WithoutShade` leaves out the lighter half, which is how Kyse draws
+  `Check`.
+- The names of the buttons that now draw an icon are properties, as in Kyse:
+  `NumberProps.DecrementLabel` and `IncrementLabel`, `PasswordProps.ShowLabel`
+  and `HideLabel`, `SplitProps.MenuLabel`, `FormDialogProps.CloseLabel` and
+  `EditInPlaceProps.EditLabel`. `DeleteRowProps` takes an `Icon` and `IconOnly`
+  as Kyse's does. `Secret.Reveal` shows or hides the value from the screen.
+- `frame`: the pictures `inner-structure`, `inner-inputs`, `inner-overlays` and
+  `inner-palette`, in both schemes at two densities, show every component whose
+  inside changed.
+
+### Changed
+
+- The accordion, the collapsible and the tree no longer draw a filled triangle
+  of their own: the caret is Kyse's, and the accordion's and the collapsible's
+  sit at the end of the summary, where Kyse puts them, so the content under them
+  is no longer indented to clear a marker at the start. The table's sort mark is
+  no longer a triangle, and the calendar's steps, the number input's, the
+  password reveal's, the split button's and the pagination's ellipsis no longer
+  say `<`, `>`, `-`, `+`, `Show`, `Hide`, `...` in text where Kyse draws an
+  icon; the ellipsis is the `…` Kyse writes.
+- `DeleteRow` and `EditInPlace` no longer draw a trash and a pencil of their
+  own, because Kyse's draw none: the first is a button that says "Delete" and
+  takes an icon from the product, the second shows the value and "Edit".
+- The toast shows the `X` that Kyse's has, and the form dialog the one in its
+  corner unless it is an alert.
+
 ## [v0.5.0](https://github.com/arandu-io/ayra/compare/v0.4.0...v0.5.0) - 2026-10-31
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.4.0...v0.5.0

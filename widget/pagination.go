@@ -108,7 +108,7 @@ func (p PaginationProps) layout(c ayra.Context, state *Pages) ayra.Dimensions {
 				inner := c.With(gtx)
 				inner.Constraints.Min = image.Point{}
 				return layout.Inset{Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return drawText(c.With(gtx), "...", unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Middle, plain())
+					return drawText(c.With(gtx), "…", unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Middle, plain())
 				})
 			}))
 			continue
@@ -198,7 +198,7 @@ func (p PaginationProps) wider(c ayra.Context, state *Pages, window int) bool {
 	gap := inner.Dp(unit.Dp(4))
 	for _, page := range p.visible(state.current, window) {
 		width += gap
-		label := "..."
+		label := "…"
 		if page != 0 {
 			label = strconv.Itoa(page)
 		}

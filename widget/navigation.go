@@ -68,7 +68,7 @@ func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 				inner := c.With(gtx)
 				inner.Constraints.Min = image.Point{}
 				return layout.Inset{Left: 6, Right: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return drawText(c.With(gtx), "/", unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
+					return drawInner(c.With(gtx), innerIcon("breadcrumb", "CaretRight"), innerPixels(c, innerSideSmall), c.Theme.Colours.MutedForeground, 0)
 				})
 			}))
 		}

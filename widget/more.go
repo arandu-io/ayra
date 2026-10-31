@@ -9,7 +9,6 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	"github.com/arandu-io/ayra/icons"
 	"github.com/arandu-io/ayra/theme"
 )
 
@@ -204,8 +203,9 @@ type EditInPlaceProps struct {
 	// Placeholder is shown in the field while it is empty, and in place of the
 	// text when there is none.
 	Placeholder string
-	// SaveLabel and CancelLabel are the two buttons.
-	SaveLabel, CancelLabel string
+	// EditLabel, SaveLabel and CancelLabel are the three buttons. EditLabel is
+	// the word beside the text, as Kyse draws it; empty says "Edit".
+	EditLabel, SaveLabel, CancelLabel string
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -245,7 +245,7 @@ func (p EditInPlaceProps) Layout(c ayra.Context, state *EditInPlace) ayra.Dimens
 					}),
 					layout.Rigid(layout.Spacer{Width: 6}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return IconProps{Icon: icons.PencilSimple(), Tone: Muted, Label: p.Value}.Layout(c.With(gtx))
+						return drawText(c.With(gtx), orDefault(p.EditLabel, "Edit"), unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
 					}),
 				)
 			})
@@ -347,9 +347,9 @@ func (p ThemeToggleProps) PartNames() []string { return []string{"root"} }
 // Layout draws the button, a sun in the dark scheme and a moon in the light one,
 // and switches the scheme when it is pressed.
 func (p ThemeToggleProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
-	next, icon := theme.Dark, icons.Moon()
+	next, icon := theme.Dark, innerIcon("theme-toggle", "Moon")
 	if c.Theme.Scheme == theme.Dark {
-		next, icon = theme.Light, icons.Sun()
+		next, icon = theme.Light, innerIcon("theme-toggle", "Sun")
 	}
 	if state.Clicked(c) {
 		c.ChangeScheme(next)

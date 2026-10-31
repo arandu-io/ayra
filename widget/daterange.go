@@ -141,7 +141,7 @@ func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dime
 	}
 
 	field := func(c ayra.Context) ayra.Dimensions {
-		return dateField(c, p.ComponentProps, "daterangepicker", label, ink, p.Disabled)
+		return dateField(c, p.ComponentProps, "daterangepicker", "date-range-picker", label, ink, p.Disabled)
 	}
 	if p.Disabled {
 		state.popover.Close()
@@ -237,6 +237,7 @@ func (p DateRangePickerProps) panel(c ayra.Context, state *DateRange) ayra.Dimen
 				Today: p.Today, Min: p.Min, Max: p.Max, Monday: p.Monday,
 				Range:      [2]time.Time{state.from, to},
 				MonthNames: p.MonthNames, WeekdayNames: p.WeekdayNames,
+				owned: "date-range-picker",
 			}.Layout(c.With(gtx), &state.month)
 		}),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),

@@ -73,6 +73,13 @@ type MenuProps struct {
 	Width unit.Dp
 	// Above opens it upwards, for a control near the bottom of a window.
 	Above bool
+
+	// ticked marks the entries that are on, by index, with the tick Kyse draws
+	// at the end of a row of a filter menu. A widget that offers several choices
+	// from a menu sets it; the menu itself is a list of actions.
+	ticked func(index int) bool
+	// tickOwner is the Kyse component whose tick it is.
+	tickOwner string
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -128,7 +135,13 @@ func (p MenuProps) list(c ayra.Context, state *Menu, trigger ayra.Dimensions) {
 		}
 
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return ItemProps{Title: entry, Pressable: true}.Layout(c.With(gtx), &state.entries[index], nil)
+			var tick ayra.Widget
+			if p.ticked != nil && p.ticked(index) {
+				tick = func(c ayra.Context) ayra.Dimensions {
+					return drawInner(c, innerIcon(p.tickOwner, "Check"), innerPixels(c, innerSide), c.Theme.Colours.Foreground, 0)
+				}
+			}
+			return ItemProps{Title: entry, Pressable: true}.Layout(c.With(gtx), &state.entries[index], tick)
 		}))
 	}
 
