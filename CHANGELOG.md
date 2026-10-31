@@ -1,6 +1,22 @@
 # Release Notes
 
-## Unreleased
+## [v0.3.0](https://github.com/arandu-io/ayra/compare/module/v0.2.0...v0.3.0) - 2026-10-31
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/module/v0.2.0...v0.3.0
+
+## [v0.3.0](https://github.com/arandu-io/ayra/compare/v0.2.0...v0.3.0) - 2026-10-31
+
+### Fixed
+
+- `widget`: a text field is focused by a tap anywhere on it. The field was
+  painted across the room it was given, but the editor inside it measured only
+  its text -- one point wide while empty -- whenever its column had no minimum
+  width, which is every column a screen centres. A tap landed on the border, no
+  editor was focused, and on Android the keyboard came up and every key it sent
+  went nowhere: the sign-in of a phone app took no input. `Input` now asks its
+  editor for the whole width, and the painted field, border and padding
+  included, takes the tap and gives the editor the focus and the keyboard.
+  Applies to `Password` and every `Kind`.
 
 ### Security
 

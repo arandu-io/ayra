@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- a request path is built from segments
+## v0.3.0 -- a request path is built from segments
 
 `client.Client.Get` and `client.Client.Post` take a `client.Path` instead of a
 string. A path is built with `client.At`, one argument per segment, and a query

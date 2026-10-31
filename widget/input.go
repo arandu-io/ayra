@@ -5,7 +5,9 @@ import (
 	"image/color"
 
 	"github.com/arandu-io/ayra/engine/font"
+	"github.com/arandu-io/ayra/engine/gesture"
 	"github.com/arandu-io/ayra/engine/io/key"
+	"github.com/arandu-io/ayra/engine/io/pointer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
@@ -25,6 +27,11 @@ import (
 // one field drawn twice, and typing in either changes both.
 type Input struct {
 	editor engine.Editor
+
+	// field is the whole painted field as a target. The editor answers a tap
+	// only where its text is, and a finger lands on the border and the padding
+	// as often as on the text.
+	field gesture.Click
 }
 
 // Text is what the field holds.
@@ -199,7 +206,17 @@ func (p InputProps) Layout(c ayra.Context, state *Input) ayra.Dimensions {
 		state.editor.Mask = 0
 	}
 
-	return p.surface(c, box, func(inner ayra.Context) ayra.Dimensions {
+	// A field fills the room it is given, and so does the editor in it. The
+	// editor's pointer area is its own size, which with no minimum is the width
+	// of its text -- one point while the field is empty -- so a field painted
+	// across the screen was focused only by a tap on its first pixel. A column
+	// that centres its children gives each a minimum of nothing, which is every
+	// sign-in screen, and the keyboard that a tap elsewhere raised then typed
+	// into an editor that had no focus.
+	c.Constraints.Min.X = c.Constraints.Max.X
+
+	p.focusOnTap(c, state)
+	return p.surface(c, state, box, func(inner ayra.Context) ayra.Dimensions {
 		return insetOf(box.Padding).Layout(inner.Context,
 			func(gtx layout.Context) layout.Dimensions {
 				return p.content(inner.With(gtx), state, box, hint)
@@ -239,8 +256,29 @@ func placeholder(c ayra.Context, content string, size unit.Sp, ink color.NRGBA, 
 	return drawFace(c, content, size, ink, 1, text.Start, face)
 }
 
+// focusOnTap gives the editor the focus, and raises the keyboard, when the
+// field is tapped anywhere the editor is not. A tap on the editor itself is the
+// editor's own and also places the caret.
+func (p InputProps) focusOnTap(c ayra.Context, state *Input) {
+	for {
+		event, ok := state.field.Update(c.Source)
+		if !ok {
+			return
+		}
+		pressed := event.Kind == gesture.KindPress && event.Source == pointer.Mouse
+		clicked := event.Kind == gesture.KindClick && event.Source != pointer.Mouse
+		if !pressed && !clicked {
+			continue
+		}
+		c.Execute(key.FocusCmd{Tag: &state.editor})
+		if !p.Disabled {
+			c.Execute(key.SoftKeyboardCmd{Show: true})
+		}
+	}
+}
+
 // surface paints the field's background and border behind its content.
-func (p InputProps) surface(c ayra.Context, box theme.Style, content ayra.Widget) ayra.Dimensions {
+func (p InputProps) surface(c ayra.Context, state *Input, box theme.Style, content ayra.Widget) ayra.Dimensions {
 	measure := op.Record(c.Ops)
 	dims := content(c)
 	drawn := measure.Stop()
@@ -256,6 +294,11 @@ func (p InputProps) surface(c ayra.Context, box theme.Style, content ayra.Widget
 	paint.FillShape(c.Ops, box.Background.NRGBA(), shape.Op(c.Ops))
 	stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(c.Dp(unit.Dp(box.BorderWidth.Points())))}
 	paint.FillShape(c.Ops, box.Border.NRGBA(), stroke.Op())
+
+	// Beneath the editor, so a tap on the text is still the editor's.
+	area := clip.Rect(image.Rectangle{Max: dims.Size}).Push(c.Ops)
+	state.field.Add(c.Ops)
+	area.Pop()
 
 	drawn.Add(c.Ops)
 	return dims
