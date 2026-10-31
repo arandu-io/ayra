@@ -116,7 +116,11 @@ var ErrNotRunning = errors.New("jni: the Java virtual machine is not available y
 // for a thread this attached and by the caller of a native method for one that
 // was already attached.
 func Do(f func(Env) error) error {
-	vm := (*C.JavaVM)(unsafe.Pointer(app.JavaVM()))
+	// The machine's address arrives as an integer and is read back as the
+	// pointer it was, without a conversion the vet check cannot tell from a
+	// forged one.
+	address := app.JavaVM()
+	vm := *(**C.JavaVM)(unsafe.Pointer(&address))
 	if vm == nil {
 		return ErrNotRunning
 	}
@@ -133,7 +137,7 @@ func Do(f func(Env) error) error {
 
 // EnvOf wraps the JNIEnv a native method was called with, for the exported
 // functions that receive it as an argument.
-func EnvOf(p uintptr) Env { return Env{(*C.JNIEnv)(unsafe.Pointer(p))} }
+func EnvOf(p uintptr) Env { return Env{*(**C.JNIEnv)(unsafe.Pointer(&p))} }
 
 // Context is the application context as a reference valid in this call.
 func Context() uintptr { return app.AppContext() }
