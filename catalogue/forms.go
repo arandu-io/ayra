@@ -29,6 +29,8 @@ func forms() []Entry {
 		oneTimeCodeEntry(),
 		dateRangePickerEntry(),
 		dateTimePickerEntry(),
+		comboboxEntry(),
+		fileUploadEntry(),
 	}
 }
 

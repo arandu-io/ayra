@@ -106,6 +106,10 @@ func (a *Autocomplete) Chosen() int {
 
 // AutocompleteProps is a text field with a list of entries under it.
 type AutocompleteProps struct {
+	// ComponentProps is what the caller changes on this one instance. The field
+	// publishes the parts of an [InputProps], restyled under the name
+	// "autocomplete".
+	ComponentProps
 	// Entries are what can be suggested, in the order they are offered.
 	Entries []string
 	// Placeholder is shown while the field is empty.
@@ -117,6 +121,22 @@ type AutocompleteProps struct {
 	Empty string
 	// Disabled draws it as unavailable and refuses to open.
 	Disabled bool
+	// Unfiltered says the entries were already chosen for what is typed, by
+	// something that knows more than a substring does -- a server that matched
+	// on a code, a name and a neighbourhood. They are offered as they are, in
+	// the order given, instead of being filtered again by the text: a second
+	// filter would drop the very entries the first one found.
+	Unfiltered bool
+
+	// widget is the name the field is restyled under when another widget draws
+	// it: the combobox, which is this with a server behind it.
+	widget string
+}
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p AutocompleteProps) PartNames() []string {
+	return []string{"root", "focus", "invalid", "placeholder"}
 }
 
 // Layout draws the field and, while there are suggestions, the list under it.
@@ -127,6 +147,12 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 
 	typed := state.input.Text()
 	found := matches(p.Entries, typed)
+	if p.Unfiltered {
+		found = found[:0]
+		for index := range p.Entries {
+			found = append(found, index)
+		}
+	}
 
 	switch {
 	case typed == "":
@@ -152,8 +178,10 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 	}
 
 	dims := InputProps{
-		Placeholder: p.Placeholder,
-		Disabled:    p.Disabled,
+		ComponentProps: p.ComponentProps,
+		widget:         orDefault(p.widget, "autocomplete"),
+		Placeholder:    p.Placeholder,
+		Disabled:       p.Disabled,
 	}.Layout(c, &state.input)
 
 	if !state.open.Showing() {

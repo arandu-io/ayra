@@ -26,7 +26,7 @@ var (
 	resolvesByName = regexp.MustCompile(`Resolve\(name, "([a-z-]+)"`)
 	// drawnUnder says which names those files draw under.
 	drawnUnder = map[string][]string{
-		"input.go":     {"input", "textarea", "masked"},
+		"input.go":     {"input", "textarea", "masked", "autocomplete", "combobox"},
 		"datefield.go": {"daterangepicker", "datetimepicker"},
 	}
 )

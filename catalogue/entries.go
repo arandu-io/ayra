@@ -1,6 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"io"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/mask"
 	"github.com/arandu-io/ayra/mask/brazil"
@@ -129,4 +136,71 @@ func dateTimePickerEntry() Entry {
 			}
 		},
 	}
+}
+
+// comboboxEntry draws the field that searches a server as it is typed in.
+func comboboxEntry() Entry {
+	return Entry{
+		Control: "ComboboxProps",
+		Summary: "A field that searches a server and holds the option chosen, never the text typed.",
+		Build: func() ayra.Widget {
+			var state widget.Combobox
+			props := widget.ComboboxProps{
+				Placeholder: "Search a city",
+				Source: widget.LookupFunc(func(ctx context.Context, query string) ([]widget.Option, error) {
+					var found []widget.Option
+					for code, name := range map[string]string{"SP": "Sao Paulo", "RJ": "Rio de Janeiro", "BH": "Belo Horizonte", "SJ": "Sao Jose dos Campos"} {
+						if strings.Contains(strings.ToLower(name), strings.ToLower(query)) || strings.EqualFold(code, query) {
+							found = append(found, widget.Option{Value: code, Label: name})
+						}
+					}
+					sort.Slice(found, func(a, b int) bool { return found[a].Label < found[b].Label })
+					return found, nil
+				}),
+			}
+			return sized(320, func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &state) })
+		},
+	}
+}
+
+// fileUploadEntry draws the field that chooses files and sends them.
+func fileUploadEntry() Entry {
+	return Entry{
+		Control: "FileUploadProps",
+		Summary: "A field that chooses files and sends them, with a bar for each and the rules checked first.",
+		Build: func() ayra.Widget {
+			var state widget.FileUpload
+			props := widget.FileUploadProps{
+				Accept:  []string{".pdf", ".png"},
+				MaxSize: 5 << 20,
+				Chooser: widget.ChooserFunc(func(ctx context.Context) ([]widget.File, error) {
+					return []widget.File{demoFile("contract.pdf", 3<<20), demoFile("notes.txt", 900)}, nil
+				}),
+				Uploader: widget.UploaderFunc(func(ctx context.Context, f widget.File, body io.Reader) error {
+					buf := make([]byte, 64<<10)
+					for {
+						_, err := body.Read(buf)
+						if err == io.EOF {
+							return nil
+						}
+						if err != nil {
+							return err
+						}
+						select {
+						case <-time.After(30 * time.Millisecond):
+						case <-ctx.Done():
+							return ctx.Err()
+						}
+					}
+				}),
+			}
+			return sized(480, func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &state) })
+		},
+	}
+}
+
+func demoFile(name string, size int) widget.File {
+	return widget.File{Name: name, Size: int64(size), Open: func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(make([]byte, size))), nil
+	}}
 }
