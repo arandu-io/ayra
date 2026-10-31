@@ -15,9 +15,12 @@ it opened with, as before:
 
 ```go
 shell.Run(shell.Config{
-	Mode:  theme.System, // Scheme is the one used until the system says, and where it cannot
+	Title:  "Alpr.sh",
+	Mode:   theme.System, // Scheme is used until the system says, and where it cannot
 	Locale: theme.PortugueseBrazil(),
-	OnLifecycle: func(l ayra.Lifecycle) { /* pause on ayra.Background, resume on ayra.Foreground */ },
+	OnLifecycle: func(l ayra.Lifecycle) {
+		// stop the socket on ayra.Background, start it on ayra.Foreground
+	},
 }, screen)
 ```
 
