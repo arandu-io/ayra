@@ -4,7 +4,12 @@ import (
 	"strconv"
 	"time"
 
+	"image"
+	gocolor "image/color"
+
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/op/clip"
+	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/widget"
 )
 
@@ -19,6 +24,7 @@ func data() []Entry {
 		datePickerEntry(),
 		filePickerEntry(),
 		playerEntry(),
+		liveEntry(),
 	}
 }
 
@@ -353,5 +359,75 @@ func playerEntry() Entry {
 				)(c)
 			}
 		},
+	}
+}
+
+// liveEntry draws a live video from a picture it makes itself.
+//
+// The control takes its picture in the props and decodes nothing, so a
+// catalogue with no camera and no decoder can still show every state it has:
+// a picture with a box over it, a picture whose stream stopped, and the shape
+// it holds before the first picture.
+func liveEntry() Entry {
+	return Entry{
+		Control: "LiveProps",
+		Summary: "A live video that draws the picture it is handed, a sentence over it, and what the application puts on top.",
+		Build: func() ayra.Widget {
+			var running, stopped, waiting widget.Live
+			scene := scenery(192, 108)
+
+			return func(c ayra.Context) ayra.Dimensions {
+				return stack(18,
+					labelled("a picture, with a box in the camera's own pixels", sized(480, func(c ayra.Context) ayra.Dimensions {
+						return widget.LiveProps{
+							Frame: scene, Seq: 1, Label: "Gate camera",
+							Overlay: func(c ayra.Context, area widget.LiveArea) {
+								box := area.Rect(image.Rect(100, 52, 156, 78))
+								frameBox(c, box)
+							},
+						}.Layout(c, &running)
+					})),
+					labelled("a stream that stopped, over the last picture", sized(480, func(c ayra.Context) ayra.Dimensions {
+						return widget.LiveProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
+					})),
+					labelled("before the first picture, holding its shape", sized(480, func(c ayra.Context) ayra.Dimensions {
+						return widget.LiveProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
+					})),
+				)(c)
+			}
+		},
+	}
+}
+
+// scenery is a synthetic picture of a road under a sky.
+func scenery(w, h int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			px := gocolor.NRGBA{R: uint8(60 + y), G: uint8(110 + y), B: uint8(190 + x/8), A: 255}
+			if y >= h/2 {
+				v := uint8(70 + (y-h/2)/2)
+				px = gocolor.NRGBA{R: v, G: v, B: v + 6, A: 255}
+			}
+			if x > 100 && x < 156 && y > 52 && y < 78 {
+				px = gocolor.NRGBA{R: 200, G: 40, B: 40, A: 255}
+			}
+			img.Set(x, y, px)
+		}
+	}
+	return img
+}
+
+// frameBox strokes a green rectangle, the way a box over a plate is drawn.
+func frameBox(c ayra.Context, r image.Rectangle) {
+	const width = 2
+	green := gocolor.NRGBA{R: 0x22, G: 0xC5, B: 0x5E, A: 0xFF}
+	for _, side := range []image.Rectangle{
+		{Min: r.Min, Max: image.Pt(r.Max.X, r.Min.Y+width)},
+		{Min: image.Pt(r.Min.X, r.Max.Y-width), Max: r.Max},
+		{Min: r.Min, Max: image.Pt(r.Min.X+width, r.Max.Y)},
+		{Min: image.Pt(r.Max.X-width, r.Min.Y), Max: r.Max},
+	} {
+		paint.FillShape(c.Ops, green, clip.Rect(side).Op())
 	}
 }
