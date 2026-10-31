@@ -323,6 +323,15 @@ void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
 	v.handle = handle;
 }
 
+// The hooks below are where a native capability that is not the window's own
+// reaches the application delegate. Each has a default that does nothing, weak
+// so that a package carrying the real one -- the push notifications -- replaces
+// it at link time without this file knowing the package exists.
+__attribute__((weak)) void ayra_push_launched(void) {}
+__attribute__((weak)) void ayra_push_registered(const void *token, unsigned long length) {}
+__attribute__((weak)) void ayra_push_failed(const char *reason) {}
+__attribute__((weak)) void ayra_push_remote(CFTypeRef userInfo) {}
+
 @interface _ayraAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
@@ -333,8 +342,21 @@ void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle) {
 	AyraViewController *controller = [[AyraViewController alloc] initWithNibName:nil bundle:nil];
 	self.window.rootViewController = controller;
 	[self.window makeKeyAndVisible];
+	ayra_push_launched();
 	return YES;
 }
+#if !TARGET_OS_TV
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+	ayra_push_registered(deviceToken.bytes, deviceToken.length);
+}
+- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
+	ayra_push_failed(error.localizedDescription.UTF8String);
+}
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
+	ayra_push_remote((__bridge CFTypeRef)userInfo);
+	completionHandler(UIBackgroundFetchResultNoData);
+}
+#endif
 - (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options {
     gio_onOpenURI((__bridge CFTypeRef)url.absoluteString);
 	return YES;
