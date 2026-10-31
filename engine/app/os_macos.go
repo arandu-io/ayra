@@ -164,6 +164,24 @@ static void performWindowDragWithEvent(CFTypeRef windowRef, CFTypeRef evt) {
 	}
 }
 
+// viewAppearance is the appearance the view is drawn under: 1 for light, 2 for
+// dark. The effective appearance follows the system setting and a window's own
+// override alike, which is why it is read from the view and not from the
+// application.
+static int viewAppearance(CFTypeRef viewRef) {
+	@autoreleasepool {
+		NSView *view = (__bridge NSView *)viewRef;
+		NSAppearanceName best = [view.effectiveAppearance bestMatchFromAppearancesWithNames:@[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+		if ([best isEqualToString:NSAppearanceNameDarkAqua]) {
+			return 2;
+		}
+		if ([best isEqualToString:NSAppearanceNameAqua]) {
+			return 1;
+		}
+		return 0;
+	}
+}
+
 static void closeWindow(CFTypeRef windowRef) {
 	@autoreleasepool {
 		NSWindow* window = (__bridge NSWindow *)windowRef;
@@ -415,6 +433,7 @@ func (w *window) WriteClipboard(mime string, s []byte) {
 }
 
 func (w *window) updateWindowMode() {
+	w.config.Appearance = appearanceFromCode(int(C.viewAppearance(w.view)))
 	w.scale = float32(C.getViewBackingScale(w.view))
 	wf, hf := float32(C.viewWidth(w.view)), float32(C.viewHeight(w.view))
 	w.config.Size = image.Point{
@@ -736,6 +755,16 @@ func gio_onFocus(h C.uintptr_t, focus C.int) {
 	w.SetCursor(w.cursor)
 	w.config.Focused = focus == 1
 	w.ProcessEvent(ConfigEvent{Config: w.config})
+}
+
+//export gio_onStage
+func gio_onStage(h C.uintptr_t, background C.int) {
+	w := windowFor(h)
+	if background != 0 {
+		w.ProcessEvent(StageEvent{Stage: StageBackground})
+		return
+	}
+	w.ProcessEvent(StageEvent{Stage: StageForeground})
 }
 
 //export gio_onChangeScreen

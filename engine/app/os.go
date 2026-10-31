@@ -47,6 +47,11 @@ type Config struct {
 	TopMost bool
 	// Focused reports whether the window is focused.
 	Focused bool
+	// Appearance is the scheme the system draws its own interface in, as far
+	// as the platform can say. It follows the system while the window is open:
+	// a ConfigEvent carries the new value when a person changes it, and the
+	// window is not recreated.
+	Appearance Appearance
 	// decoHeight is the height of the fallback decoration for platforms such
 	// as Wayland that may need fallback client-side decorations.
 	decoHeight unit.Dp
@@ -55,6 +60,91 @@ type Config struct {
 // ConfigEvent is sent whenever the configuration of a Window changes.
 type ConfigEvent struct {
 	Config Config
+}
+
+// Appearance is the scheme the system draws its interface in.
+//
+// Unknown is a real answer. A platform with no reliable source -- a Linux
+// desktop without a settings portal, a browser that does not implement the
+// media query -- says so instead of guessing, and an application that follows
+// the system then keeps the scheme it opened with.
+type Appearance uint8
+
+const (
+	// AppearanceUnknown is what a platform that cannot tell reports.
+	AppearanceUnknown Appearance = iota
+	// AppearanceLight is the system's light scheme.
+	AppearanceLight
+	// AppearanceDark is the system's dark scheme.
+	AppearanceDark
+)
+
+// String names the appearance.
+func (a Appearance) String() string {
+	switch a {
+	case AppearanceLight:
+		return "light"
+	case AppearanceDark:
+		return "dark"
+	}
+	return "unknown"
+}
+
+// appearanceFromCode maps the code the native side reports -- 1 for light, 2
+// for dark, anything else for a platform that did not say -- to the appearance.
+// Android, iOS and macOS all report it that way.
+func appearanceFromCode(code int) Appearance {
+	switch code {
+	case 1:
+		return AppearanceLight
+	case 2:
+		return AppearanceDark
+	}
+	return AppearanceUnknown
+}
+
+// appearanceFromLightTheme maps the value Windows keeps for "apps use light
+// theme" -- zero when the person chose the dark mode, anything else for the
+// light one -- to the appearance. A value that could not be read is unknown,
+// not light: older Windows has no such setting, and saying light there would
+// be a guess.
+func appearanceFromLightTheme(value uint64, read bool) Appearance {
+	switch {
+	case !read:
+		return AppearanceUnknown
+	case value == 0:
+		return AppearanceDark
+	}
+	return AppearanceLight
+}
+
+// Stage is whether the application is in front of the person.
+type Stage uint8
+
+const (
+	// StageForeground is the application on screen: the window is visible, or
+	// the activity is started. It is the stage a window opens in.
+	StageForeground Stage = iota
+	// StageBackground is the application out of sight: the activity stopped,
+	// the app in the background, the window minimised or its tab hidden. Frames
+	// are no longer drawn, and whatever is running for the screen -- a socket,
+	// a video -- has nothing to show it to.
+	StageBackground
+)
+
+// String names the stage.
+func (s Stage) String() string {
+	if s == StageBackground {
+		return "background"
+	}
+	return "foreground"
+}
+
+// StageEvent is sent when the application goes to the background or comes back
+// to the front. Like the other events it is coalesced: a program that was slow
+// to read sees the stage the application is in now, not every step to it.
+type StageEvent struct {
+	Stage Stage
 }
 
 func (c *Config) apply(m unit.Metric, options []Option) {
@@ -363,3 +453,4 @@ func walkActions(actions system.Action, do func(system.Action)) {
 
 func (wakeupEvent) ImplementsEvent() {}
 func (ConfigEvent) ImplementsEvent() {}
+func (StageEvent) ImplementsEvent()  {}

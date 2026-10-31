@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/arandu-io/ayra/engine/app"
+	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
@@ -30,8 +31,33 @@ type Config struct {
 	// size that fits a form on a laptop.
 	Width, Height int
 
-	// Scheme is the palette to open with.
+	// Scheme is the palette to open with. With Mode [theme.System] it is the one
+	// the window keeps until the system says which it is in, and the one it
+	// stays in on a platform that cannot say.
 	Scheme theme.Scheme
+
+	// Mode says where the scheme comes from. Zero is [theme.Fixed]: the window
+	// draws Scheme until a screen asks for another, as before. [theme.System]
+	// follows the operating system -- the window opens in its scheme and
+	// changes with it while the application runs, without being reopened.
+	//
+	// A choice made with [ayra.Context.ChangeScheme] wins over the system while
+	// it stands, and [ayra.Context.FollowSystem] hands the decision back.
+	Mode theme.Mode
+
+	// Locale is the language of the calendar's words: month and weekday names,
+	// the first day of the week and the labels of its controls. Zero draws
+	// English. It is laid over the theme Theme builds, so a stylesheet-made
+	// theme does not have to carry it.
+	Locale theme.Locale
+
+	// OnLifecycle is told when the application goes to the background, comes
+	// back to the front and is destroyed. It runs on the goroutine that draws,
+	// between two frames, so it must not block: it starts or stops what runs for
+	// the screen -- a socket, a video -- and returns. A window opens in the
+	// foreground, so the first call is a return from the background, and a
+	// notice that repeats the stage the application is already in is not made.
+	OnLifecycle func(ayra.Lifecycle)
 
 	// Theme builds the theme for a scheme. Zero takes [theme.New], the Basecoat
 	// palette; a product that has its own -- made from its stylesheet by
@@ -96,10 +122,14 @@ func Run(cfg Config, screen Screen) error {
 
 // theme answers the theme the window draws with.
 func (c Config) theme(scheme theme.Scheme) theme.Theme {
+	th := theme.New(scheme)
 	if c.Theme != nil {
-		return c.Theme(scheme)
+		th = c.Theme(scheme)
 	}
-	return theme.New(scheme)
+	if !c.Locale.IsZero() {
+		th.Locale = c.Locale
+	}
+	return th
 }
 
 // MissingFaceError is what Run answers when the theme's scale names a typeface
@@ -141,25 +171,64 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 		app.Title(cfg.Title),
 		app.Size(unit.Dp(cfg.Width), unit.Dp(cfg.Height)),
 	)
+	return loop(&window, cfg, shaper, screen)
+}
 
-	palette := cfg.theme(cfg.Scheme)
+// host is the window as the frame loop sees it. It is [app.Window], and it is an
+// interface so that the path from a platform's event to the palette on screen
+// can be walked in a test with a window that is a list of events.
+type host interface {
+	Event() event.Event
+	Option(...app.Option)
+	Invalidate()
+}
+
+// loop draws until the window is destroyed.
+func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
+	state := newSchemes(cfg.Mode, cfg.Scheme)
+	stage := newStages(cfg.OnLifecycle)
+	palette := cfg.theme(state.scheme)
+
+	// The bars of the system and the ground behind the window are painted with
+	// the background of the palette, and the icons on them are dark on a light
+	// ground and light on a dark one. They are set when a palette is first
+	// drawn and again whenever it changes, and only then: an option sent every
+	// frame is a configure call every frame.
+	var barsFor *theme.Scheme
 
 	// A change of scheme is asked for during a frame and applied at the start of
 	// the next, so that one frame is never drawn half in each palette.
-	var next *theme.Scheme
-	setScheme := func(scheme theme.Scheme) {
-		next = &scheme
-		window.Invalidate()
+	changed := func(did bool) {
+		if did {
+			window.Invalidate()
+		}
 	}
 
 	var ops op.Ops
 	for {
 		switch e := window.Event().(type) {
 		case app.DestroyEvent:
+			stage.destroyed()
 			return e.Err
+		case app.StageEvent:
+			stage.observe(e.Stage)
+		case app.ConfigEvent:
+			// The system's scheme travels with the window's configuration. It
+			// is recorded whatever the mode, so that handing the decision back
+			// to the system finds the scheme it is in now and not the one it
+			// was in when the window opened.
+			changed(state.observe(e.Config.Appearance))
 		case app.FrameEvent:
-			if next != nil {
-				palette, next = cfg.theme(*next), nil
+			if state.scheme != palette.Scheme {
+				palette = cfg.theme(state.scheme)
+			}
+			if barsFor == nil || *barsFor != palette.Scheme {
+				scheme := palette.Scheme
+				barsFor = &scheme
+				window.Option(
+					app.StatusColor(palette.Colours.Background),
+					app.NavigationColor(palette.Colours.Background),
+				)
 			}
 			gtx := app.NewContext(&ops, e)
 			c := ayra.Context{
@@ -167,7 +236,13 @@ func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 				Theme:      palette,
 				Shaper:     shaper,
 				Invalidate: window.Invalidate,
-				SetScheme:  setScheme,
+				Mode:       state.mode,
+				SetScheme: func(scheme theme.Scheme) {
+					changed(state.choose(scheme))
+				},
+				SetMode: func(mode theme.Mode) {
+					changed(state.setMode(mode))
+				},
 			}
 
 			// The window is filled before the screen draws, and it is filled

@@ -59,6 +59,10 @@ type Theme struct {
 	Metrics Metrics
 	// Type is the scale and the faces of the text.
 	Type Typography
+	// Locale is the language of the words the widgets draw when the caller did
+	// not write them: the months and weekdays of a calendar, and its controls.
+	// The zero value draws English.
+	Locale Locale
 
 	// Styles are what a product lays over the default look: the tokens of its
 	// stylesheet, a look for the whole application and the variants it names.

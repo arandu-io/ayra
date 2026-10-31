@@ -50,6 +50,25 @@ static void hideTextInput(CFTypeRef viewRef) {
 	[view resignFirstResponder];
 }
 
+// viewAppearance is the interface style the view is drawn under: 1 for light,
+// 2 for dark, 0 when the system does not say. The trait collection of a view
+// follows the window and, through it, the system setting, which is why it is
+// read here and not from the screen.
+static int viewAppearance(CFTypeRef viewRef) {
+	UIView *v = (__bridge UIView *)viewRef;
+	if (@available(iOS 12.0, tvOS 10.0, *)) {
+		switch (v.traitCollection.userInterfaceStyle) {
+		case UIUserInterfaceStyleLight:
+			return 1;
+		case UIUserInterfaceStyleDark:
+			return 2;
+		default:
+			return 0;
+		}
+	}
+	return 0;
+}
+
 static struct drawParams viewDrawParams(CFTypeRef viewRef) {
 	UIView *v = (__bridge UIView *)viewRef;
 	struct drawParams params;
@@ -158,6 +177,10 @@ func (w *window) draw(sync bool) {
 	if w.hidden {
 		return
 	}
+	if appearance := appearanceFromCode(int(C.viewAppearance(w.view))); appearance != w.config.Appearance {
+		w.config.Appearance = appearance
+		w.ProcessEvent(ConfigEvent{Config: w.config})
+	}
 	params := C.viewDrawParams(w.view)
 	if params.width == 0 || params.height == 0 {
 		return
@@ -191,12 +214,14 @@ func (w *window) draw(sync bool) {
 func onStop(h C.uintptr_t) {
 	w := viewFor(h)
 	w.hidden = true
+	w.ProcessEvent(StageEvent{Stage: StageBackground})
 }
 
 //export onStart
 func onStart(h C.uintptr_t) {
 	w := viewFor(h)
 	w.hidden = false
+	w.ProcessEvent(StageEvent{Stage: StageForeground})
 	w.draw(true)
 }
 

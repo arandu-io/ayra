@@ -129,6 +129,16 @@ NSArray<UIKeyCommand *> *_keyCommands;
 + (Class)layerClass {
     return gio_layerClass();
 }
+// traitCollectionDidChange is how the system tells a view its scheme changed.
+// The view draws again, and the draw reads the new style and reports it.
+- (void)traitCollectionDidChange:(UITraitCollection *)previous {
+	[super traitCollectionDidChange:previous];
+	if (@available(iOS 12.0, tvOS 10.0, *)) {
+		if (self.handle != 0 && previous.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
+			gio_onDraw(self.handle);
+		}
+	}
+}
 - (void)willMoveToWindow:(UIWindow *)newWindow {
 	self.contentScaleFactor = newWindow.screen.nativeScale;
     if (@available(iOS 13.0, *)) {

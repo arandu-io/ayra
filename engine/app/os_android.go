@@ -181,6 +181,7 @@ var ayraView struct {
 	once               sync.Once
 	getDensity         C.jmethodID
 	getFontScale       C.jmethodID
+	getUiMode          C.jmethodID
 	showTextInput      C.jmethodID
 	hideTextInput      C.jmethodID
 	setInputHint       C.jmethodID
@@ -467,6 +468,7 @@ func Java_io_arandu_ayra_AyraView_onCreateView(env *C.JNIEnv, class C.jclass, vi
 		m := &ayraView
 		m.getDensity = getMethodID(env, class, "getDensity", "()I")
 		m.getFontScale = getMethodID(env, class, "getFontScale", "()F")
+		m.getUiMode = getMethodID(env, class, "getUiMode", "()I")
 		m.showTextInput = getMethodID(env, class, "showTextInput", "()V")
 		m.hideTextInput = getMethodID(env, class, "hideTextInput", "()V")
 		m.setInputHint = getMethodID(env, class, "setInputHint", "(I)V")
@@ -525,6 +527,7 @@ func Java_io_arandu_ayra_AyraView_onStopView(env *C.JNIEnv, class C.jclass, hand
 	w := cgo.Handle(handle).Value().(*window)
 	w.started = false
 	w.visible = false
+	w.processEvent(StageEvent{Stage: StageBackground})
 }
 
 //export Java_io_arandu_ayra_AyraView_onStartView
@@ -534,6 +537,7 @@ func Java_io_arandu_ayra_AyraView_onStartView(env *C.JNIEnv, class C.jclass, han
 	if w.win != nil {
 		w.setVisible(env)
 	}
+	w.processEvent(StageEvent{Stage: StageForeground})
 }
 
 //export Java_io_arandu_ayra_AyraView_onSurfaceDestroyed
@@ -561,7 +565,13 @@ func Java_io_arandu_ayra_AyraView_onLowMemory(env *C.JNIEnv, class C.jclass) {
 //export Java_io_arandu_ayra_AyraView_onConfigurationChanged
 func Java_io_arandu_ayra_AyraView_onConfigurationChanged(env *C.JNIEnv, class C.jclass, view C.jlong) {
 	w := cgo.Handle(view).Value().(*window)
+	before := w.config.Appearance
 	w.loadConfig(env, class)
+	if w.config.Appearance != before {
+		// The activity is not recreated when the system changes scheme, so this
+		// is the only place the application learns of it.
+		w.processEvent(ConfigEvent{Config: w.config})
+	}
 	w.draw(env, true)
 }
 
@@ -831,6 +841,7 @@ func (w *window) nativeWindow() (*C.ANativeWindow, int, int) {
 func (w *window) loadConfig(env *C.JNIEnv, class C.jclass) {
 	dpi := int(C.jni_CallIntMethod(env, w.view, ayraView.getDensity))
 	w.fontScale = float32(C.jni_CallFloatMethod(env, w.view, ayraView.getFontScale))
+	w.config.Appearance = appearanceFromCode(int(C.jni_CallIntMethod(env, w.view, ayraView.getUiMode)))
 	switch dpi {
 	case C.ACONFIGURATION_DENSITY_NONE,
 		C.ACONFIGURATION_DENSITY_DEFAULT,

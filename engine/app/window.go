@@ -112,6 +112,7 @@ type Window struct {
 type eventSummary struct {
 	wakeup       bool
 	cfg          *ConfigEvent
+	stage        *StageEvent
 	view         *ViewEvent
 	frame        *frameEvent
 	framePending bool
@@ -588,6 +589,10 @@ func (w *Window) nextEvent() (event.Event, bool) {
 		e := *s.cfg
 		s.cfg = nil
 		return e, true
+	case s.stage != nil:
+		e := *s.stage
+		s.stage = nil
+		return e, true
 	case s.frame != nil:
 		e := *s.frame
 		s.frame = nil
@@ -665,6 +670,7 @@ func (w *Window) processEvent(e event.Event) bool {
 	case ConfigEvent:
 		w.decorations.Decorations.Maximized = e2.Config.Mode == Maximized
 		wasFocused := w.decorations.Config.Focused
+		wasAppearance := w.decorations.Config.Appearance
 		w.decorations.Config = e2.Config
 		e2.Config = w.effectiveConfig()
 		w.coalesced.cfg = &e2
@@ -676,7 +682,17 @@ func (w *Window) processEvent(e event.Event) bool {
 			w.setNextFrame(t)
 			w.updateAnimation()
 		}
-		return handled
+		// A change of the system's scheme is delivered now. Waiting for the
+		// next frame would leave the application in the old palette until
+		// something else asked to draw, and a platform that is already hiding
+		// the window has no next frame at all.
+		return handled || e2.Config.Appearance != wasAppearance
+	case StageEvent:
+		w.coalesced.stage = &e2
+		// Delivered now for the same reason: a window that went to the
+		// background draws nothing more, and a stage that waited for a frame
+		// would never arrive.
+		return true
 	case event.Event:
 		focusDir := key.FocusDirection(-1)
 		if e, ok := e2.(key.Event); ok && e.State == key.Press {

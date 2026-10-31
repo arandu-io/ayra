@@ -23,9 +23,15 @@ __attribute__ ((visibility ("hidden"))) CALayer *gio_layerFactory(BOOL presentWi
   AyraView *view = (AyraView *)window.contentView;
 	gio_onDraw(view.handle);
 }
+- (void)windowDidMiniaturize:(NSNotification *)notification {
+	NSWindow *window = (NSWindow *)[notification object];
+	AyraView *view = (AyraView *)window.contentView;
+	gio_onStage(view.handle, 1);
+}
 - (void)windowDidDeminiaturize:(NSNotification *)notification {
 	NSWindow *window = (NSWindow *)[notification object];
   AyraView *view = (AyraView *)window.contentView;
+	gio_onStage(view.handle, 0);
 	gio_onDraw(view.handle);
 }
 - (void)windowWillEnterFullScreen:(NSNotification *)notification {
@@ -203,10 +209,19 @@ static void handleMouse(AyraView *view, NSEvent *event, int typ, CGFloat dx, CGF
     return [[self window] convertRectToScreen:r];
 }
 - (void)applicationWillUnhide:(NSNotification *)notification {
+	gio_onStage(self.handle, 0);
 	gio_onDraw(self.handle);
 }
 - (void)applicationDidHide:(NSNotification *)notification {
+	gio_onStage(self.handle, 1);
 	gio_onDraw(self.handle);
+}
+// viewDidChangeEffectiveAppearance is how AppKit says the system, or the window
+// holding the view, changed between light and dark. The view draws again and
+// the draw reads the appearance it is under.
+- (void)viewDidChangeEffectiveAppearance {
+	[super viewDidChangeEffectiveAppearance];
+	[self setNeedsDisplay:YES];
 }
 - (void)dealloc {
 	gio_onDestroy(self.handle);

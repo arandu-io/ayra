@@ -109,6 +109,7 @@ func newWindow(win *callbacks, options []Option) {
 		})
 		return nil
 	})
+	w.config.Appearance = w.systemAppearance()
 	w.addEventListeners()
 	w.addHistory()
 
@@ -190,6 +191,28 @@ func (w *window) addEventListeners() {
 	w.addEventListener(w.visualViewport, "resize", func(this js.Value, args []js.Value) interface{} {
 		w.resize()
 		w.draw(true)
+		return nil
+	})
+	// The media query the stylesheet of a web page reads is the same one the
+	// canvas follows, and it changes while the page is open.
+	if dark := w.matchMedia("(prefers-color-scheme: dark)"); dark.Truthy() {
+		w.addEventListener(dark, "change", func(this js.Value, args []js.Value) interface{} {
+			if appearance := w.systemAppearance(); appearance != w.config.Appearance {
+				w.config.Appearance = appearance
+				w.processEvent(ConfigEvent{Config: w.config})
+			}
+			return nil
+		})
+	}
+	// A tab in the background draws no frames: the browser stops
+	// requestAnimationFrame, and what the page runs for the screen should stop
+	// with it.
+	w.addEventListener(w.document, "visibilitychange", func(this js.Value, args []js.Value) interface{} {
+		if w.document.Get("hidden").Truthy() {
+			w.processEvent(StageEvent{Stage: StageBackground})
+		} else {
+			w.processEvent(StageEvent{Stage: StageForeground})
+		}
 		return nil
 	})
 	w.addEventListener(w.window, "contextmenu", func(this js.Value, args []js.Value) interface{} {
@@ -1062,6 +1085,32 @@ func (w *window) orientation(mode Orientation) {
 	}
 }
 
+// matchMedia answers the media query list, or the zero value in a browser that
+// has none.
+func (w *window) matchMedia(query string) js.Value {
+	if !w.window.Get("matchMedia").Truthy() {
+		return js.Value{}
+	}
+	return w.window.Call("matchMedia", query)
+}
+
+// systemAppearance reads prefers-color-scheme. A browser that answers neither
+// the dark nor the light query does not implement it, and is unknown rather
+// than light.
+func (w *window) systemAppearance() Appearance {
+	matches := func(query string) bool {
+		list := w.matchMedia(query)
+		return list.Truthy() && list.Get("matches").Truthy()
+	}
+	switch {
+	case matches("(prefers-color-scheme: dark)"):
+		return AppearanceDark
+	case matches("(prefers-color-scheme: light)"):
+		return AppearanceLight
+	}
+	return AppearanceUnknown
+}
+
 func (w *window) navigationColor(c color.NRGBA) {
 	theme := w.head.Call("querySelector", `meta[name="theme-color"]`)
 	if !theme.Truthy() {
@@ -1070,7 +1119,7 @@ func (w *window) navigationColor(c color.NRGBA) {
 		w.head.Call("appendChild", theme)
 	}
 	rgba := f32color.NRGBAToRGBA(c)
-	theme.Set("content", fmt.Sprintf("#%06X", []uint8{rgba.R, rgba.G, rgba.B}))
+	theme.Set("content", fmt.Sprintf("#%02X%02X%02X", rgba.R, rgba.G, rgba.B))
 }
 
 func osMain() {

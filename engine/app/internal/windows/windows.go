@@ -359,6 +359,7 @@ const (
 	WM_SETFOCUS              = 0x0007
 	WM_SHOWWINDOW            = 0x0018
 	WM_SIZE                  = 0x0005
+	WM_SETTINGCHANGE         = 0x001A
 	WM_STYLECHANGED          = 0x007D
 	WM_SYSKEYDOWN            = 0x0104
 	WM_SYSKEYUP              = 0x0105

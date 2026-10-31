@@ -57,13 +57,35 @@ type Context struct {
 	// one frame leaves it, and [Context.ChangeScheme] then does nothing: there is
 	// no window whose palette could change.
 	SetScheme func(theme.Scheme)
+
+	// Mode is where the scheme being drawn comes from: [theme.System] while the
+	// window follows the operating system, [theme.Fixed] when a person or the
+	// application chose one. A control that offers Automático, Claro and Escuro
+	// reads it to mark the current choice.
+	Mode theme.Mode
+
+	// SetMode is what [Context.FollowSystem] calls. The window applies it from
+	// the next frame, like SetScheme. It is nil outside a window.
+	SetMode func(theme.Mode)
 }
 
-// ChangeScheme asks the window to draw in another palette. It is what the theme
-// toggle does, and what a screen that follows the platform's own setting would.
+// ChangeScheme asks the window to draw in another palette, and keeps it there:
+// it is a choice, and a choice wins over the system's setting for as long as it
+// stands, so a window that followed the system stops following it until
+// [Context.FollowSystem] is called. It is what the theme toggle does.
 func (c Context) ChangeScheme(scheme theme.Scheme) {
 	if c.SetScheme != nil {
 		c.SetScheme(scheme)
+	}
+}
+
+// FollowSystem asks the window to draw in the scheme of the operating system
+// again, and to change with it, which is the web panel's Automático. It undoes
+// a [Context.ChangeScheme]. On a platform that cannot tell the system's scheme
+// the window keeps the one it has.
+func (c Context) FollowSystem() {
+	if c.SetMode != nil {
+		c.SetMode(theme.System)
 	}
 }
 

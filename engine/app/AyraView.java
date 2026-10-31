@@ -11,6 +11,7 @@ import android.app.FragmentManager;
 import android.app.FragmentTransaction;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -459,6 +460,21 @@ public final class AyraView extends SurfaceView implements Choreographer.FrameCa
 
 	float getFontScale() {
 		return getResources().getConfiguration().fontScale;
+	}
+
+	// getUiMode answers the system's night mode: 0 when the platform does not
+	// say, 1 for light and 2 for dark. It is read from the resources, which the
+	// activity keeps current because the manifest declares uiMode among the
+	// configuration changes it handles itself.
+	int getUiMode() {
+		int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+		switch (night) {
+		case Configuration.UI_MODE_NIGHT_NO:
+			return 1;
+		case Configuration.UI_MODE_NIGHT_YES:
+			return 2;
+		}
+		return 0;
 	}
 
 	public void start() {

@@ -52,6 +52,9 @@ type window struct {
 	// frameDims stores the last seen window frame width and height.
 	frameDims image.Point
 	loop      *eventLoop
+	// minimized is whether the last update saw the window minimised, which is
+	// the Windows form of the application being in the background.
+	minimized bool
 }
 
 const _WM_WAKEUP = windows.WM_USER + iota
@@ -109,6 +112,7 @@ func newWindow(win *callbacks, options []Option) {
 		}
 		winMap.Store(w.hwnd, w)
 		defer winMap.Delete(w.hwnd)
+		w.config.Appearance = systemAppearance()
 		w.Configure(options)
 		w.ProcessEvent(Win32ViewEvent{HWND: uintptr(w.hwnd)})
 		windows.SetForegroundWindow(w.hwnd)
@@ -242,7 +246,28 @@ func (w *window) update() {
 		w.config.Mode = Windowed
 	}
 	w.ProcessEvent(ConfigEvent{Config: w.config})
+	if minimized := p.IsMinimized(); minimized != w.minimized {
+		w.minimized = minimized
+		if minimized {
+			w.ProcessEvent(StageEvent{Stage: StageBackground})
+		} else {
+			w.ProcessEvent(StageEvent{Stage: StageForeground})
+		}
+	}
 	w.draw(true)
+}
+
+// systemAppearance reads the scheme the person chose for applications in
+// Settings, Personalization, Colors. It is a per-user value in the registry,
+// and the setting is only there on a Windows that has a dark mode.
+func systemAppearance() Appearance {
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, registry.QUERY_VALUE)
+	if err != nil {
+		return AppearanceUnknown
+	}
+	defer key.Close()
+	value, _, err := key.GetIntegerValue("AppsUseLightTheme")
+	return appearanceFromLightTheme(value, err == nil)
 }
 
 func windowProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr {
@@ -376,6 +401,15 @@ func windowProc(hwnd syscall.Handle, msg uint32, wParam, lParam uintptr) uintptr
 		return 0
 	case windows.WM_PAINT:
 		w.draw(true)
+	case windows.WM_SETTINGCHANGE:
+		// The system broadcasts this when a setting changes, with the name of
+		// the area in lParam; the colour scheme is "ImmersiveColorSet". The
+		// registry is cheap to read, so it is read on every one and compared,
+		// instead of decoding a pointer the message may not carry.
+		if appearance := systemAppearance(); appearance != w.config.Appearance {
+			w.config.Appearance = appearance
+			w.ProcessEvent(ConfigEvent{Config: w.config})
+		}
 	case windows.WM_STYLECHANGED:
 		w.update()
 	case windows.WM_WINDOWPOSCHANGED:
