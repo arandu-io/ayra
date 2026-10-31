@@ -2,7 +2,58 @@
 
 ## Unreleased
 
+### Added
+
+- `engine/app`: the system's scheme. `Config.Appearance` is `AppearanceLight`,
+  `AppearanceDark` or `AppearanceUnknown`, and a `ConfigEvent` carries each change
+  while the window is open, delivered at once and without recreating anything.
+  Android reads `uiMode` from the resources (`AyraView.getUiMode`) on
+  `onConfigurationChanged`, iOS the trait collection of the view
+  (`traitCollectionDidChange`), macOS the effective appearance of the view
+  (`viewDidChangeEffectiveAppearance`), Windows the `AppsUseLightTheme` value and
+  `WM_SETTINGCHANGE`, and the browser `prefers-color-scheme` and its change event.
+  Linux (X11 and Wayland) reports `AppearanceUnknown`: there is no settings portal
+  client in the engine, and a guess would draw the light palette on a dark desktop.
+- `shell`: `Config.Mode` takes `theme.System` to follow the operating system, and
+  `theme.Fixed`, the zero value, keeps the scheme asked for as before. A scheme
+  chosen with `Context.ChangeScheme` wins over the system for as long as it stands;
+  `Context.FollowSystem` hands the decision back, taking the scheme the system is
+  in now. `Context.Mode` says which is in force. `theme.Mode` is the new type.
+- `shell`: the status and navigation bars are painted with the background of the
+  palette, and the icons on them are dark on the light palette and light on the
+  dark one, when the window opens and each time the scheme changes. The whole
+  window, the strips under the bars included, is painted with the background:
+  from Android 15 the bars are transparent and the strip showed the surface's white
+  clear colour.
+- `engine/app`, `shell`, `ayra`: the application's stage. `app.StageEvent` says
+  when the application goes to the background and comes back -- the Android
+  activity stopped or started, the iOS app in the background, a window minimised
+  or hidden on macOS and Windows, a browser tab hidden. `shell.Config.OnLifecycle`
+  receives `ayra.Foreground`, `ayra.Background` and `ayra.Destroyed`, once per
+  change, between two frames, so a screen can pause a socket or a video instead of
+  guessing from a heartbeat. Linux reports no stage.
+- `theme`: `Locale`, carried by `Theme.Locale` and set with `shell.Config.Locale`,
+  is the language of the words the date widgets draw when the Props leave them
+  empty: month and weekday names, the first day of the week, "Hoje", "Limpar",
+  "Mês anterior" and "Próximo mês" (the names of the calendar's two steps, which
+  are Kyse's carets, so a screen reader says them), "Ano anterior" and "Próximo
+  ano", the placeholders and the end-of-period line.
+  `theme.PortugueseBrazil()` is pt-BR with the same month and weekday names and
+  the same "Hoje" and "Limpar" as the Kyse web half; the week starts on Sunday.
+  `Calendar`, `DatePicker`, `DateRangePicker` and `DateTimePicker` read it, and a
+  Props field that is set still wins. `CalendarProps.TodayLabel` and `ClearLabel`
+  draw the two controls under the grid, which choose today and empty the choice.
+- `widget`: `Menubar.Open`, `DatePicker.Open` and `Hover.Hold`, to restore a menu
+  or a tooltip and to draw one open.
+- `frame`: golden pictures, light and dark at 1x and 2x, for `Accordion`, `Dialog`,
+  `Drawer` (right and bottom), `Empty`, `Figure`, `Menubar`, `Palette`, `Popover`,
+  `Toast`, `Tooltip`, `DialogTrigger` and `ResponsiveImage`, and for the calendar,
+  the date picker, the date range and the date time picker in pt-BR.
+
 ### Fixed
+
+- `widget`: a `Tooltip` was clipped to its own control, so the bubble was cut
+  away and never showed. The clip is closed before the bubble is drawn.
 
 - `widget`: a press on a `Drawer` or a `Dialog` no longer counts as a press outside
   it. The barrier behind the panel was an enclosing area of the panel, and the

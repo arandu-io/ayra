@@ -4,6 +4,35 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- the system theme
+
+Nothing that compiled stops compiling. `app.Config`, `ayra.Context`, `theme.Theme`
+and `shell.Config` have more fields, so a literal written with positional values
+needs the names. Three things are worth knowing.
+
+A window follows the system when it is told to; one that is not keeps the scheme
+it opened with, as before:
+
+```go
+shell.Run(shell.Config{
+	Mode:  theme.System, // Scheme is the one used until the system says, and where it cannot
+	Locale: theme.PortugueseBrazil(),
+	OnLifecycle: func(l ayra.Lifecycle) { /* pause on ayra.Background, resume on ayra.Foreground */ },
+}, screen)
+```
+
+A theme toggle keeps working: `ChangeScheme` is now a choice that wins over the
+system, and `FollowSystem` is the "Automático" that undoes it.
+
+A dismissible `Dialog` or `Drawer` takes the keyboard once when it opens and no
+longer on every frame, and reads escape whatever holds the focus. A screen that
+relied on the panel keeping the focus away from a field inside it has the field
+working now.
+
+On Android the app has to be built with `aru` from this change or later: the
+activity declares `uiMode` among the configuration changes it handles, and
+without it the system recreates the activity when the scheme changes.
+
 ## v0.6.0 -- Kyse's icons
 
 Nothing that compiled stops compiling, and the pictures of an application that

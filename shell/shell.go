@@ -7,12 +7,16 @@
 package shell
 
 import (
+	"image"
+	"image/color"
 	"os"
 	"strings"
 
 	"github.com/arandu-io/ayra/engine/app"
 	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/op"
+	"github.com/arandu-io/ayra/engine/op/clip"
+	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 
@@ -231,6 +235,7 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 				)
 			}
 			gtx := app.NewContext(&ops, e)
+			paintBehindBars(gtx.Ops, e, palette.Colours.Background)
 			c := ayra.Context{
 				Context:    gtx,
 				Theme:      palette,
@@ -257,6 +262,26 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 			e.Frame(gtx.Ops)
 		}
 	}
+}
+
+// paintBehindBars paints the whole window, the strips under the system bars
+// included, with the background of the palette.
+//
+// The context a screen is handed has the insets taken off: it starts below the
+// status bar and ends above the navigation bar, and what it paints stays inside
+// that. The strips outside it belong to nobody, and the surface is cleared to
+// white there -- which is what a phone in the dark mode showed above and below
+// an otherwise dark screen, whatever colour the bars were set to, because from
+// Android 15 on the bars are transparent and the window is what shows through.
+// The offset the insets applied is undone for the length of the fill.
+func paintBehindBars(ops *op.Ops, e app.FrameEvent, ground color.NRGBA) {
+	if e.Insets == (app.Insets{}) {
+		return
+	}
+	defer op.Offset(image.Pt(-e.Metric.Dp(e.Insets.Left), -e.Metric.Dp(e.Insets.Top))).Push(ops).Pop()
+	defer clip.Rect{Max: e.Size}.Push(ops).Pop()
+	paint.ColorOp{Color: ground}.Add(ops)
+	paint.PaintOp{}.Add(ops)
 }
 
 // errNoTitle is what an unnamed window answers with.
