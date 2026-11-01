@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- the keyboard is the window's, not the application's
+## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard
 -- its own `app.Window`, an `app.NewContext` followed by a `layout.Inset` of the
