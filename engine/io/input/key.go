@@ -172,8 +172,16 @@ func (k *keyHandler) ResetEvent() (event.Event, bool) {
 // not drawn at all, cannot keep it -- and the keyboard raised for it is
 // dismissed in the same breath, because a keyboard open for a control that is
 // gone covers whatever replaced it.
-func (q *keyQueue) Frame(handlers map[event.Tag]*handler, state keyState) keyState {
+//
+// A held focus is kept whether or not its control was drawn; see
+// [Router.HoldFocus]. It still needs the control to be known to the router, so a
+// focus whose handler is gone is given up even then.
+func (q *keyQueue) Frame(handlers map[event.Tag]*handler, state keyState, held bool) keyState {
 	if state.focus != nil {
+		if _, known := handlers[state.focus]; held && known {
+			q.updateFocusLayout(handlers)
+			return state
+		}
 		if h, ok := handlers[state.focus]; !ok || !h.filter.focusable || !h.key.visible {
 			state.focus = nil
 			state.state = TextInputClose
@@ -234,8 +242,11 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 	if len(q.dirOrder) == 0 {
 		return state, nil
 	}
+	// A focus held through frames in which its control was not drawn has no
+	// place in this frame to move from, and moves as though there were none.
+	placed := state.focus != nil && handlers[state.focus].key.orderPlusOne != 0
 	order := 0
-	if state.focus != nil {
+	if placed {
 		order = handlers[state.focus].key.dirOrder
 	}
 	focus := q.dirOrder[order]
@@ -248,7 +259,7 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 		if dir == key.FocusBackward {
 			order = -1
 		}
-		if state.focus != nil {
+		if placed {
 			order = handlers[state.focus].key.orderPlusOne - 1
 			if dir == key.FocusForward {
 				order++
@@ -260,7 +271,7 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 		return q.Focus(handlers, state, q.order[order])
 	case key.FocusRight, key.FocusLeft:
 		next := order
-		if state.focus != nil {
+		if placed {
 			next = order + 1
 			if dir == key.FocusLeft {
 				next = order - 1
@@ -281,7 +292,7 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 			delta = -1
 		}
 		nextRow := 0
-		if state.focus != nil {
+		if placed {
 			nextRow = focus.row + delta
 		}
 		var closest event.Tag

@@ -248,6 +248,10 @@ func (w *Window) updateState() {
 	switch q.TextInputState() {
 	case input.TextInputOpen:
 		w.driver.ShowTextInput(true)
+		// A field that asks for the keyboard has to be where the person can
+		// see what is typed into it, whether the keyboard comes up now or was
+		// already up and the focus moved to a field it covers.
+		w.queue.BeginReveal(revealArea(w.viewport, w.metric), false)
 	case input.TextInputClose:
 		w.driver.ShowTextInput(false)
 	}
@@ -267,10 +271,30 @@ func (w *Window) updateState() {
 		w.imeState = newState
 		w.driver.EditorStateChanged(oldState, newState)
 	}
+	// Not there yet: the scroll was asked for and is read by the next frame,
+	// which has to be drawn for it to be.
+	if q.ContinueReveal(revealArea(w.viewport, w.metric)) {
+		w.setNextFrame(time.Time{})
+	}
 	if t, ok := q.WakeupTime(); ok {
 		w.setNextFrame(t)
 	}
 	w.updateAnimation()
+}
+
+// revealMargin is the room, in dp, left between a field brought into view and
+// the edge of the viewport it was brought to, so that it is not drawn flush
+// against the keyboard.
+const revealMargin = unit.Dp(24)
+
+// revealArea is the part of the viewport a field is brought into: the viewport
+// with a margin kept at every edge, as long as that leaves room.
+func revealArea(viewport image.Rectangle, m unit.Metric) image.Rectangle {
+	margin := m.Dp(revealMargin)
+	if viewport.Dx() <= 2*margin || viewport.Dy() <= 2*margin {
+		return viewport
+	}
+	return viewport.Inset(margin)
 }
 
 // Invalidate the window such that a [FrameEvent] will be generated immediately.
@@ -630,9 +654,14 @@ func (w *Window) processEvent(e event.Event) bool {
 				Y: e2.Size.Y - e2.Metric.Dp(e2.Insets.Bottom),
 			},
 		}
-		// Scroll to focus if viewport is shrinking in any dimension.
+		// Scroll to focus if viewport is shrinking in any dimension. The room
+		// that is left is laid out for the first time in the frame this event
+		// starts, so the focused control may be one it leaves out, and the
+		// scroll that brings it back can only be settled once that frame has
+		// been drawn: the focus is held until then, and the reveal is repeated
+		// after each frame until the control is in view.
 		if old, new := w.viewport.Size(), viewport.Size(); new.X < old.X || new.Y < old.Y {
-			w.queue.RevealFocus(viewport)
+			w.queue.BeginReveal(revealArea(viewport, e2.Metric), true)
 		}
 		w.viewport = viewport
 		wrapper := &w.decorations.Ops

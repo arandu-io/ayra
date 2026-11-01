@@ -42,6 +42,7 @@ type List struct {
 	Position Position
 
 	bounds       Constraints
+	resized      bool
 	scroll       gesture.Scroll
 	scrollPixels int
 	itemCount    int
@@ -104,6 +105,11 @@ func (l *List) beginFrame(gtx Context, count int) {
 	if count < 0 {
 		count = 0
 	}
+	// A list laid out in another room than the last frame's does not know yet
+	// how far it can scroll: the position it kept describes the old room.
+	_, was := l.Axis.mainConstraint(l.bounds)
+	_, now := l.Axis.mainConstraint(gtx.Constraints)
+	l.resized = l.itemCount > 0 && was != now
 	l.bounds = gtx.Constraints
 	l.children = l.children[:0]
 	l.mainLength = 0
@@ -129,6 +135,14 @@ func (l *List) readScroll(gtx Context) {
 		maximum = max(0, -l.Position.OffsetLast)
 	}
 
+	if l.resized {
+		// The range is asked of the position the list had in the room it was in
+		// before. Held to it, a list that fitted its room and no longer does
+		// offers nothing to be scrolled by, and the scroll that brings a field
+		// above the keyboard is refused. It is laid out again from the offset it
+		// is given, and what lies past the end is taken back there.
+		minimum, maximum = -unboundedListSize, unboundedListSize
+	}
 	horizontal := pointer.ScrollRange{Min: minimum, Max: maximum}
 	vertical := pointer.ScrollRange{}
 	axis := gesture.Axis(l.Axis)

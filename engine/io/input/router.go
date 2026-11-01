@@ -98,6 +98,18 @@ type Router struct {
 	// allocates nothing. A control asks once per frame and there are hundreds
 	// of them.
 	scratchFilters []taggedFilter
+
+	// focusHold is how many more frames the focus survives without its control
+	// being drawn, set by [Router.HoldFocus].
+	focusHold int
+	// revealLeft is how many more frames [Router.ContinueReveal] tries.
+	revealLeft int
+	// seen is where the focused control was last drawn, kept for the frames in
+	// which it is not: see [Router.RevealFocus].
+	seen struct {
+		tag    event.Tag
+		bounds image.Rectangle
+	}
 }
 
 // Source is what a control is handed, and the whole of what it may do.
@@ -566,9 +578,18 @@ func (q *Router) Frame(frame *op.Ops) {
 	}
 	q.reader.Reset(opsList)
 	q.collect()
+	q.rememberFocus()
 
+	held := q.focusHold > 0
+	focus := q.lastState().focus
 	for k, h := range q.handlers {
 		if !h.active {
+			// The focused control is kept while the focus is held, though it
+			// was not drawn: dropping it here would make the focus below
+			// name a handler that is not there.
+			if held && k == focus {
+				continue
+			}
 			delete(q.handlers, k)
 		} else {
 			h.active = false
@@ -584,7 +605,10 @@ func (q *Router) Frame(frame *op.Ops) {
 	st := q.lastState()
 	pst, evts := q.pointer.queue.Frame(q.handlers, st.pointerState)
 	st.pointerState = pst
-	st.keyState = q.key.queue.Frame(q.handlers, q.lastState().keyState)
+	st.keyState = q.key.queue.Frame(q.handlers, q.lastState().keyState, held)
+	if q.focusHold > 0 {
+		q.focusHold--
+	}
 	q.changeState(nil, st, evts)
 
 	q.collapseState(len(q.changes) - 1)
@@ -899,20 +923,110 @@ func (q *Router) MoveFocus(dir key.FocusDirection) {
 	q.changeState(nil, state, evts)
 }
 
+// HoldFocus keeps the focus through the next frames even if the control that
+// has it is not drawn in them.
+//
+// A window that shrinks -- the on-screen keyboard coming up takes the bottom of
+// it -- is laid out again in the room that is left, and a list in that room
+// draws only the rows that fit. The focused field can be one it leaves out, and
+// a focus whose control is not in the frame is given up, along with the keyboard
+// raised for it: the keyboard closes, the window grows back, the field is drawn
+// again with no focus and the person has watched the keyboard flicker and typed
+// into nothing. Held, the focus waits the few frames it takes
+// [Router.RevealFocus] to scroll the field into the room that is left.
+//
+// The hold ends after frames frames or at [Router.ReleaseFocus], whichever is
+// first, and a focus still without its control then is given up as it always
+// was.
+func (q *Router) HoldFocus(frames int) {
+	q.focusHold = max(frames, 0)
+}
+
+// ReleaseFocus ends the hold [Router.HoldFocus] put on the focus.
+func (q *Router) ReleaseFocus() {
+	q.focusHold = 0
+}
+
+// RevealFrames is how many frames bringing the focused control into view is
+// tried for, and how long the focus is held while the control is not drawn.
+//
+// The first frame in a room that shrank draws a list before it knows how far it
+// can scroll, so the scroll that brings the field back is read by the second or
+// the third.
+const RevealFrames = 8
+
+// BeginReveal starts bringing the focused control into view, as a window does
+// when its room shrinks under the on-screen keyboard or when a field asks for the
+// keyboard. It scrolls at once what the frame already drawn allows, holds the
+// focus for the frames the rest takes, and leaves [Router.ContinueReveal] to
+// finish after each of them. A viewport is the room the control is brought into,
+// in window coordinates.
+func (q *Router) BeginReveal(viewport image.Rectangle, hold bool) {
+	if hold {
+		q.HoldFocus(RevealFrames)
+	}
+	q.RevealFocus(viewport)
+	q.revealLeft = RevealFrames
+}
+
+// ContinueReveal is what a window calls after each frame while a reveal is
+// under way. It scrolls toward the control again and reports whether another
+// frame has to be drawn for the scroll to be read -- which is false once the
+// control is inside viewport, or there is no focus, or the frames ran out.
+func (q *Router) ContinueReveal(viewport image.Rectangle) (again bool) {
+	if q.revealLeft == 0 {
+		return false
+	}
+	q.revealLeft--
+	if q.RevealFocus(viewport) {
+		q.revealLeft = 0
+		q.ReleaseFocus()
+		return false
+	}
+	return q.revealLeft > 0
+}
+
+// rememberFocus records where the focused control is drawn, if it is.
+//
+// A frame that does not draw it keeps what was seen, for as long as it is the
+// control that has the focus: that is where the control was, and where a scroll
+// has to be delivered to bring it back.
+func (q *Router) rememberFocus() {
+	if kh, ok := q.focusedKeyHandler(); ok {
+		q.seen.tag = q.lastState().focus
+		q.seen.bounds = q.key.queue.BoundsFor(kh)
+	} else if q.seen.tag != q.lastState().focus {
+		q.seen.tag = nil
+	}
+}
+
 // RevealFocus scrolls the focused control into viewport, if anything above it
-// can scroll.
+// can scroll, and reports whether there is nothing more to do: the control is
+// inside viewport, or there is no focus to bring there.
 //
 // It is what makes keyboard navigation usable in a long form: the focus can
 // move to a control that is off the screen, and without this it would be taking
-// the typing from somewhere nobody can see.
-func (q *Router) RevealFocus(viewport image.Rectangle) {
-	kh, ok := q.focusedKeyHandler()
-	if !ok {
-		return
+// the typing from somewhere nobody can see. It is what keeps a field above the
+// on-screen keyboard as well, and for that it does not stop at a control that is
+// not drawn: a list that was laid out again in a smaller room has left the field
+// out, and the scroll that brings it back is delivered at where the field was,
+// clamped into viewport. The answer is false until the field is drawn inside.
+func (q *Router) RevealFocus(viewport image.Rectangle) (settled bool) {
+	focus := q.lastState().focus
+	if focus == nil {
+		return true
 	}
-	bounds := q.key.queue.BoundsFor(kh)
-	area := q.key.queue.AreaFor(kh)
-	viewport = q.pointer.queue.ClipFor(area, viewport)
+	kh, drawn := q.focusedKeyHandler()
+	var bounds image.Rectangle
+	switch {
+	case drawn:
+		bounds = q.key.queue.BoundsFor(kh)
+		viewport = q.pointer.queue.ClipFor(q.key.queue.AreaFor(kh), viewport)
+	case q.seen.tag == focus:
+		bounds = q.seen.bounds
+	default:
+		return true
+	}
 
 	// How far the control is outside the viewport, on each side, taking
 	// whichever side it overflows. Clamped to nought at both ends so that a
@@ -931,7 +1045,24 @@ func (q *Router) RevealFocus(viewport image.Rectangle) {
 	if s.Y == 0 {
 		s.Y = bottomright.Y
 	}
-	q.ScrollFocus(s)
+	if drawn {
+		q.ScrollFocus(s)
+		return s == (image.Point{})
+	}
+
+	// Not drawn: scroll what lies where the control was, at the nearest point
+	// of the viewport to it.
+	at := image.Pt(
+		min(max(bounds.Min.X+1, viewport.Min.X), viewport.Max.X-1),
+		min(max(bounds.Min.Y+1, viewport.Min.Y), viewport.Max.Y-1),
+	)
+	q.changeState(nil, q.lastState(), q.pointer.queue.deliverScrollEvent(q.handlers, nil, pointer.Event{
+		Kind:     pointer.Scroll,
+		Source:   pointer.Touch,
+		Position: f32internal.FPt(at),
+		Scroll:   f32internal.FPt(s),
+	}))
+	return false
 }
 
 // ScrollFocus scrolls whatever can scroll above the focused control by dist.

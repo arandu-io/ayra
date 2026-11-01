@@ -1,5 +1,34 @@
 # Release Notes
 
+## Unreleased
+
+### Fixed
+
+- `engine/io/input`, `engine/app`, `engine/layout`: a text field low on a screen
+  keeps its keyboard when the keyboard comes up. The keyboard takes the bottom of
+  the window, the screen is laid out again in what is left, and a list in that
+  room draws only the rows that fit -- and the field the person tapped could be
+  one it left out. The router gives up the focus of a control that is not in the
+  frame, and closes the keyboard raised for it, so the keyboard opened, closed in
+  the same breath, and every key it had sent went nowhere. The window now holds the
+  focus through the frames it takes to bring the field into view
+  (`Router.HoldFocus`, `Router.ReleaseFocus`), scrolls toward the field where it
+  was even when it is not drawn (`Router.BeginReveal`, `Router.ContinueReveal`,
+  `Router.RevealFocus`, which now answers whether the field is in view), keeps a
+  margin of 24 dp between the field and the keyboard, and does it again whenever a
+  field asks for the keyboard, so a tap on another field with the keyboard up
+  brings that one into view too. `layout.List` offers the scroll it is asked for
+  in the first frame in a room of another size: the range it kept described the
+  room before, and a form that fitted its window offered nothing to scroll by.
+  The input connection stays: the editor is not told it lost the focus when it
+  comes back, and the input method is not restarted. No application needs a window
+  loop of its own for this; see UPGRADE.md.
+- `widget`: the password's eye is inside the field, at its right end, and not
+  beside it. Kyse draws the box and the control in one input group with one border;
+  `PasswordProps` laid the control outside that border. The group draws the border
+  -- focus ring, rejected colour -- and the input in it draws none. The group is
+  published as the part `group`, and `Secret` keeps a `Button` for the eye.
+
 ## [v0.7.0](https://github.com/arandu-io/ayra/compare/v0.6.0...v0.7.0) - 2026-10-31
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.6.0...v0.7.0

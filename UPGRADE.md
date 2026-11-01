@@ -4,6 +4,38 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- the keyboard is the window's, not the application's
+
+An application that opened its own window loop to keep a field above the keyboard
+-- its own `app.Window`, an `app.NewContext` followed by a `layout.Inset` of the
+frame's insets, a check of `e.Insets.Bottom` against a height to guess the
+keyboard -- deletes it and calls `shell.Run`. That loop is what made the form
+vanish and the keyboard close: `app.NewContext` has already taken the insets off the
+context, so the `layout.Inset` took them off a second time, and with the keyboard
+up the room left was too small to draw the focused field in. A router drops the
+focus of a control that is not in the frame, together with the keyboard raised for
+it.
+
+```go
+// before: cmd/native/window.go, runWindow, frames
+// now
+shell.Run(shell.Config{Title: "Nivela", Scheme: scheme, Fonts: fonts, Theme: theme}, app.Layout)
+```
+
+`shell.Run` already paints the strips under the status and navigation bars with the
+palette and colours the bars; it applies the insets of the bars and of the keyboard
+once; it scrolls the focused field above the keyboard with a margin; and it keeps
+the input connection. A screen that scrolls does so with a `layout.List` (or any
+control that takes scroll), as before: nothing in the screen mentions the keyboard,
+and a screen that kept its own "scroll the touched block into view" code can delete
+that too.
+
+`Router.RevealFocus` now returns a `bool`. A call that ignored it compiles as it was.
+
+`PasswordProps` draws the eye inside the field. A screen that laid the field out
+by its width and the eye's separately has nothing to change; one that set the part
+`root` to restyle the field restyles `group` as well.
+
 ## v0.7.0 -- the system theme
 
 Nothing that compiled stops compiling. `app.Config`, `ayra.Context`, `theme.Theme`
