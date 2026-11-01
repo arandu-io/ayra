@@ -2,10 +2,6 @@
 
 ## [v0.8.0](https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0) - 2026-11-01
 
-**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0
-
-## v0.8.0 - 2026-11-01
-
 ### Fixed
 
 - `engine/io/input`, `engine/app`, `engine/layout`: a text field low on a screen
@@ -32,6 +28,8 @@
   `PasswordProps` laid the control outside that border. The group draws the border
   -- focus ring, rejected colour -- and the input in it draws none. The group is
   published as the part `group`, and `Secret` keeps a `Button` for the eye.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0
 
 ## [v0.7.0](https://github.com/arandu-io/ayra/compare/v0.6.0...v0.7.0) - 2026-10-31
 
