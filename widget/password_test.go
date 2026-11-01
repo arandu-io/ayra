@@ -44,3 +44,42 @@ func TestAPasswordFieldDoesNotCopyItsText(t *testing.T) {
 		t.Errorf("the input method was told %q", got)
 	}
 }
+
+// TestThePasswordEyeIsInsideTheField is the parity with Kyse's input group: the
+// control that reveals what was typed sits inside the field's border, at its
+// right end, and not beside the field. The field and its eye are one box as wide
+// as the room they were given, a tap on the eye reveals the value and leaves the
+// field alone, and a tap anywhere else on the box focuses the field.
+func TestThePasswordEyeIsInsideTheField(t *testing.T) {
+	var state widget.Secret
+	screen := func(c ayra.Context) ayra.Dimensions {
+		return widget.PasswordProps{Placeholder: "Senha"}.Layout(c, &state)
+	}
+
+	p := newPanel()
+	size := p.draw(screen).Size
+	p.draw(screen)
+	if size.X != p.size.X {
+		t.Fatalf("the password field is %d wide in a room of %d: the eye is outside it", size.X, p.size.X)
+	}
+
+	// The eye is in the last 48 points of the field, vertically centred.
+	tap(p, screen, size.X-24, size.Y/2)
+	if !state.Shown() {
+		t.Errorf("a tap on the eye, inside the field's right end, did not reveal the value")
+	}
+	tap(p, screen, size.X-24, size.Y/2)
+	if state.Shown() {
+		t.Errorf("a second tap on the eye did not hide the value again")
+	}
+
+	// Left of the eye the tap is the field's, and what is typed arrives.
+	tap(p, screen, 40, size.Y/2)
+	typeText(p, screen, "ação")
+	if got := state.Text(); got != "ação" {
+		t.Errorf("the field holds %q after a tap beside the eye and typing, want %q", got, "ação")
+	}
+	if state.Shown() {
+		t.Errorf("typing revealed the value")
+	}
+}

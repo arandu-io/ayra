@@ -1,13 +1,11 @@
 package widget
 
 import (
-	"image"
-
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
-	engine "github.com/arandu-io/ayra/engine/widget"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // FieldProps is a labelled control with its help and its error.
@@ -110,7 +108,7 @@ type PasswordProps struct {
 
 // PartNames are the parts this widget publishes, by the names the web
 // component publishes in data-part.
-func (p PasswordProps) PartNames() []string { return []string{"root"} }
+func (p PasswordProps) PartNames() []string { return []string{"root", "group"} }
 
 // Secret is the state half of a password field: what is typed, and whether it
 // is shown.
@@ -120,7 +118,7 @@ func (p PasswordProps) PartNames() []string { return []string{"root"} }
 // for the two of them is a compile error today and a confusion afterwards.
 type Secret struct {
 	Input
-	reveal engine.Clickable
+	reveal Button
 	shown  bool
 }
 
@@ -140,7 +138,7 @@ func (p PasswordProps) Layout(c ayra.Context, state *Secret) ayra.Dimensions {
 
 // layout is Layout without the root part around it.
 func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
-	if state.reveal.Clicked(c.Context) {
+	if state.reveal.Clicked(c) {
 		state.shown = !state.shown
 	}
 
@@ -153,34 +151,56 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 		kind = Text
 	}
 
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return InputProps{
-				Placeholder: p.Placeholder,
-				Kind:        kind,
-				Disabled:    p.Disabled,
-				Invalid:     p.Invalid,
-			}.Layout(c.With(gtx), &state.Input)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			// The eye while the value is hidden, the crossed eye once it shows:
-			// the two pictures Kyse swaps in its reveal control. What they say
-			// is the label.
-			name, icon := orDefault(p.ShowLabel, "Show"), innerIcon("password", "Eye")
-			if state.shown {
-				name, icon = orDefault(p.HideLabel, "Hide"), innerIcon("password", "EyeSlash")
-			}
-			return layout.Inset{Left: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return state.reveal.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Top: 6, Bottom: 6, Left: 8, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						inside := c.With(gtx)
-						side := innerPixels(inside, innerSide)
-						close := announce(inside, image.Pt(side, side), Announcement{Label: name, Class: Pressable, Disabled: p.Disabled})
-						defer close()
-						return drawInner(inside, icon, side, c.Theme.Colours.MutedForeground, 0)
-					})
+	// The eye lives inside the field, at its right end, as Kyse's input group
+	// has it: one border around the box and the control, drawn by the group, and
+	// the box inside it drawn with none. The border says what the field is in --
+	// focused, rejected -- because the box has none of its own to say it with.
+	t := c.Theme
+	border := t.Colours.Input
+	switch {
+	case p.Invalid:
+		border = t.Colours.Destructive
+	case c.Focused(&state.editor):
+		border = t.Colours.Ring
+	}
+	if p.Disabled {
+		border = fade(border)
+	}
+	bare := theme.Style{Border: theme.Transparent, Background: theme.Transparent, Radius: theme.Pt(0)}
+	box := ComponentProps{Parts: theme.Parts{"root": bare, "focus": bare, "invalid": bare}}
+
+	name, icon := orDefault(p.ShowLabel, "Show"), innerIcon("password", "Eye")
+	if state.shown {
+		name, icon = orDefault(p.HideLabel, "Hide"), innerIcon("password", "EyeSlash")
+	}
+
+	group := t.Resolve("password", "group", "default", theme.Style{
+		Background: theme.Colour(t.Colours.Background),
+		Border:     theme.Colour(border),
+		Radius:     theme.Pt(t.Metrics.Radius),
+	}, theme.Component{Parts: p.Parts})
+	if !p.Parts["group"].Border.IsSet() {
+		group.Border = theme.Colour(border)
+	}
+
+	return Surface(c, group, func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return InputProps{
+					ComponentProps: box,
+					Placeholder:    p.Placeholder,
+					Kind:           kind,
+					Disabled:       p.Disabled,
+					Invalid:        p.Invalid,
+				}.Layout(c.With(gtx), &state.Input)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				inner := c.With(gtx)
+				inner.Constraints.Min = layout.Constraints{}.Min
+				return layout.Inset{Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return ButtonProps{Label: name, Icon: icon, IconOnly: true, Size: Icon, Variant: Ghost, Disabled: p.Disabled}.Layout(inner.With(gtx), &state.reveal)
 				})
-			})
-		}),
-	)
+			}),
+		)
+	})
 }
