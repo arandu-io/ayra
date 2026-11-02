@@ -2,6 +2,7 @@ package widget
 
 import (
 	"image"
+	"image/color"
 	"io"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
 // reader wraps a string as the stream the clipboard takes.
@@ -140,7 +142,71 @@ func (p SegmentedProps) layout(c ayra.Context, state *Segments) ayra.Dimensions 
 	if chosen := state.group.Clicked(c); chosen >= 0 {
 		state.selected = chosen
 	}
-	return ButtonGroupProps{Labels: p.Options, Selected: state.selected, Size: p.Size}.Layout(c, &state.group)
+	for len(state.group.buttons) < len(p.Options) {
+		state.group.buttons = append(state.group.buttons, Button{})
+	}
+
+	t := c.Theme
+	size := p.Size
+	if size == Medium {
+		size = Small
+	}
+
+	// Kyse's bar: a muted track with the segments in it, every one as wide as
+	// the widest, and the chosen one raised on the page's own colour. Joined
+	// buttons of the widths of their words, with the chosen one a grey a shade
+	// from the track, were a bar in which the choice could not be told.
+	pad, gap := c.Dp(unit.Dp(3)), c.Dp(unit.Dp(2))
+	inner := c
+	inner.Constraints.Min = image.Point{}
+
+	widest := 0
+	for _, label := range p.Options {
+		props := ButtonProps{Label: label, Variant: Ghost, Size: size}
+		style := props.style(t)
+		measured := op.Record(inner.Ops)
+		text := buttonLabel(inner, label, style)
+		measured.Stop()
+		widest = max(widest, text.Size.X+c.Dp(unit.Dp(style.Padding.Left+style.Padding.Right)))
+	}
+	if n := len(p.Options); n > 0 && c.Constraints.Max.X < 1<<20 {
+		widest = min(widest, (c.Constraints.Max.X-2*pad-(n-1)*gap)/n)
+	}
+
+	segments := make([]op.CallOp, len(p.Options))
+	height := 0
+	for index, label := range p.Options {
+		style := theme.Style{Foreground: theme.Colour(t.Colours.MutedForeground)}
+		if index == state.selected {
+			edge := t.Colours.Foreground
+			edge.A = 64
+			style = theme.Style{
+				Background: theme.Colour(t.Colours.Background),
+				Foreground: theme.Colour(t.Colours.Foreground),
+				Border:     theme.Colour(edge),
+				Radius:     theme.Pt(max(t.Metrics.Radius-1, 0)),
+				Font:       theme.Font{Weight: theme.SemiBold},
+			}
+		} else {
+			style.Radius = theme.Pt(max(t.Metrics.Radius-1, 0))
+		}
+		cell := inner
+		cell.Constraints.Min.X = widest
+		record := op.Record(inner.Ops)
+		dims := ButtonProps{ComponentProps: ComponentProps{Style: style}, Label: label, Variant: Ghost, Size: size}.Layout(cell, &state.group.buttons[index])
+		segments[index] = record.Stop()
+		height = max(height, dims.Size.Y)
+	}
+
+	width := 2*pad + max(len(p.Options)-1, 0)*gap + widest*len(p.Options)
+	total := image.Pt(width, height+2*pad)
+	paintShape(c, total, t.Colours.Muted, color.NRGBA{}, controlRadius(c), 0)
+	for index := range segments {
+		at := op.Offset(image.Pt(pad+index*(widest+gap), pad)).Push(c.Ops)
+		segments[index].Add(c.Ops)
+		at.Pop()
+	}
+	return ayra.Dimensions{Size: total}
 }
 
 // SidebarProps is the column of places a screen can go.
