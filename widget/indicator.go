@@ -40,7 +40,7 @@ func (p LabelProps) Layout(c ayra.Context) ayra.Dimensions {
 		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Small)},
 	}, p.ComponentProps)
 	if p.Disabled {
-		style.Foreground = theme.Colour(fade(style.Foreground.NRGBA()))
+		style.Foreground = theme.Colour(fadeOver(style.Foreground.NRGBA(), c.Theme.Colours.Background))
 	}
 
 	content := p.Text
