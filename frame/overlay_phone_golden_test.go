@@ -2,6 +2,7 @@ package frame_test
 
 import (
 	"image"
+	"strconv"
 	"testing"
 
 	"github.com/arandu-io/ayra"
@@ -22,6 +23,8 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "dialog-over-bars", width: 390, height: 640, draw: dialogOverBars}},
 		{screen: screen{name: "drawer-over-bars", width: 390, height: 640, draw: drawerOverBars}},
 		{screen: screen{name: "tabs-phone", width: 390, height: 260, draw: tabsPhone}},
+		{screen: screen{name: "menu-flip-phone", width: 390, height: 520, draw: menuAtTheFootOfAForm}},
+		{screen: screen{name: "menu-capped-phone", width: 390, height: 400, draw: menuLongerThanTheRoom}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -232,6 +235,63 @@ func tabsPhone() ayra.Widget {
 					return widget.TabsProps{Labels: []string{"Câmeras", "Leituras", "Alertas"}, Icons: []icons.Icon{icons.Camera(), icons.Gear(), icons.Camera()}}.Layout(inner.With(gtx), &iconic)
 				}),
 			)
+		})
+	}
+}
+
+// menuAtTheFootOfAForm is the last field of a form of 390 points, a list of
+// choices under a control with no room under it: it opens over it.
+func menuAtTheFootOfAForm() ayra.Widget {
+	var plate, owner widget.Input
+	var menu widget.Menu
+	menu.Open()
+	var trigger widget.Button
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			inner := c.With(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.FieldProps{Label: "Placa"}.Layout(inner.With(gtx), func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "ABC1D23"}.Layout(c, &plate)
+					})
+				}),
+				layout.Rigid(layout.Spacer{Height: 12}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.FieldProps{Label: "Proprietário"}.Layout(inner.With(gtx), func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "Nome"}.Layout(c, &owner)
+					})
+				}),
+				layout.Rigid(layout.Spacer{Height: 260}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					g := inner.With(gtx)
+					g.Constraints.Min.X = g.Constraints.Max.X
+					return widget.MenuProps{Entries: []string{"Portão principal", "Garagem do subsolo", "Entrada de serviço", "Doca de carga"}, Width: 358}.
+						Layout(g, &menu, func(c ayra.Context) ayra.Dimensions {
+							return widget.ButtonProps{Label: "Câmera", Variant: widget.Outline}.Layout(c, &trigger)
+						})
+				}),
+			)
+		})
+	}
+}
+
+// menuLongerThanTheRoom is forty entries under a control near the top of a short
+// window: the list is held to the window and scrolls.
+func menuLongerThanTheRoom() ayra.Widget {
+	var menu widget.Menu
+	menu.Open()
+	var trigger widget.Button
+	entries := make([]string, 40)
+	for i := range entries {
+		entries[i] = "Câmera " + strconv.Itoa(i+1)
+	}
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			return widget.MenuProps{Entries: entries, Width: 220}.Layout(c.With(gtx), &menu, func(c ayra.Context) ayra.Dimensions {
+				return widget.ButtonProps{Label: "Câmeras", Variant: widget.Outline}.Layout(c, &trigger)
+			})
 		})
 	}
 }

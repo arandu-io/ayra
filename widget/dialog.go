@@ -220,8 +220,13 @@ const dialogMargin = 16
 // scrolled lays the content out in a column that scrolls when it is taller than
 // the room it was given, and takes only the room it needs when it is not.
 func (d *Dialog) scrolled(c ayra.Context, content ayra.Widget) ayra.Dimensions {
-	d.scroll.Axis = layout.Vertical
-	return d.scroll.Layout(c.Context, 1, func(gtx layout.Context, _ int) layout.Dimensions {
+	return scrolled(&d.scroll, c, content)
+}
+
+// scrolled is a column that scrolls, holding one widget.
+func scrolled(list *layout.List, c ayra.Context, content ayra.Widget) ayra.Dimensions {
+	list.Axis = layout.Vertical
+	return list.Layout(c.Context, 1, func(gtx layout.Context, _ int) layout.Dimensions {
 		return content(c.With(gtx))
 	})
 }

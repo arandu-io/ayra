@@ -89,13 +89,16 @@ func Draw(o Options, screen ayra.Widget) (*image.RGBA, error) {
 	if o.Theme != nil {
 		palette = o.Theme(o.Scheme)
 	}
-	var source input.Source
+	// The router is what remembers where the last pass drew each control, which
+	// a list that opens under one asks. Without it the second pass would be a
+	// picture of a window that cannot say where anything is.
+	var router input.Router
 
 	var ops op.Ops
 	for pass := 0; pass < 2; pass++ {
 		ops.Reset()
 
-		gtx := app.NewContext(&ops, frameEvent(o, pixels, source))
+		gtx := app.NewContext(&ops, frameEvent(o, pixels, router.Source()))
 		overlay := &ayra.Overlay{
 			Window: image.Rectangle{Max: pixels},
 			Safe:   image.Rectangle{Max: pixels},
@@ -116,7 +119,7 @@ func Draw(o Options, screen ayra.Widget) (*image.RGBA, error) {
 
 		screen(c)
 		overlay.Flush(gtx.Ops)
-		source = gtx.Source
+		router.Frame(&ops)
 
 		if err := window.Frame(&ops); err != nil {
 			return nil, fmt.Errorf("ayra/frame: the drawing was refused: %w", err)

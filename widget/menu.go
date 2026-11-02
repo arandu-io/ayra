@@ -7,6 +7,7 @@ import (
 	"github.com/arandu-io/ayra/engine/gesture"
 	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/key"
+	"github.com/arandu-io/ayra/engine/io/pointer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
@@ -37,6 +38,12 @@ type Menu struct {
 	// can answer.
 	barrier gesture.Click
 	hit     gesture.Click
+
+	// anchor is declared over the control the panel opens from, and is what the
+	// router is asked where the control is. scroll is the column of the panel,
+	// for one taller than the room there is.
+	anchor byte
+	scroll layout.List
 }
 
 // Showing reports whether the list is open.
@@ -132,9 +139,12 @@ func (p MenuProps) layout(c ayra.Context, state *Menu, trigger ayra.Widget) ayra
 	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		return trigger(c.With(gtx))
 	})
+	state.declareAnchor(c, dims)
 
 	if state.open.Showing() {
 		p.list(c, state, dims)
+	} else {
+		state.scroll.Position = layout.Position{}
 	}
 	return dims
 }
@@ -171,24 +181,61 @@ func (p MenuProps) list(c ayra.Context, state *Menu, trigger ayra.Dimensions) {
 	}
 	inner.Constraints.Min.X = min(c.Dp(unit.Dp(180)), inner.Constraints.Max.X)
 
-	panel := op.Record(c.Ops)
-	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(4).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(c.With(gtx).Context, children...)
+	column := func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
+	}
+	build := func(maxHeight int) (op.CallOp, image.Point) {
+		return state.panel(inner, 4, maxHeight, column)
+	}
+	state.float(c, trigger.Size, placement{gap: c.Dp(unit.Dp(4)), above: p.Above, end: p.End, barrier: !p.modeless}, build)
+}
+
+// panel records the box a list or a popover is drawn in, and answers it with its
+// size. A maxHeight over zero holds it to that height, with what is in it
+// scrolling: a list of forty entries, or a calendar, on a screen that has room
+// for ten.
+func (m *Menu) panel(c ayra.Context, inset unit.Dp, maxHeight int, content ayra.Widget) (op.CallOp, image.Point) {
+	if maxHeight > 0 {
+		c.Constraints.Max.Y = maxHeight
+	} else if c.Overlay != nil {
+		// The room the control's parent had left under it is not the panel's:
+		// the panel floats over what follows, and was cut to a sliver by a form
+		// whose last field had nothing under it. It is as tall as the window.
+		c.Constraints.Max.Y = c.Overlay.Safe.Dy()
+	}
+	recording := op.Record(c.Ops)
+	size := surface(c, c.Theme.Colours.Popover, c.Theme.Colours.Border, controlRadius(c), func(c ayra.Context) ayra.Dimensions {
+		return layout.UniformInset(inset).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			if maxHeight > 0 {
+				return scrolled(&m.scroll, c.With(gtx), content)
+			}
+			return content(c.With(gtx))
 		})
 	}).Size
-	drawn := panel.Stop()
+	return recording.Stop(), size
+}
 
-	top := trigger.Size.Y + c.Dp(unit.Dp(4))
-	if p.Above {
-		top = -size.Y - c.Dp(unit.Dp(4))
-	}
-	left := 0
-	if p.End {
-		left = trigger.Size.X - size.X
-	}
+// declareAnchor registers, over the control the panel opens from, the tag the
+// router is asked about.
+func (m *Menu) declareAnchor(c ayra.Context, trigger ayra.Dimensions) {
+	// Pass-through: a handler that wants no events is still a handler, and one
+	// over the control would stop the press the control is waiting for.
+	pass := pointer.PassOp{}.Push(c.Ops)
+	area := clip.Rect(image.Rectangle{Max: trigger.Size}).Push(c.Ops)
+	event.Op(c.Ops, &m.anchor)
+	area.Pop()
+	pass.Pop()
+}
 
-	state.float(c, image.Pt(left, top), size, drawn, !p.modeless)
+// placement is where a floating panel goes in relation to its control.
+type placement struct {
+	// gap is the room between the control and the panel, in pixels.
+	gap int
+	// above asks for the panel over the control; end for its right edge on the
+	// control's.
+	above, end bool
+	// barrier puts a target under the panel that reads a press outside it.
+	barrier bool
 }
 
 // farAway is how far the barrier reaches in every direction, in pixels: further
@@ -228,22 +275,72 @@ func (m *Menu) dismiss(c ayra.Context, barrier bool) {
 	}
 }
 
-// float puts the panel over the screen at an offset from the control, and the
-// barrier under it.
+// float puts the panel over the screen beside its control, and the barrier under
+// it.
 //
 // It is deferred to the end of the frame: drawn in layout order, the next row of
 // a list or the next paragraph was drawn over the list and took the presses
 // meant for it. The offset is from where the control is, and the transform in
 // force when it is called is the control's, which is what Defer keeps.
-func (m *Menu) float(c ayra.Context, at, size image.Point, panel op.CallOp, barrier bool) {
+//
+// Where the control is in the window is asked of the router, which knows it from
+// the last frame, and the panel is placed by it: under the control when there is
+// room, over it when there is not and there is more there, held to the room that
+// is left with what is in it scrolling, and kept off the sides of the window.
+// With no window to ask -- no Overlay -- it is where it was asked to be, at its
+// natural size.
+func (m *Menu) float(c ayra.Context, trigger image.Point, pl placement, build func(maxHeight int) (op.CallOp, image.Point)) {
+	panel, size := build(0)
+	left := 0
+	if pl.end {
+		left = trigger.X - size.X
+	}
+	above := pl.above
+
+	if bounds, ok := m.anchorBounds(c); ok {
+		safe := c.Overlay.Safe
+		below := safe.Max.Y - bounds.Max.Y - pl.gap
+		over := bounds.Min.Y - safe.Min.Y - pl.gap
+
+		fits := func(room int) bool { return size.Y <= room }
+		switch {
+		case above && !fits(over) && fits(below):
+			above = false
+		case !above && !fits(below) && (fits(over) || over > below):
+			above = true
+		}
+		room := below
+		if above {
+			room = over
+		}
+		if size.Y > room && room > 0 {
+			panel, size = build(room)
+			if pl.end {
+				left = trigger.X - size.X
+			}
+		}
+
+		if bounds.Min.X+left+size.X > safe.Max.X {
+			left = safe.Max.X - size.X - bounds.Min.X
+		}
+		if bounds.Min.X+left < safe.Min.X {
+			left = safe.Min.X - bounds.Min.X
+		}
+	}
+
+	top := trigger.Y + pl.gap
+	if above {
+		top = -size.Y - pl.gap
+	}
+
 	floating := op.Record(c.Ops)
-	if barrier {
+	if pl.barrier {
 		area := clip.Rect(image.Rect(-farAway, -farAway, farAway, farAway)).Push(c.Ops)
 		m.barrier.Add(c.Ops)
 		event.Op(c.Ops, &m.barrier)
 		area.Pop()
 	}
-	offset := op.Offset(at).Push(c.Ops)
+	offset := op.Offset(image.Pt(left, top)).Push(c.Ops)
 	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
 	m.hit.Add(c.Ops)
 	event.Op(c.Ops, &m.hit)
@@ -251,6 +348,21 @@ func (m *Menu) float(c ayra.Context, at, size image.Point, panel op.CallOp, barr
 	clipped.Pop()
 	offset.Pop()
 	op.Defer(c.Ops, floating.Stop())
+}
+
+// anchorBounds is where the control the panel opens from is, in the coordinates
+// the screen is drawn in, and false when the window cannot say.
+func (m *Menu) anchorBounds(c ayra.Context) (image.Rectangle, bool) {
+	if c.Overlay == nil {
+		return image.Rectangle{}, false
+	}
+	bounds, ok := c.Source.Bounds(&m.anchor)
+	if !ok {
+		return image.Rectangle{}, false
+	}
+	// The frame is written offset by the system bars, and the screen from the
+	// corner of what they leave.
+	return bounds.Add(c.Overlay.Window.Min), true
 }
 
 // PopoverProps is a panel that appears beside the control that opened it.
@@ -297,7 +409,9 @@ func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.
 	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		return trigger(c.With(gtx))
 	})
+	state.declareAnchor(c, dims)
 	if !state.open.Showing() {
+		state.scroll.Position = layout.Position{}
 		return dims
 	}
 
@@ -310,24 +424,10 @@ func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.
 	inner.Constraints.Max.X = min(c.Dp(width), c.Constraints.Max.X)
 	inner.Constraints.Min.X = inner.Constraints.Max.X
 
-	panel := op.Record(c.Ops)
-	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(12).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			return content(c.With(gtx))
-		})
-	}).Size
-	drawn := panel.Stop()
-
-	top := dims.Size.Y + c.Dp(unit.Dp(6))
-	if p.Above {
-		top = -size.Y - c.Dp(unit.Dp(6))
+	build := func(maxHeight int) (op.CallOp, image.Point) {
+		return state.panel(inner, 12, maxHeight, content)
 	}
-	left := 0
-	if p.End {
-		left = dims.Size.X - size.X
-	}
-
-	state.float(c, image.Pt(left, top), size, drawn, !p.light)
+	state.float(c, dims.Size, placement{gap: c.Dp(unit.Dp(6)), above: p.Above, end: p.End, barrier: !p.light}, build)
 	return dims
 }
 
