@@ -391,3 +391,9 @@ func toggleColours(c ayra.Context, on, disabled bool) (fill, border, ink color.N
 func luminance(c color.NRGBA) int {
 	return (int(c.R)*299 + int(c.G)*587 + int(c.B)*114) / 1000
 }
+
+// touchTarget is the least height, in points, of a row or a strip a finger has to
+// hit: a control with a label, the tabs, the summary of a section, a step of a
+// breadcrumb and a destination of the navigation. The text in them is 17 points
+// tall, and a row that is only as tall as its text is one a thumb misses.
+const touchTarget unit.Dp = 44

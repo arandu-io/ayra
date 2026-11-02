@@ -165,8 +165,9 @@ func TestEveryControlSmallerThanAFingerIsPressedByOne(t *testing.T) {
 				"below": centre.Add(image.Pt(0, 20)),
 			} {
 				tc.reset()
-				// A frame in the reset state, so that what the router holds is the
-				// closed control and not the panel the last press opened.
+				// A frame with the state as it is now: the router answers a press
+				// with the last frame drawn, and a popover that was open in it still
+				// has its barrier there to take the press.
 				p.draw(screen)
 				p.tap(at, screen)
 				if !tc.changed() {

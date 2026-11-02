@@ -32,6 +32,17 @@ type Menu struct {
 	chosen int
 	picked bool
 
+	// floating is what a panel that opens beside its control needs. scroll is the
+	// column of the panel, for one taller than the room there is.
+	floating
+	scroll layout.List
+}
+
+// floating is the half of a control with a panel that opens beside it that places
+// the panel: where the control is, the barrier that reads a press outside the
+// panel, and the panel's own target. A menu, a popover, a select and an
+// autocomplete hold one, and put their panel over the screen with [floating.float].
+type floating struct {
 	// barrier is the target behind the panel that reads a press outside it, and
 	// hit is the panel itself. Two separate targets for the reason the dialog's
 	// are: "was this press outside" is a question only the two of them together
@@ -40,10 +51,8 @@ type Menu struct {
 	hit     gesture.Click
 
 	// anchor is declared over the control the panel opens from, and is what the
-	// router is asked where the control is. scroll is the column of the panel,
-	// for one taller than the room there is.
+	// router is asked where the control is.
 	anchor byte
-	scroll layout.List
 }
 
 // Showing reports whether the list is open.
@@ -217,7 +226,7 @@ func (m *Menu) panel(c ayra.Context, inset unit.Dp, maxHeight int, content ayra.
 
 // declareAnchor registers, over the control the panel opens from, the tag the
 // router is asked about.
-func (m *Menu) declareAnchor(c ayra.Context, trigger ayra.Dimensions) {
+func (m *floating) declareAnchor(c ayra.Context, trigger ayra.Dimensions) {
 	// Pass-through: a handler that wants no events is still a handler, and one
 	// over the control would stop the press the control is waiting for.
 	pass := pointer.PassOp{}.Push(c.Ops)
@@ -247,10 +256,17 @@ const farAway = 1 << 20
 // Android's own menus do: the press that closes a menu is not also a press on
 // whatever was under the finger.
 func (m *Menu) dismiss(c ayra.Context, barrier bool) {
-	if !m.open.Showing() {
+	m.floating.dismiss(c, &m.open, barrier, true)
+}
+
+// dismiss is Menu.dismiss for any control with a panel: open is the disclosure
+// that says whether it is up, and keys says whether escape and back are read here
+// -- a control that reads its own escape from the field it is in leaves them out.
+func (m *floating) dismiss(c ayra.Context, open *Disclosure, barrier, keys bool) {
+	if !open.Showing() {
 		return
 	}
-	for {
+	for keys {
 		e, ok := c.Event(
 			key.Filter{Name: key.NameEscape},
 			key.Filter{Name: key.NameBack},
@@ -259,14 +275,14 @@ func (m *Menu) dismiss(c ayra.Context, barrier bool) {
 			break
 		}
 		if press, isKey := e.(key.Event); isKey && press.State == key.Press {
-			m.open.Close()
+			open.Close()
 		}
 	}
 	for barrier {
 		if _, ok := m.barrier.Update(c.Source); !ok {
 			break
 		}
-		m.open.Close()
+		open.Close()
 	}
 	for {
 		if _, ok := m.hit.Update(c.Source); !ok {
@@ -289,7 +305,7 @@ func (m *Menu) dismiss(c ayra.Context, barrier bool) {
 // is left with what is in it scrolling, and kept off the sides of the window.
 // With no window to ask -- no Overlay -- it is where it was asked to be, at its
 // natural size.
-func (m *Menu) float(c ayra.Context, trigger image.Point, pl placement, build func(maxHeight int) (op.CallOp, image.Point)) {
+func (m *floating) float(c ayra.Context, trigger image.Point, pl placement, build func(maxHeight int) (op.CallOp, image.Point)) {
 	panel, size := build(0)
 	left := 0
 	if pl.end {
@@ -352,7 +368,7 @@ func (m *Menu) float(c ayra.Context, trigger image.Point, pl placement, build fu
 
 // anchorBounds is where the control the panel opens from is, in the coordinates
 // the screen is drawn in, and false when the window cannot say.
-func (m *Menu) anchorBounds(c ayra.Context) (image.Rectangle, bool) {
+func (m *floating) anchorBounds(c ayra.Context) (image.Rectangle, bool) {
 	if c.Overlay == nil {
 		return image.Rectangle{}, false
 	}

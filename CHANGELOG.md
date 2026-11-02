@@ -147,7 +147,7 @@ text uses `fadeOver`. A plate is written in capitals: `mask` takes hesape's `U` 
 
 **Combobox, autocomplete, command palette.** The keys a suggestion list answers to
 reach it (arrows, escape, return); the list is drawn over what follows and keeps to
-the window; rows are 44 tall. A failed search is said under the field and marks it
+the window; rows are 44 tall. The list flips over the field when there is no room under it, as the select's does. A failed search is said under the field and marks it
 `Invalid`. The palette takes the keyboard when it opens.
 
 **File picker, file upload.** Rows are 44 points tall and the sentences are the
@@ -168,6 +168,8 @@ phone -- a control for each sortable column, marked with its order -- and a Colu
 filters loses its "Sort by" section. A column is as wide as its heading, in the heading
 and in every row. An empty list is a 96-point box with the sentence centred. The label
 of a card stays at the top against a value on two lines.
+
+**ItemProps, drawer.** A pressable row answers a press within 44 points and is drawn as it was. `DrawerProps.Scroll` lays the content of a drawer out in a scrolling column, off by default.
 
 **Menu, popover, tooltip, dialog, drawer.** The window has an overlay layer
 (`ayra.Context.Overlay`, played back by `shell.Run` and `frame.Draw`): a menu, a

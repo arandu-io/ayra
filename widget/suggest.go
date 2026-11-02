@@ -10,7 +10,6 @@ import (
 	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/icons"
@@ -59,8 +58,10 @@ func step(at, by, length int) int {
 
 // Autocomplete is the state of a field that suggests entries as it is typed in.
 type Autocomplete struct {
-	input   Input
-	open    Disclosure
+	input Input
+	open  Disclosure
+	// floating places the list beside the field.
+	floating
 	options []Button
 	// at is the row the keyboard is on, and active says there is one: the zero
 	// value of the state is a list with no row under the cursor, so a list that
@@ -222,6 +223,8 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 		tail:           p.tail,
 	}.Layout(c, &state.input)
 
+	state.declareAnchor(c, dims)
+	state.dismiss(c, &state.open, false, false)
 	if !state.open.Showing() {
 		state.fit = 0
 		return dims
@@ -326,98 +329,71 @@ func (p AutocompleteProps) limit() int {
 
 func (p AutocompleteProps) limitSet() bool { return p.Limit > 0 }
 
-// list draws the suggestions under the field, or above it when there is no
-// room under it.
+// list draws the suggestions beside the field: under it, and over it when there
+// is no room under it.
 //
-// The room under the field is what the layout above it left: a screen is laid
-// out in the window, and the window is what the keyboard has not covered. A
-// field low in it is a field whose list would run off the bottom, so the list
-// keeps to the rows that fit; with fewer than a few fitting it goes above the
-// field instead. It is drawn last, over whatever the screen put below the field
-// -- the help line, the next field -- because a list that those drew over is a
-// list nobody can read.
+// The window says how much room there is (the overlay layer places and holds the
+// panel to it, and the rows scroll when they are more than fit), so the list is
+// as tall as its rows and no other measure is taken here. It is drawn last, over
+// whatever the screen put below the field -- the help line, the next field --
+// because a list that those drew over is a list nobody can read.
 func (p AutocompleteProps) list(c ayra.Context, state *Autocomplete, found []int, field ayra.Dimensions) {
 	inner := c
 	inner.Constraints.Min.X = field.Size.X
 	inner.Constraints.Max.X = field.Size.X
 	inner.Constraints.Min.Y = 0
-	// The panel is as tall as its rows. The room the field was given is what
-	// decides how many rows there are, below; it is not a ceiling on the panel,
-	// which a flip above the field would otherwise be cut by.
-	inner.Constraints.Max.Y = 1 << 20
-
-	gap := c.Dp(unit.Dp(4))
-	pad := c.Dp(unit.Dp(4))
+	if c.Overlay != nil {
+		inner.Constraints.Max.Y = c.Overlay.Safe.Dy()
+	} else {
+		inner.Constraints.Max.Y = 1 << 20
+	}
 
 	shown := found
 	if limit := p.limit(); len(shown) > limit {
 		shown = shown[:limit]
 	}
-
-	above := false
+	// Every row that is shown is one the keyboard can reach.
 	state.fit = 0
-	if c.Constraints.Max.Y < boundedHeight {
-		// What a row takes is measured on a press state of its own, which is
-		// thrown away: the real ones must not have a press read by a drawing that
-		// is not shown.
-		probe := op.Record(c.Ops)
-		rowHeight := suggestion(inner, &Button{}, "Ag", false).Size.Y
-		probe.Stop()
-		if rowHeight > 0 {
-			room := c.Constraints.Max.Y - field.Size.Y - gap - 2*pad - 2*hairline(c)
-			fits := max(room/rowHeight, 0)
-			want := max(len(shown), 1)
-			if fits < min(want, 3) {
-				above = true
-			} else if fits < len(shown) {
-				shown = shown[:fits]
-				state.fit = fits
-			}
+
+	build := func(maxHeight int) (op.CallOp, image.Point) {
+		if maxHeight > 0 {
+			inner.Constraints.Max.Y = maxHeight
 		}
+		panel := op.Record(c.Ops)
+		size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
+			return layout.Inset{Top: 4, Bottom: 4}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				c := c.With(gtx)
+				if len(shown) == 0 {
+					return layout.UniformInset(10).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+						ink := c.Theme.Colours.MutedForeground
+						if p.problem {
+							ink = c.Theme.Colours.Destructive
+						}
+						return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), ink, 0, text.Start, plain())
+					})
+				}
+
+				rows := make([]layout.FlexChild, 0, len(shown))
+				for position, index := range shown {
+					position, index := position, index
+					rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						row := c.With(gtx)
+						button := &state.options[index]
+						if button.Clicked(row) {
+							state.choose(index, p.Entries[index])
+						}
+						return suggestion(row, button, p.Entries[index], state.active && position == state.at)
+					}))
+				}
+				return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
+			})
+		}).Size
+		return panel.Stop(), size
 	}
 
-	panel := op.Record(c.Ops)
-	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-		return layout.Inset{Top: 4, Bottom: 4}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			c := c.With(gtx)
-			if len(shown) == 0 {
-				return layout.UniformInset(10).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-					ink := c.Theme.Colours.MutedForeground
-					if p.problem {
-						ink = c.Theme.Colours.Destructive
-					}
-					return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), ink, 0, text.Start, plain())
-				})
-			}
-
-			rows := make([]layout.FlexChild, 0, len(shown))
-			for position, index := range shown {
-				position, index := position, index
-				rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					row := c.With(gtx)
-					button := &state.options[index]
-					if button.Clicked(row) {
-						state.choose(index, p.Entries[index])
-					}
-					return suggestion(row, button, p.Entries[index], state.active && position == state.at)
-				}))
-			}
-			return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
-		})
-	}).Size
-	drawn := panel.Stop()
-
-	top := field.Size.Y + gap
-	if above {
-		top = -size.Y - gap
-	}
-	placed := op.Record(c.Ops)
-	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
-	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
-	drawn.Add(c.Ops)
-	clipped.Pop()
-	offset.Pop()
-	op.Defer(c.Ops, placed.Stop())
+	// No barrier: the field is where the person is typing, and a press on it is
+	// not outside.
+	state.float(c, field.Size, placement{gap: c.Dp(unit.Dp(4))}, build)
 }
 
 // choose fills the field in with an entry and closes the list.

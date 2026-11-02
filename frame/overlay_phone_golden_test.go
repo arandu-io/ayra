@@ -29,6 +29,8 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "carousel-phone", width: 390, height: 260, draw: carouselPhone}},
 		{screen: screen{name: "navigation-phone", width: 390, height: 360, draw: navigationPhone}},
 		{screen: screen{name: "tooltip-phone", width: 390, height: 160, draw: tooltipEdges}},
+		{screen: screen{name: "select-flip-phone", width: 390, height: 520, draw: selectAtTheFootOfAForm}},
+		{screen: screen{name: "drawer-scroll-phone", width: 390, height: 520, draw: drawerTallerThanItsPanel}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -401,5 +403,64 @@ func tooltipEdges() ayra.Widget {
 				}),
 			)
 		})
+	}
+}
+
+// selectAtTheFootOfAForm is a select as the last field of a form of 390 points,
+// open with no room under it: the list is over the field, inside the window.
+func selectAtTheFootOfAForm() ayra.Widget {
+	var plate, owner widget.Input
+	var choice widget.Select
+	choice.Open()
+	choice.Choose(1)
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			inner := c.With(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.FieldProps{Label: "Placa"}.Layout(inner.With(gtx), func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "ABC1D23"}.Layout(c, &plate)
+					})
+				}),
+				layout.Rigid(layout.Spacer{Height: 12}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.FieldProps{Label: "Proprietário"}.Layout(inner.With(gtx), func(c ayra.Context) ayra.Dimensions {
+						return widget.InputProps{Placeholder: "Nome"}.Layout(c, &owner)
+					})
+				}),
+				layout.Rigid(layout.Spacer{Height: 250}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.FieldProps{Label: "Câmera"}.Layout(inner.With(gtx), func(c ayra.Context) ayra.Dimensions {
+						return widget.SelectProps{Options: []string{"Portão principal", "Garagem do subsolo", "Entrada de serviço", "Doca de carga"}, Placeholder: "Escolha"}.Layout(c, &choice)
+					})
+				}),
+			)
+		})
+	}
+}
+
+// drawerTallerThanItsPanel is a form of twelve lines in a sheet of 300 points,
+// which scrolls.
+func drawerTallerThanItsPanel() ayra.Widget {
+	var state widget.Dialog
+	state.Open()
+	var buttons [12]widget.Button
+	return func(c ayra.Context) ayra.Dimensions {
+		return widget.DrawerProps{Side: widget.Bottom, Size: 300, Modal: true, Dismissible: true, Scroll: true}.Layout(c, &state,
+			func(c ayra.Context) ayra.Dimensions {
+				items := []ayra.Widget{line("Filtros", widget.Heading, true), spacer(8)}
+				for i := range buttons {
+					items = append(items, button(widget.ButtonProps{Label: "Câmera " + strconv.Itoa(i+1), Variant: widget.Outline}, &buttons[i]), spacer(6))
+				}
+				return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, func() []layout.FlexChild {
+					children := make([]layout.FlexChild, len(items))
+					for i, item := range items {
+						item := item
+						children[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions { return item(c.With(gtx)) })
+					}
+					return children
+				}()...)
+			})
 	}
 }

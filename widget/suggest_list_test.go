@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/io/key"
+	"github.com/arandu-io/ayra/engine/io/pointer"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/widget"
@@ -178,13 +180,28 @@ func TestAListLowInTheWindowStaysInsideIt(t *testing.T) {
 	p := newPanel()
 	p.size = image.Pt(400, 400)
 	s := &suggestions{top: 300}
-	p.draw(s.layout)
-	tap(p, s.layout, 100, 300+16)
-	typeIn(p, s.layout, "a")
+
+	// In a window, which is what says how much room there is under the field.
+	frame := func() { p.windowed(0, s.layout) }
+	touch := func(x, y int) {
+		at := f32.Pt(float32(x), float32(y))
+		p.router.Queue(
+			pointer.Event{Kind: pointer.Press, Source: pointer.Touch, PointerID: 1, Position: at},
+			pointer.Event{Kind: pointer.Release, Source: pointer.Touch, PointerID: 1, Position: at},
+		)
+		frame()
+		frame()
+	}
+	frame()
+	frame()
+	touch(100, 300+16)
+	p.router.Queue(key.EditEvent{Range: key.Range{Start: 0, End: 0}, Text: "a"})
+	frame()
+	frame()
 
 	// The row nearest the field, above it, is pressable there; below it, there
 	// was no window left to press in.
-	tap(p, s.layout, 100, 300-30)
+	touch(100, 300-30)
 	if got := s.field.Chosen(); got < 0 {
 		t.Error("the list was not above the field with no room beneath it")
 	}

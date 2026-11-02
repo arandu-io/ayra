@@ -133,6 +133,12 @@ overlay.Flush(gtx.Ops)
 `Window` is the whole window in the coordinates the screen is drawn in, whose origin
 is the corner of the room the screen was given.
 
+`DrawerProps.Scroll` lays the content of a drawer out in a column that scrolls when
+it is taller than the panel. It is off by default: a sheet that fills the panel --
+a footer of buttons at the bottom, a list of its own, as the data table's filters
+have -- is given the panel's height as before. Set it on a drawer holding a form;
+its content then takes the room it needs and is not stretched to the panel's.
+
 A modal dialog or drawer keeps Tab inside itself (`key.FocusFilter.Trap`), and the
 back key closes it, or the menu open over it first.
 
