@@ -28,6 +28,7 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "disclosure-phone", width: 390, height: 400, draw: disclosurePhone}},
 		{screen: screen{name: "carousel-phone", width: 390, height: 260, draw: carouselPhone}},
 		{screen: screen{name: "navigation-phone", width: 390, height: 360, draw: navigationPhone}},
+		{screen: screen{name: "tooltip-phone", width: 390, height: 160, draw: tooltipEdges}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -362,6 +363,41 @@ func navigationPhone() ayra.Widget {
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return widget.SidebarProps{Title: "Espaço de trabalho", Entries: []string{"Visão geral", "Câmeras", "Leituras do dia de hoje", "Configurações da organização e integrações"}, Width: 358}.
 						Layout(inner.With(gtx), &sidebar)
+				}),
+			)
+		})
+	}
+}
+
+// tooltipEdges is a tooltip on a control at each edge of a phone: each is kept inside the window.
+func tooltipEdges() ayra.Widget {
+	var left, right widget.Hover
+	left.Hold(true)
+	right.Hold(true)
+	var a, b widget.Button
+	tip := "Leituras por minuto da câmera do portão principal"
+	row := func(at layout.Direction, state *widget.Hover, button *widget.Button) func(ayra.Context) ayra.Dimensions {
+		return func(c ayra.Context) ayra.Dimensions {
+			return at.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				return widget.TooltipProps{Text: tip, Below: true}.Layout(c.With(gtx), state, func(c ayra.Context) ayra.Dimensions {
+					return widget.ButtonProps{Icon: icons.Gear(), Size: widget.Icon, Variant: widget.Outline}.Layout(c, button)
+				})
+			})
+		}
+	}
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 12, Left: 4, Right: 4}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			inner := c.With(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return row(layout.W, &left, &a)(inner.With(gtx))
+				}),
+				layout.Rigid(layout.Spacer{Height: 52}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return row(layout.E, &right, &b)(inner.With(gtx))
 				}),
 			)
 		})
