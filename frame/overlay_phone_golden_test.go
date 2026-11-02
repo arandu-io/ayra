@@ -27,6 +27,7 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "menu-capped-phone", width: 390, height: 400, draw: menuLongerThanTheRoom}},
 		{screen: screen{name: "disclosure-phone", width: 390, height: 400, draw: disclosurePhone}},
 		{screen: screen{name: "carousel-phone", width: 390, height: 260, draw: carouselPhone}},
+		{screen: screen{name: "navigation-phone", width: 390, height: 360, draw: navigationPhone}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -338,6 +339,31 @@ func carouselPhone() ayra.Widget {
 				Layout(c.With(gtx), &one, func(c ayra.Context, i int) ayra.Dimensions {
 					return line("Portão principal, leituras ao vivo", widget.Heading, true)(c)
 				})
+		})
+	}
+}
+
+// navigationPhone is a trail longer than a phone over a sidebar whose current
+// entry is marked.
+func navigationPhone() ayra.Widget {
+	var crumbs widget.Crumbs
+	var sidebar widget.Sidebar
+	sidebar.Show(2)
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			inner := c.With(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.BreadcrumbProps{Steps: []string{"Organização Condomínio Jardins", "Câmeras do portão principal", "Configurações avançadas", "Leituras"}}.
+						Layout(inner.With(gtx), &crumbs)
+				}),
+				layout.Rigid(layout.Spacer{Height: 12}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.SidebarProps{Title: "Espaço de trabalho", Entries: []string{"Visão geral", "Câmeras", "Leituras do dia de hoje", "Configurações da organização e integrações"}, Width: 358}.
+						Layout(inner.With(gtx), &sidebar)
+				}),
+			)
 		})
 	}
 }
