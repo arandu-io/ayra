@@ -37,6 +37,9 @@ type vtDecoder struct {
 	lengthSz int
 }
 
+// supported is true: this platform has a hardware decoder.
+const supported = true
+
 func newDecoder(sink FrameSink) (Decoder, error) {
 	d := &vtDecoder{sink: sink}
 	d.handle = cgo.NewHandle(d)

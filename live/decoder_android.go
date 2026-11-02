@@ -41,6 +41,9 @@ type mcDecoder struct {
 	closed   bool
 }
 
+// supported is true: this platform has a hardware decoder.
+const supported = true
+
 func newDecoder(sink FrameSink) (Decoder, error) {
 	d := &mcDecoder{sink: sink}
 	d.handle = cgo.NewHandle(d)

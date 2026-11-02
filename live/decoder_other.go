@@ -11,4 +11,7 @@ package live
 // to is deliberate. An application on those targets draws the stream's boxes
 // and status over a still picture or none, and [PlayerConfig.Decoder] takes its
 // own decoder if one is wanted.
+// supported is false: this platform has no decoder.
+const supported = false
+
 func newDecoder(FrameSink) (Decoder, error) { return nil, ErrUnsupported }

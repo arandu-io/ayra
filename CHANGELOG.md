@@ -19,7 +19,12 @@
   VideoToolbox on iOS and macOS; the other targets have no decoder.
 - `widget.VideoProps` and `widget.Video`: a live video drawn uncropped, with a
   caption over a dimmed picture and an overlay hook that is given the picture's
-  rectangle and the camera's own pixel size.
+  rectangle and the camera's own pixel size. It is a component like the others:
+  `ComponentProps` restyles its parts `root` (the ground and the corners) and
+  `caption`. It is named Video because `widget.Live` is the data table's source of
+  change notices.
+- `live.Supported` says whether the platform has a decoder, so a screen chooses
+  between the moving picture and a still one before it opens a socket.
 - `engine/app/permission/notifications`: the permission package for
   notifications.
 - The Android activity tells native capabilities about the intents it receives
@@ -37,6 +42,13 @@
 - `client.Client.Download` fetches bytes -- an image, a document -- under the
   same credential and the same refusal to leave the server, with its own limit
   (`DefaultDownloadLimit`, `WithDownloadLimit`).
+
+### Fixed
+
+- `TestHowMuchOfThisIsStillSomebodyElses` failed in CI from v0.7.0 and passed on
+  every laptop. It skips when `gioui.org@v0.10.2` is not in the module cache, and
+  the workflow fetches that tree, so the count is only real there: 66 files of the
+  engine are still the original, and the ceiling still said 71.
 
 ## [v0.8.0](https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0) - 2026-11-01
 

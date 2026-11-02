@@ -227,6 +227,12 @@ What each needs from the platform, and what it costs:
   macOS. The windows of the other targets have no decoder: the stream connects
   and reports `live.ErrUnsupported`, and an application on them shows the status
   and the overlay over no picture, or hands `live.PlayerConfig.Decoder` its own.
+  `live.Supported` says so before a socket is opened, so a screen can choose a
+  still picture where there is no decoder. A player closes its socket five
+  seconds after nothing has asked it for a frame, which is what a camera scrolled
+  out of the screen or an application in the background does; a screen that wants
+  it at once calls `Pause` on `ayra.Background` and `Resume` on `ayra.Foreground`
+  (`shell.Config.OnLifecycle`).
   The decoded picture is converted to RGBA once on its way to the screen; on a
   phone at 1080p that conversion is the cost that matters, and drawing a codec
   surface as a texture would remove it.

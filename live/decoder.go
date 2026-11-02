@@ -57,3 +57,9 @@ type FrameSink interface {
 // answers [ErrUnsupported], and a [Player] over it reports a failed stream with
 // that error rather than a stream that connects and shows nothing.
 func NewDecoder(sink FrameSink) (Decoder, error) { return newDecoder(sink) }
+
+// Supported reports whether this platform has a decoder, so that a screen can
+// choose between the moving picture and a still one before it opens a socket.
+// Android and the Apple platforms do; the other targets answer false, and a
+// [Player] there would only report [ErrUnsupported].
+func Supported() bool { return supported }
