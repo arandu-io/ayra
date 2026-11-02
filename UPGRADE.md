@@ -42,6 +42,26 @@ rule. Their square is 44 points, as a thumb needs, and not 40.
 `ItemProps` (and so in a `Tree`), instead of ending in an ellipsis after one
 line. A row is as tall as its longest cell.
 
+**The cards carry the bar of order controls and the menu of columns**, as Kyse
+keeps the head of the table as a bar on a phone. A button for each `Sortable`
+column, marked with the way it is ordered, under the search; and, for columns
+marked `Hideable` (with a `Key`; `Hidden` starts one off), a "Columns" menu with a
+tick on those showing, which the wide table has too, at the end of its toolbar.
+`DataTableWords.Columns` names the button. The sheet of filters no longer has a
+"Sort by" section, since the bar orders the list, and the "Filters" button only
+appears for a table that has facets; `Words.SortBy` is kept and unused.
+`DataTable.HideColumn(key, hidden)` and `ColumnHidden(key)` restore and read what
+the person chose.
+
+**A heading does not break and a column is as wide as it needs.** Every column is
+given the width of its title, and what is left is shared by `Flex` as before, in
+the heading and in every row; `TableProps` does the same. A table over a phone's
+width no longer breaks "Data e hora" in two.
+
+**An empty list is a box, the same everywhere**: the sentence centred across and
+down in 96 points, wrapping where it is long, in the table and in the cards.
+Before, it was one line, cut off, set against the edge when it was wide.
+
 **An error after the first answer is said.** The rows on screen are the last
 question's, so a failure replaces them with the message and the retry button, as
 it did for a table that had never loaded; asking again clears it.

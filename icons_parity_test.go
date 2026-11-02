@@ -63,13 +63,12 @@ var withoutIcons = map[string]map[string]string{
 		"Check": "the list under the field marks no chosen row: choosing one puts its label in the field and closes the list",
 	},
 	"data-table": {
-		"CaretDown":        "the columns menu, which hides and shows columns, does not exist in the native table",
 		"CaretDoubleLeft":  "the footer pages with Pagination, which Kyse draws as words and numbers and not as carets; the native table follows that component",
 		"CaretDoubleRight": "the footer pages with Pagination, which Kyse draws as words and numbers and not as carets; the native table follows that component",
 		"CaretLeft":        "the footer pages with Pagination, which Kyse draws as words and numbers and not as carets; the native table follows that component",
 		"CaretRight":       "the footer pages with Pagination, which Kyse draws as words and numbers and not as carets; the native table follows that component",
 		"DotsThree":        "the row's actions are buttons at the end of the row and not a menu behind one",
-		"EyeSlash":         "'Hide' is an entry of the column menu, which does not exist in the native table",
+		"EyeSlash":         "'Hide' is an entry of the menu on a column's heading, which the native table does not have: its columns are hidden and shown from the columns menu",
 		"MagnifyingGlass":  "the search inside a filter's menu; a filter's menu here is a list of its options and has no field of its own",
 	},
 	"password": {

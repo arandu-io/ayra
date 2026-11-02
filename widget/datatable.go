@@ -129,6 +129,13 @@ type DataColumn struct {
 	// is a column like any other, heading included. It is Kyse's
 	// TableColumn.Actions.
 	Actions bool
+	// Hideable lists the column in the columns menu, where it is switched off and
+	// on; it needs a Key. Hidden starts it switched off. A column that is not
+	// Hideable is always shown, as in Kyse's TableColumn.
+	Hideable bool
+	Hidden   bool
+	// off is whether the table has switched the column off this frame.
+	off bool
 	// Cell draws the column's value with a widget of the application's own. It
 	// is asked for each row, and returns the widget that draws that row's cell,
 	// so that a plate, a status or a badge is the application's component and
@@ -212,6 +219,9 @@ type DataTable struct {
 	checks    []Toggle
 	everyone  Toggle
 	activated string
+	hidden    map[string]bool
+	columns   Menu
+	columnsBn Button
 
 	// m is what the narrow layout, the infinite list, the pull to refresh, the
 	// live updates and the row actions hold.
@@ -318,7 +328,13 @@ type DataTableWords struct {
 	// Filters is the button that opens the sheet of filters, Apply the one that
 	// asks with them, Reset the one that empties them and Close the one that
 	// puts the sheet away without asking.
-	Filters, Apply, Reset, Close, SortBy string
+	Filters, Apply, Reset, Close string
+	// SortBy is not drawn since the cards carry their own bar of order controls;
+	// it is kept so that a Words written for the earlier sheet still compiles.
+	SortBy string
+	// Columns is the button that opens the menu of columns that can be switched
+	// off and on.
+	Columns string
 	// Refresh is what the pull says while it is pulled and Refreshing once it
 	// asked. LoadMore is the button at the end of a list that cannot tell when
 	// it is reached, and End the line under the last row of an infinite list.
@@ -501,7 +517,13 @@ func (p DataTableProps) Layout(c ayra.Context, state *DataTable) ayra.Dimensions
 		state.query = Query{Sort: p.InitialSort, Page: 1, PageSize: p.sizes()[0]}
 		state.fetch(c, p)
 		state.m.start(c, p, state)
+		for _, column := range p.Columns {
+			if column.Hideable && column.Hidden && column.Key != "" {
+				state.HideColumn(column.Key, true)
+			}
+		}
 	}
+	p = p.shown(state)
 	for len(state.headers) < len(p.Columns) {
 		state.headers = append(state.headers, Button{})
 	}
@@ -601,6 +623,15 @@ func (p DataTableProps) apply(c ayra.Context, state *DataTable) (changed bool) {
 		changed = true
 	}
 
+	if chosen := state.columns.Chosen(); chosen >= 0 {
+		// Switching a column off or on moves nothing the source is asked: it is the
+		// same page, drawn with another set of columns.
+		if list := p.hideable(); chosen < len(list) {
+			key := p.Columns[list[chosen]].Key
+			state.HideColumn(key, !state.hidden[key])
+		}
+	}
+
 	if chosen := state.sizes.Chosen(); chosen >= 0 && chosen < len(p.sizes()) {
 		state.query.PageSize = p.sizes()[chosen]
 		changed = true
@@ -688,7 +719,28 @@ func (p DataTableProps) toolbar(c ayra.Context, state *DataTable) ayra.Dimension
 				return ButtonProps{Label: orDefault(p.Words.Clear, "Clear filters"), Icon: innerIcon("data-table", "X"), Trailing: true, Variant: Ghost, Size: Small}.Layout(inner, &state.clear)
 			}))
 		}
+		if len(p.hideable()) > 0 {
+			children = append(children, layout.Rigid(layout.Spacer{Width: 6}.Layout), layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return p.columnsMenu(c.With(gtx), state)
+			}))
+		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
+	})
+}
+
+// columnsMenu is the button that opens the list of columns that can be switched
+// off and on, with a tick on those showing: Kyse's "Columns" menu.
+func (p DataTableProps) columnsMenu(c ayra.Context, state *DataTable) ayra.Dimensions {
+	list := p.hideable()
+	entries := make([]string, len(list))
+	for i, at := range list {
+		entries[i] = p.Columns[at].Title
+	}
+	showing := func(i int) bool { return i < len(list) && !p.Columns[list[i]].off }
+	inner := c
+	inner.Constraints.Min = image.Point{}
+	return MenuProps{Entries: entries, Width: 200, ticked: showing, tickOwner: "data-table"}.Layout(inner, &state.columns, func(c ayra.Context) ayra.Dimensions {
+		return ButtonProps{Label: orDefault(p.Words.Columns, "Columns"), Icon: innerIcon("data-table", "CaretDown"), Trailing: true, Variant: Outline, Size: Small}.Layout(c, &state.columnsBn)
 	})
 }
 
@@ -699,12 +751,6 @@ func (p DataTableProps) table(c ayra.Context, state *DataTable, result Result, l
 	}
 
 	headerStyle := t.Resolve("datatable", "header", p.VariantName("default"), theme.Style{}, p.ComponentProps)
-
-	columns := make([]Column, len(p.Columns))
-	for i, column := range p.Columns {
-		columns[i] = Column{Title: column.Title, Align: column.Align, Flex: column.Flex, Numeric: column.Numeric}
-	}
-	grid := TableProps{Columns: columns}
 
 	rows := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -738,15 +784,7 @@ func (p DataTableProps) table(c ayra.Context, state *DataTable, result Result, l
 			}))
 		}
 	case len(result.Rows) == 0:
-		empty := t.Resolve("datatable", "empty", p.VariantName("default"), theme.Style{}, p.ComponentProps)
-		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return Surface(c.With(gtx), empty, func(c ayra.Context) ayra.Dimensions {
-				c.Constraints.Min.X = c.Constraints.Max.X
-				return layout.Inset{Top: 24, Bottom: 24}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-					return drawText(c.With(gtx), orDefault(p.Words.Empty, "No results."), unit.Sp(t.Type.Body), t.Colours.MutedForeground, 1, text.Middle, plain())
-				})
-			})
-		}))
+		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.emptyState(c.With(gtx)) }))
 	default:
 		for index, row := range result.Rows {
 			index, row := index, row
@@ -754,7 +792,7 @@ func (p DataTableProps) table(c ayra.Context, state *DataTable, result Result, l
 				rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SeparatorProps{}.Layout(c.With(gtx)) }))
 			}
 			rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return p.row(c.With(gtx), state, grid, row, index, loading)
+				return p.row(c.With(gtx), state, row, index, loading)
 			}))
 		}
 	}
@@ -763,7 +801,6 @@ func (p DataTableProps) table(c ayra.Context, state *DataTable, result Result, l
 
 // headings draws the heading row, with the sort mark on the column it orders by.
 func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result) ayra.Dimensions {
-	t := c.Theme
 	cells := []layout.FlexChild{}
 
 	if p.Selectable {
@@ -784,50 +821,21 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 			return CheckboxProps{}.Layout(inner, &state.everyone)
 		}))
 	}
-	for index, column := range p.Columns {
-		index, column := index, column
-		share := column.Flex
-		if share == 0 {
-			share = 1
+	cells = append(cells, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+		widths := p.columnWidths(c.With(gtx), gtx.Constraints.Max.X)
+		columns := []layout.FlexChild{}
+		for index, column := range p.Columns {
+			index, column := index, column
+			if column.off {
+				continue
+			}
+			columns = append(columns, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X, gtx.Constraints.Max.X = widths[index], widths[index]
+				return p.heading(c.With(gtx), state, index, column)
+			}))
 		}
-		cells = append(cells, layout.Flexed(share, func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			if !column.Sortable {
-				return layout.Inset{Top: 8, Bottom: 8, Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return drawText(inner.With(gtx), column.Title, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, column.Align.alignment(), semibold())
-				})
-			}
-			// The arrow Kyse puts after a sortable heading: both ways while the
-			// column is not the one in order, then the way it is.
-			arrow := innerIcon("data-table", "ArrowsDownUp")
-			if state.query.Sort.Key == column.Key && column.Key != "" {
-				arrow = innerIcon("data-table", "ArrowUp")
-				if state.query.Sort.Descending {
-					arrow = innerIcon("data-table", "ArrowDown")
-				}
-			}
-			// The button is as wide as its label and sits where the column's text
-			// does, on the side the column is aligned to, so a heading stands over
-			// its values. Its own padding (8 points) is taken back, as Kyse's -ms-3
-			// takes it back, so that the label and not the button lines up.
-			place, inset := layout.W, layout.Inset{Left: -8}
-			switch column.Align {
-			case End:
-				place, inset = layout.E, layout.Inset{Right: -8}
-			case Middle:
-				place, inset = layout.Center, layout.Inset{}
-			}
-			return layout.Inset{Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return place.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						button := inner.With(gtx)
-						button.Constraints.Min = image.Point{}
-						return ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(button, &state.headers[index])
-					})
-				})
-			})
-		}))
-	}
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, columns...)
+	}))
 	if len(p.Actions) > 0 {
 		cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Dimensions{Size: image.Pt(p.actionsWidth(c), 0)}
@@ -836,8 +844,82 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, cells...)
 }
 
+// heading draws the heading of one column: its title, or the button that orders
+// the list by it. It is given the width of the column.
+func (p DataTableProps) heading(c ayra.Context, state *DataTable, index int, column DataColumn) ayra.Dimensions {
+	t := c.Theme
+	gtx := c.Context
+	inner := c.With(gtx)
+	if !column.Sortable {
+		return layout.Inset{Top: 8, Bottom: 8, Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return drawText(inner.With(gtx), column.Title, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, column.Align.alignment(), semibold())
+		})
+	}
+	// The arrow Kyse puts after a sortable heading: both ways while the
+	// column is not the one in order, then the way it is.
+	arrow := innerIcon("data-table", "ArrowsDownUp")
+	if state.query.Sort.Key == column.Key && column.Key != "" {
+		arrow = innerIcon("data-table", "ArrowUp")
+		if state.query.Sort.Descending {
+			arrow = innerIcon("data-table", "ArrowDown")
+		}
+	}
+	// The button is as wide as its label and sits where the column's text
+	// does, on the side the column is aligned to, so a heading stands over
+	// its values. Its own padding (8 points) is taken back, as Kyse's -ms-3
+	// takes it back, so that the label and not the button lines up.
+	place, inset := layout.W, layout.Inset{Left: -8}
+	switch column.Align {
+	case End:
+		place, inset = layout.E, layout.Inset{Right: -8}
+	case Middle:
+		place, inset = layout.Center, layout.Inset{}
+	}
+	return layout.Inset{Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return place.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				button := inner.With(gtx)
+				button.Constraints.Min = image.Point{}
+				return ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(button, &state.headers[index])
+			})
+		})
+	})
+}
+
+// columnWidths is the width of each column, by position: as wide as its heading
+// needs, and the rest of the room shared by the columns' Flex. A column the table
+// switched off has none. The heading and every row are given the same widths, so
+// a column stands under its heading.
+func (p DataTableProps) columnWidths(c ayra.Context, total int) []int {
+	shares := make([]float32, len(p.Columns))
+	mins := make([]int, len(p.Columns))
+	for i, column := range p.Columns {
+		if column.off {
+			shares[i] = -1
+			continue
+		}
+		shares[i] = column.Flex
+		if shares[i] == 0 {
+			shares[i] = 1
+		}
+		if column.Sortable && column.Key != "" {
+			// The button: the label, the arrow and the button's own padding, less the
+			// 8 points the heading takes back, plus the cell's.
+			inner := c
+			inner.Constraints.Min = image.Point{}
+			inner.Constraints.Max.X = 1 << 20
+			measure := op.Record(c.Ops)
+			mins[i] = ButtonProps{Label: column.Title, Icon: innerIcon("data-table", "ArrowsDownUp"), Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(inner, &Button{}).Size.X
+			measure.Stop()
+			continue
+		}
+		mins[i] = headingWidth(c, column.Title)
+	}
+	return shareWidths(total, shares, mins)
+}
+
 // row draws one row, inert while the next page is being fetched.
-func (p DataTableProps) row(c ayra.Context, state *DataTable, grid TableProps, row Row, index int, loading bool) ayra.Dimensions {
+func (p DataTableProps) row(c ayra.Context, state *DataTable, row Row, index int, loading bool) ayra.Dimensions {
 	if loading {
 		c.Context = c.Context.Disabled()
 	}
@@ -863,7 +945,7 @@ func (p DataTableProps) row(c ayra.Context, state *DataTable, grid TableProps, r
 	}
 	cells = append(cells, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 		return state.rows[index].click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return p.cells(c.With(gtx), grid, row)
+			return p.cells(c.With(gtx), row)
 		})
 	}))
 	if state.rows[index].Clicked(c) {
@@ -900,7 +982,9 @@ func (p DataTableProps) footer(c ayra.Context, state *DataTable, result Result, 
 
 	size := max(state.query.PageSize, 1)
 	pages := pageCount(result, state.query)
-	narrow := p.narrow(c)
+	// Under the width of a tablet the count, the size menu and the pager do not
+	// fit in one line, whatever the rows are drawn as.
+	narrow := p.narrow(c) || c.Constraints.Max.X < c.Dp(600)
 
 	count := func(gtx layout.Context) layout.Dimensions {
 		line := ""
@@ -985,6 +1069,46 @@ func (d *DataTable) allSelected(rows []Row) bool {
 		}
 	}
 	return true
+}
+
+// HideColumn switches a Hideable column off or on by its key, for a screen that
+// restores what the person chose and for a test. The columns menu does the same.
+func (d *DataTable) HideColumn(key string, hidden bool) {
+	if d.hidden == nil {
+		d.hidden = map[string]bool{}
+	}
+	d.hidden[key] = hidden
+}
+
+// ColumnHidden reports whether a Hideable column is switched off.
+func (d *DataTable) ColumnHidden(key string) bool { return d.hidden[key] }
+
+// shown is the props with the columns the person switched off marked, so that
+// the layouts skip them. It copies the columns: the caller's are not touched.
+func (p DataTableProps) shown(state *DataTable) DataTableProps {
+	hidden := false
+	for _, column := range p.Columns {
+		hidden = hidden || (column.Hideable && column.Key != "" && state.hidden[column.Key])
+	}
+	if !hidden {
+		return p
+	}
+	p.Columns = slices.Clone(p.Columns)
+	for i := range p.Columns {
+		p.Columns[i].off = p.Columns[i].Hideable && p.Columns[i].Key != "" && state.hidden[p.Columns[i].Key]
+	}
+	return p
+}
+
+// hideable is the positions of the columns the columns menu lists.
+func (p DataTableProps) hideable() []int {
+	var list []int
+	for i, column := range p.Columns {
+		if column.Hideable && column.Key != "" {
+			list = append(list, i)
+		}
+	}
+	return list
 }
 
 // SetSearch types into the search field, for a screen that fills it from

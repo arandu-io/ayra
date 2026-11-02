@@ -5,6 +5,7 @@ import (
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 )
@@ -77,9 +78,23 @@ func (p TableProps) Layout(c ayra.Context) ayra.Dimensions {
 		padding = 6
 	}
 
+	// Every column is as wide as its heading needs and no narrower, and the rest
+	// of the width is shared by the columns' Flex: a heading is not broken over
+	// two lines to make room for a value.
+	shares := make([]float32, len(p.Columns))
+	mins := make([]int, len(p.Columns))
+	for i, column := range p.Columns {
+		shares[i] = column.Flex
+		if shares[i] == 0 {
+			shares[i] = 1
+		}
+		mins[i] = headingWidth(c, column.Title)
+	}
+	widths := shareWidths(c.Constraints.Max.X, shares, mins)
+
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return p.row(c.With(gtx), p.titles(), padding, true)
+			return p.row(c.With(gtx), p.titles(), padding, true, widths)
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return SeparatorProps{}.Layout(c.With(gtx))
@@ -94,11 +109,84 @@ func (p TableProps) Layout(c ayra.Context) ayra.Dimensions {
 			}))
 		}
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return p.row(c.With(gtx), values, padding, false)
+			return p.row(c.With(gtx), values, padding, false, widths)
 		}))
 	}
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
+}
+
+// shareWidths divides total among columns by their shares, and gives no column
+// less than its minimum. A share below zero leaves the column out: it takes no
+// room. A column whose share would be narrower than its minimum takes the
+// minimum, and the others share what is left, which can push another under its
+// own minimum, so it goes on until none moves. When the minimums alone are wider
+// than the room they are scaled to it, which is the only time a heading is cut.
+func shareWidths(total int, shares []float32, mins []int) []int {
+	widths := make([]int, len(shares))
+	fixed := make([]bool, len(shares))
+	for i, share := range shares {
+		fixed[i] = share < 0
+	}
+	room := total
+	for changed := true; changed; {
+		changed = false
+		sum := float32(0)
+		for i, share := range shares {
+			if !fixed[i] {
+				sum += share
+			}
+		}
+		for i, share := range shares {
+			if fixed[i] || sum <= 0 {
+				continue
+			}
+			if int(float32(room)*share/sum) < mins[i] {
+				fixed[i], widths[i] = true, mins[i]
+				room -= mins[i]
+				changed = true
+				break
+			}
+		}
+	}
+	if room < 0 {
+		// The headings do not fit side by side: share the whole row as if they
+		// had no minimum.
+		return shareWidths(total, shares, make([]int, len(shares)))
+	}
+	sum := float32(0)
+	for i, share := range shares {
+		if !fixed[i] {
+			sum += share
+		}
+	}
+	left := room
+	last := -1
+	for i, share := range shares {
+		if !fixed[i] && sum > 0 {
+			widths[i] = int(float32(room) * share / sum)
+			left -= widths[i]
+			last = i
+		}
+	}
+	if last >= 0 {
+		// The rounding is the last column's, so the row is exactly as wide as it
+		// was given.
+		widths[last] += left
+	}
+	return widths
+}
+
+// headingWidth is how wide a heading has to be to be read whole: its text and the
+// padding every cell gives it.
+func headingWidth(c ayra.Context, title string) int {
+	inner := c
+	inner.Constraints.Min = image.Point{}
+	inner.Constraints.Max.X = 1 << 20
+	measure := op.Record(c.Ops)
+	width := drawText(inner, title, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, semibold()).Size.X
+	measure.Stop()
+	return width + c.Dp(unit.Dp(8))
 }
 
 // titles answers the heading as a row of values.
@@ -111,7 +199,7 @@ func (p TableProps) titles() []string {
 }
 
 // row draws one line of the table.
-func (p TableProps) row(c ayra.Context, values []string, padding unit.Dp, heading bool) ayra.Dimensions {
+func (p TableProps) row(c ayra.Context, values []string, padding unit.Dp, heading bool, widths []int) ayra.Dimensions {
 	children := make([]layout.FlexChild, 0, len(p.Columns))
 
 	for index, column := range p.Columns {
@@ -122,12 +210,8 @@ func (p TableProps) row(c ayra.Context, values []string, padding unit.Dp, headin
 			value = values[index]
 		}
 
-		share := column.Flex
-		if share == 0 {
-			share = 1
-		}
-
-		children = append(children, layout.Flexed(share, func(gtx layout.Context) layout.Dimensions {
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.X, gtx.Constraints.Max.X = widths[index], widths[index]
 			inner := c.With(gtx)
 			return layout.Inset{Top: padding, Bottom: padding, Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				ink, face := inner.Theme.Colours.Foreground, plain()
@@ -143,8 +227,13 @@ func (p TableProps) row(c ayra.Context, values []string, padding unit.Dp, headin
 				}
 				// The text of a cell wraps instead of being cut short: a table over a
 				// phone's width keeps every column, and a column too narrow for a plate
-				// or a name loses the characters that tell one row from the next.
-				return drawText(inner.With(gtx), value, size, ink, 0, column.Align.alignment(), face)
+				// or a name loses the characters that tell one row from the next. A
+				// heading never wraps: its column was given its width.
+				lines := 0
+				if heading {
+					lines = 1
+				}
+				return drawText(inner.With(gtx), value, size, ink, lines, column.Align.alignment(), face)
 			})
 		}))
 	}

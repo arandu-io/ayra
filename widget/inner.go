@@ -43,7 +43,7 @@ var innerIcons = map[string]map[string]func() icons.Icon{
 	"collapsible":       {"CaretDown": icons.CaretDown},
 	"combobox":          {"CaretDown": icons.CaretDown},
 	"command":           {"MagnifyingGlass": icons.MagnifyingGlass},
-	"data-table":        {"ArrowDown": icons.ArrowDown, "ArrowUp": icons.ArrowUp, "ArrowsDownUp": icons.ArrowsDownUp, "CaretUpDown": icons.CaretUpDown, "Check": icons.Check, "PlusCircle": icons.PlusCircle, "X": icons.X},
+	"data-table":        {"ArrowDown": icons.ArrowDown, "ArrowUp": icons.ArrowUp, "ArrowsDownUp": icons.ArrowsDownUp, "CaretDown": icons.CaretDown, "CaretUpDown": icons.CaretUpDown, "Check": icons.Check, "PlusCircle": icons.PlusCircle, "X": icons.X},
 	"date-range-picker": {"CalendarBlank": icons.CalendarBlank, "CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"date-time-picker":  {"CalendarBlank": icons.CalendarBlank, "CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"form-dialog":       {"X": icons.X},
