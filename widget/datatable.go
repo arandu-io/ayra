@@ -302,9 +302,9 @@ type DataTableProps struct {
 	Words DataTableWords
 
 	// Layout chooses between the table and the cards. Zero decides by the width
-	// the table is given.
+	// of the window, not of the room the table is given.
 	Mode DataTableMode
-	// Breakpoint is the width, in points, under which the cards are drawn
+	// Breakpoint is the window width, in points, under which the cards are drawn
 	// instead of the table. Zero takes 600, the width of a tablet held upright.
 	Breakpoint unit.Dp
 	// Infinite replaces the pager by a list that asks for the next page as the

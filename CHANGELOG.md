@@ -1,5 +1,17 @@
 # Release Notes
 
+## [v0.9.2](https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2) - 2026-11-02
+
+### Fixed
+
+- `widget.DataTableProps`: with `Mode` at `ModeAuto` the cards are chosen by the width
+  of the window (`Context.Overlay.Window`) under `Breakpoint`, no longer by the room
+  the table is given. A compact table in a narrow panel of a tablet or a desktop stays
+  a table; a phone's window draws cards. `ModeTable` and `ModeCards` remain the
+  explicit exceptions, and outside a window the room given is still what is read.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2
+
 ## [v0.9.1](https://github.com/arandu-io/ayra/compare/v0.9.0...v0.9.1) - 2026-11-02
 
 ### Fixed

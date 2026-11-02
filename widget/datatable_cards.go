@@ -25,8 +25,10 @@ import (
 type DataTableMode uint8
 
 const (
-	// ModeAuto draws cards under [DataTableProps.Breakpoint] and the table at
-	// and above it. Zero.
+	// ModeAuto draws cards when the window is narrower than
+	// [DataTableProps.Breakpoint] and the table when it is not. It reads the
+	// window, never the room the table is given: a compact table in a narrow
+	// panel of a tablet or a desktop stays a table. Zero.
 	ModeAuto DataTableMode = iota
 	// ModeTable always draws the table.
 	ModeTable
@@ -120,7 +122,22 @@ type tableExtras struct {
 	actions  [][]Button
 }
 
-// narrow says whether the cards are drawn instead of the table.
+// windowWidth is the width of the window the table is drawn in, in pixels. The
+// cards are a phone's layout, so they follow the device and not the slot: a
+// panel of 300 points in a window of 1024 is a desktop with a narrow panel. A
+// context built outside a window has no window, and the room it was given is
+// then all there is to read.
+func windowWidth(c ayra.Context) int {
+	if c.Overlay != nil {
+		if w := c.Overlay.Window.Dx(); w > 0 {
+			return w
+		}
+	}
+	return c.Constraints.Max.X
+}
+
+// narrow says whether the cards are drawn instead of the table. ModeAuto reads
+// the width of the window; ModeTable and ModeCards are the explicit exceptions.
 func (p DataTableProps) narrow(c ayra.Context) bool {
 	switch p.Mode {
 	case ModeTable:
@@ -132,7 +149,7 @@ func (p DataTableProps) narrow(c ayra.Context) bool {
 	if breakpoint == 0 {
 		breakpoint = 600
 	}
-	return c.Constraints.Max.X < c.Dp(breakpoint)
+	return windowWidth(c) < c.Dp(breakpoint)
 }
 
 // follow reads what arrived outside the frame -- a live notice -- and what the

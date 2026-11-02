@@ -2,10 +2,12 @@ package widget
 
 import (
 	"context"
+	"image"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/theme"
 )
@@ -31,6 +33,38 @@ func TestTheCardsReplaceTheTableUnderTheBreakpoint(t *testing.T) {
 		if got := p.narrow(c); got != test.cards {
 			t.Errorf("%s: cards=%v, want %v", test.name, got, test.cards)
 		}
+	}
+}
+
+// The cards follow the window and not the slot: a compact table in a narrow panel
+// of a tablet or a desktop stays a table, and a phone's window draws cards
+// whatever room the table is given.
+func TestTheCardsFollowTheWindowAndNotTheSlot(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mode   DataTableMode
+		window int
+		slot   int
+		cards  bool
+	}{
+		{"a slot of 300 in a window of 1024", ModeAuto, 1024, 300, false},
+		{"a slot of 300 in a window of 600", ModeAuto, 600, 300, false},
+		{"a slot of 390 in a window of 390", ModeAuto, 390, 390, true},
+		{"a wide slot in a phone's window", ModeAuto, 390, 900, true},
+		{"cards, by choice, in a wide window", ModeCards, 1024, 300, true},
+		{"a table, by choice, in a phone's window", ModeTable, 390, 390, false},
+	} {
+		c, _ := field(t, theme.Light, test.slot)
+		c.Overlay = &ayra.Overlay{Window: image.Rect(0, 0, test.window, 800)}
+		if got := (DataTableProps{Mode: test.mode}).narrow(c); got != test.cards {
+			t.Errorf("%s: cards=%v, want %v", test.name, got, test.cards)
+		}
+	}
+
+	// Outside a window there is only the room the table was given.
+	c, _ := field(t, theme.Light, 300)
+	if !(DataTableProps{}).narrow(c) {
+		t.Error("outside a window the room given is read")
 	}
 }
 

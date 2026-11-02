@@ -4,6 +4,22 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## v0.9.2 -- a DataTable draws cards by the window, not by its slot
+
+Nothing stops compiling. `DataTableProps` with `Mode` left at `ModeAuto` used to
+draw cards whenever the room it was given was under `Breakpoint` (600 points by
+default), so a compact table in a narrow panel of a tablet or a desktop became
+cards. It now reads the width of the window (`Context.Overlay.Window`), the way a
+phone is told from a desktop: a table in a slot of 300 points inside a window of
+1024 stays a table, and in a window of 390 it is cards. A context built outside a
+window -- a test, a tool that renders one panel -- has no window and still reads the
+room it was given.
+
+An application that relied on the old rule to get cards in a narrow panel on a wide
+screen says so with `Mode: widget.ModeCards`; one that wants the table on a phone
+says `Mode: widget.ModeTable`. The footer still stacks its count, size menu and
+pager under 600 points of room, because that is about what fits.
+
 ## v0.9.0 -- a bearer token and the body of a refusal
 
 Nothing stops compiling. A `client.StatusError` is now built with its `Body` and

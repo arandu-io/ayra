@@ -282,7 +282,11 @@ A listing is one control that is two layouts. `widget.DataTable` asks a server
 for a page the way Kyse's DataTable does -- the same state, the same parameter
 names, so the route that draws the table in the browser answers the app -- and
 draws a table on a wide screen and cards on a phone, with the filters in a sheet,
-an endless list and pull to refresh. It owns no data: it asks a `DataSource`, and
+an endless list and pull to refresh. The choice is the width of the window, under
+600 points, and never the width of the room the table is given: a compact table in a
+narrow panel of a tablet or a desktop stays a table. `Mode` (`ModeTable`,
+`ModeCards`) is the explicit exception; whoever uses the table only describes the
+columns (`Primary`, `CardHidden`, `Actions`). It owns no data: it asks a `DataSource`, and
 `ServerSource` is the one that speaks an Arandu route.
 
 The controls are the part worth reading first. Each one is a `Props` value you

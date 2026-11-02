@@ -32,6 +32,8 @@ func listings() []screen {
 	return []screen{
 		{name: "listing-narrow", width: 360, height: 640, draw: func() ayra.Widget { return listing(360, 640, false) }},
 		{name: "listing-wide", width: 860, height: 420, draw: func() ayra.Widget { return listing(860, 420, false) }},
+		{name: "listing-slot-desktop", width: 1024, height: 420, draw: func() ayra.Widget { return listingInSlot(1024, 420, 300) }},
+		{name: "listing-slot-phone", width: 390, height: 640, draw: func() ayra.Widget { return listingInSlot(390, 640, 300) }},
 		{name: "listing-filters", width: 360, height: 640, draw: func() ayra.Widget { return listing(360, 640, true) }},
 	}
 }
@@ -140,6 +142,16 @@ func stroke(rotate float32) ayra.Widget {
 		stroke := clip.Stroke{Path: path.End(), Width: float32(c.Dp(2))}.Op()
 		paint.FillShape(c.Ops, c.Theme.Colours.Foreground, stroke)
 		return ayra.Dimensions{Size: image.Pt(side, side)}
+	}
+}
+
+// listingInSlot draws the listing in a panel of slot points inside a window of
+// width: the window decides between the table and the cards, not the panel.
+func listingInSlot(width, height, slot int) ayra.Widget {
+	inner := listing(slot, height, false)
+	return func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min.X, c.Constraints.Max.X = slot, slot
+		return inner(c)
 	}
 }
 
