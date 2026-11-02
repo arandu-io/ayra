@@ -67,8 +67,9 @@ type Context struct {
 	// ReduceMotion is true while the person has asked the system for less
 	// movement. A control that animates -- the skeleton's pulse, the indeterminate
 	// bar's trip -- draws its resting picture and asks for no more frames while it
-	// is set. It is false outside a window, and in a window whose application did
-	// not say how to tell: see shell.Config.ReduceMotion.
+	// is set. It is false outside a window, and a window takes it from the operating
+	// system unless the application said otherwise: see shell.Config.ReduceMotion
+	// and shell.SystemReduceMotion.
 	ReduceMotion bool
 
 	// SetMode is what [Context.FollowSystem] calls. The window applies it from
