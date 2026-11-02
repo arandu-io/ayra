@@ -29,22 +29,22 @@ func liveContext() ayra.Context {
 // down: a brush made from a picture is uploaded to the GPU, and a stream that
 // has not produced a new picture must draw the one it has.
 func TestTheTextureIsMadeOncePerPicture(t *testing.T) {
-	var state Live
+	var state Video
 	img := image.NewRGBA(image.Rect(0, 0, 32, 18))
 
-	LiveProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
+	VideoProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
 	first := state.brush
 	if first.Size() != image.Pt(32, 18) {
 		t.Fatalf("no texture was made: %v", first.Size())
 	}
 
-	LiveProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
+	VideoProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
 	if state.brush != first {
 		t.Error("the same picture was made into a new texture")
 	}
 
 	other := image.NewRGBA(image.Rect(0, 0, 32, 18))
-	LiveProps{Frame: other, Seq: 2}.Layout(liveContext(), &state)
+	VideoProps{Frame: other, Seq: 2}.Layout(liveContext(), &state)
 	if state.brush == first {
 		t.Error("a new picture reused the old texture")
 	}
@@ -53,21 +53,21 @@ func TestTheTextureIsMadeOncePerPicture(t *testing.T) {
 // TestAReusedBufferWithANewSeqIsMadeAgain: a decoder writes into buffers it
 // recycles, so the pointer alone says nothing about whether the pixels changed.
 func TestAReusedBufferWithANewSeqIsMadeAgain(t *testing.T) {
-	var state Live
+	var state Video
 	img := image.NewRGBA(image.Rect(0, 0, 32, 18))
 
-	LiveProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
+	VideoProps{Frame: img, Seq: 1}.Layout(liveContext(), &state)
 	first := state.brush
-	LiveProps{Frame: img, Seq: 2}.Layout(liveContext(), &state)
+	VideoProps{Frame: img, Seq: 2}.Layout(liveContext(), &state)
 	if state.brush == first {
 		t.Error("a buffer rewritten for a new picture was not uploaded again")
 	}
 }
 
 func TestLosingThePictureDropsTheTexture(t *testing.T) {
-	var state Live
-	LiveProps{Frame: image.NewRGBA(image.Rect(0, 0, 32, 18)), Seq: 1}.Layout(liveContext(), &state)
-	LiveProps{}.Layout(liveContext(), &state)
+	var state Video
+	VideoProps{Frame: image.NewRGBA(image.Rect(0, 0, 32, 18)), Seq: 1}.Layout(liveContext(), &state)
+	VideoProps{}.Layout(liveContext(), &state)
 	if state.brush.Size() != (image.Point{}) || state.img != nil {
 		t.Error("the texture outlived the picture")
 	}

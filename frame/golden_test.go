@@ -102,7 +102,7 @@ func screens() []screen {
 		{name: "month", width: 360, height: 470, draw: month},
 		{name: "browsing", width: 360, height: 560, draw: browsing},
 		{name: "media", width: 360, height: 620, draw: media},
-		{name: "live", width: 360, height: 600, draw: liveVideo},
+		{name: "video", width: 360, height: 600, draw: liveVideo},
 		{name: "open", width: 360, height: 420, draw: openPanels},
 	}
 }
@@ -269,7 +269,7 @@ func media() ayra.Widget {
 // there is no decoder in a headless run, and the point of the widget being given
 // its picture in the props is that a test can hand it one.
 func liveVideo() ayra.Widget {
-	var running, stopped, waiting widget.Live
+	var running, stopped, waiting widget.Video
 	scene := cameraScene(192, 108)
 
 	return func(c ayra.Context) ayra.Dimensions {
@@ -277,9 +277,9 @@ func liveVideo() ayra.Widget {
 			line("Live", widget.Heading, true),
 			spacer(10),
 			func(c ayra.Context) ayra.Dimensions {
-				return widget.LiveProps{
+				return widget.VideoProps{
 					Frame: scene, Seq: 1, Label: "Gate camera",
-					Overlay: func(c ayra.Context, area widget.LiveArea) {
+					Overlay: func(c ayra.Context, area widget.VideoArea) {
 						box := area.Rect(image.Rect(100, 52, 156, 78))
 						outline(c, box, gocolor.NRGBA{R: 0x22, G: 0xC5, B: 0x5E, A: 0xFF}, 2)
 					},
@@ -287,11 +287,11 @@ func liveVideo() ayra.Widget {
 			},
 			spacer(10),
 			func(c ayra.Context) ayra.Dimensions {
-				return widget.LiveProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
+				return widget.VideoProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
 			},
 			spacer(10),
 			func(c ayra.Context) ayra.Dimensions {
-				return widget.LiveProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
+				return widget.VideoProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
 			},
 		)
 	}

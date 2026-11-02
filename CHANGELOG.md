@@ -17,7 +17,7 @@
   `Player` adds a hardware decoder and the frame to draw, and closes the socket
   when nothing has drawn the picture for five seconds. MediaCodec on Android,
   VideoToolbox on iOS and macOS; the other targets have no decoder.
-- `widget.LiveProps` and `widget.Live`: a live video drawn uncropped, with a
+- `widget.VideoProps` and `widget.Video`: a live video drawn uncropped, with a
   caption over a dimmed picture and an overlay hook that is given the picture's
   rectangle and the camera's own pixel size.
 - `engine/app/permission/notifications`: the permission package for

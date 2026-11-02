@@ -149,7 +149,7 @@ permission, the token the server addresses the device by, the notification that
 arrived while the application was open, and the one a person touched.
 
 `live` plays the video a camera's node serves over a WebSocket, decoded by the
-phone's hardware, and `widget.LiveProps` draws the frame it leaves with a hook
+phone's hardware, and `widget.VideoProps` draws the frame it leaves with a hook
 for what goes on top of the picture.
 
 ```go
@@ -166,7 +166,7 @@ import (
 )
 
 func main() {
-	var video widget.Live
+	var video widget.Video
 
 	player := live.NewPlayer(live.PlayerConfig{
 		Endpoint: "wss://api1.example.test/live/camera-7",
@@ -188,7 +188,7 @@ func main() {
 	shell.Exit(shell.Run(shell.Config{Title: "Cameras"}, func(c ayra.Context) ayra.Dimensions {
 		player.SetRedraw(c.Redraw)
 		frame := player.Frame()
-		return widget.LiveProps{
+		return widget.VideoProps{
 			Frame:   frame.Image,
 			Seq:     frame.Seq,
 			Label:   "Gate camera",

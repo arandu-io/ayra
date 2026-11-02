@@ -11,9 +11,10 @@ import (
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
 
-// Live is the state half of a live video: the texture made from the newest
+// Video is the state half of a live video: the texture made from the newest
 // picture, kept so that a picture is uploaded to the GPU once and not once per
 // frame.
 //
@@ -21,14 +22,14 @@ import (
 // frame, from whatever owns the stream, and what a person sees is drawn from
 // that alone -- which is what lets a screen be drawn in a test with no network
 // and no hardware, and what keeps this package from carrying a codec.
-type Live struct {
+type Video struct {
 	brush paint.ImageOp
 	seq   uint64
 	img   *image.RGBA
 }
 
-// LiveArea tells an overlay where the picture was drawn.
-type LiveArea struct {
+// VideoArea tells an overlay where the picture was drawn.
+type VideoArea struct {
 	// Picture is the rectangle the picture covers, in pixels of the area the
 	// widget was given. An overlay draws inside it.
 	Picture image.Rectangle
@@ -38,7 +39,7 @@ type LiveArea struct {
 }
 
 // Scale is how many drawn pixels one pixel of the source takes.
-func (a LiveArea) Scale() float32 {
+func (a VideoArea) Scale() float32 {
 	if a.Source.X <= 0 {
 		return 0
 	}
@@ -46,7 +47,7 @@ func (a LiveArea) Scale() float32 {
 }
 
 // Rect maps a rectangle in the source's pixels onto the drawn picture.
-func (a LiveArea) Rect(source image.Rectangle) image.Rectangle {
+func (a VideoArea) Rect(source image.Rectangle) image.Rectangle {
 	s := a.Scale()
 	return image.Rectangle{
 		Min: a.Picture.Min.Add(image.Pt(int(float32(source.Min.X)*s+0.5), int(float32(source.Min.Y)*s+0.5))),
@@ -54,7 +55,7 @@ func (a LiveArea) Rect(source image.Rectangle) image.Rectangle {
 	}
 }
 
-// LiveProps is a live video.
+// VideoProps is a live video.
 //
 // Every field is an answer about a stream this control cannot see: the picture
 // to draw, and a sentence about the state it is in. The control draws the
@@ -62,7 +63,12 @@ func (a LiveArea) Rect(source image.Rectangle) image.Rectangle {
 // over it, and calls Overlay last so that the application can draw what belongs
 // on the picture -- the boxes of the plates, a timestamp -- in the picture's own
 // coordinates.
-type LiveProps struct {
+type VideoProps struct {
+	// ComponentProps is what the caller changes on this one instance. A video
+	// publishes two parts: "root", whose background is the ground the picture
+	// is letterboxed on and whose radius rounds it, and "caption", the sentence
+	// over the picture.
+	ComponentProps
 	// Frame is the picture to draw, and nil draws none. The control reads it
 	// during layout and the engine reads it again when the frame is rasterised,
 	// so it must not be written to until the next frame; a player's frame is
@@ -85,16 +91,20 @@ type LiveProps struct {
 	// Label names the video for a screen reader. Empty announces nothing.
 	Label string
 	// Overlay draws over the picture, last, inside the area it was given.
-	Overlay func(c ayra.Context, area LiveArea)
+	Overlay func(c ayra.Context, area VideoArea)
 	// Disabled draws the video dimmed.
 	Disabled bool
 }
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p VideoProps) PartNames() []string { return []string{"root", "caption"} }
 
 // liveAspect is the shape of a camera that has not said otherwise.
 var liveAspect = image.Pt(16, 9)
 
 // Layout draws the video and returns the room it took.
-func (p LiveProps) Layout(c ayra.Context, state *Live) ayra.Dimensions {
+func (p VideoProps) Layout(c ayra.Context, state *Video) ayra.Dimensions {
 	source := p.Size
 	if p.Frame != nil && !p.Frame.Bounds().Empty() {
 		source = p.Frame.Bounds().Size()
@@ -120,14 +130,18 @@ func (p LiveProps) Layout(c ayra.Context, state *Live) ayra.Dimensions {
 	closeNode := announce(c, size, Announcement{Label: p.Label, Description: p.Caption, Class: Plain, Disabled: p.Disabled})
 	defer closeNode()
 
-	radius := controlRadius(c)
-	area := image.Rectangle{Max: size}
-	defer clip.UniformRRect(area, radius).Push(c.Ops).Pop()
-
 	// The ground is black whatever the scheme: a video is not part of the
 	// palette, and a letterbox that followed the theme would flash white around
 	// a dark picture.
-	paint.Fill(c.Ops, color.NRGBA{A: 0xFF})
+	root := c.Theme.Resolve("video", "root", p.VariantName("default"), theme.Style{
+		Background: theme.Colour(color.NRGBA{A: 0xFF}),
+		Radius:     theme.Pt(c.Theme.Metrics.Radius),
+	}, p.ComponentProps)
+	radius := c.Dp(unit.Dp(root.Radius.Points()))
+	area := image.Rectangle{Max: size}
+	defer clip.UniformRRect(area, radius).Push(c.Ops).Pop()
+
+	paint.Fill(c.Ops, root.Background.NRGBA())
 
 	if state.brush.Size() != (image.Point{}) {
 		func() {
@@ -151,20 +165,23 @@ func (p LiveProps) Layout(c ayra.Context, state *Live) ayra.Dimensions {
 	if p.Overlay != nil {
 		inner := c
 		inner.Constraints.Min, inner.Constraints.Max = size, size
-		p.Overlay(inner, LiveArea{Picture: area, Source: source})
+		p.Overlay(inner, VideoArea{Picture: area, Source: source})
 	}
 	return ayra.Dimensions{Size: size}
 }
 
 // caption centres the sentence on the picture.
-func (p LiveProps) caption(c ayra.Context, size image.Point) {
+func (p VideoProps) caption(c ayra.Context, size image.Point) {
+	style := c.Theme.Resolve("video", "caption", p.VariantName("default"), theme.Style{
+		Foreground: theme.Colour(color.NRGBA{R: 0xFA, G: 0xFA, B: 0xFA, A: 0xFF}),
+	}, p.ComponentProps)
 	inset := c.Dp(unit.Dp(12))
 	inner := c
 	inner.Constraints.Min = image.Point{}
 	inner.Constraints.Max = image.Pt(max(size.X-2*inset, 1), size.Y)
 
 	measure := op.Record(c.Ops)
-	dims := drawText(inner, p.Caption, unit.Sp(c.Theme.Type.Small), color.NRGBA{R: 0xFA, G: 0xFA, B: 0xFA, A: 0xFF}, 3, text.Middle, plain())
+	dims := drawText(inner, p.Caption, unit.Sp(c.Theme.Type.Small), style.Foreground.NRGBA(), 3, text.Middle, plain())
 	drawn := measure.Stop()
 
 	at := image.Pt((size.X-dims.Size.X)/2, (size.Y-dims.Size.Y)/2)

@@ -4,7 +4,7 @@
 // per picture, length-prefixed NAL units, with the decoder's configuration sent
 // ahead of the first of them. This package reads that stream, joins the pieces
 // of a picture that did not fit in one message, and hands the pictures to a
-// decoder the platform provides. It does not draw; [github.com/arandu-io/ayra/widget.LiveProps]
+// decoder the platform provides. It does not draw; [github.com/arandu-io/ayra/widget.VideoProps]
 // draws the frame this leaves in a [Player].
 //
 // The wire format is the one the node's server documents, and it is repeated in

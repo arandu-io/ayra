@@ -11,7 +11,7 @@ import (
 )
 
 // picture is a frame of a given size, as a decoder would leave one.
-func picture(w, h int, shade uint8) *image.RGBA {
+func videoPicture(w, h int, shade uint8) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for i := 0; i < len(img.Pix); i += 4 {
 		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = shade, shade, shade, 255
@@ -21,9 +21,9 @@ func picture(w, h int, shade uint8) *image.RGBA {
 
 func TestALiveVideoWithNoPictureHoldsASixteenByNineShape(t *testing.T) {
 	c, _ := frame(t, theme.Light, 640)
-	var state widget.Live
+	var state widget.Video
 
-	dims := widget.LiveProps{}.Layout(c, &state)
+	dims := widget.VideoProps{}.Layout(c, &state)
 
 	if dims.Size.X != 640 || dims.Size.Y != 360 {
 		t.Errorf("an empty live video took %v, want 640x360", dims.Size)
@@ -32,9 +32,9 @@ func TestALiveVideoWithNoPictureHoldsASixteenByNineShape(t *testing.T) {
 
 func TestALiveVideoTakesTheShapeOfItsPicture(t *testing.T) {
 	c, _ := frame(t, theme.Light, 640)
-	var state widget.Live
+	var state widget.Video
 
-	dims := widget.LiveProps{Frame: picture(400, 300, 90), Seq: 1}.Layout(c, &state)
+	dims := widget.VideoProps{Frame: videoPicture(400, 300, 90), Seq: 1}.Layout(c, &state)
 
 	if dims.Size.X != 640 || dims.Size.Y != 480 {
 		t.Errorf("a 4:3 picture took %v, want 640x480", dims.Size)
@@ -46,9 +46,9 @@ func TestALiveVideoTakesTheShapeOfItsPicture(t *testing.T) {
 func TestALiveVideoNeverCropsToFitTheRoom(t *testing.T) {
 	c, _ := frame(t, theme.Light, 1000)
 	c.Constraints.Max.Y = 200
-	var state widget.Live
+	var state widget.Video
 
-	dims := widget.LiveProps{Frame: picture(1920, 1080, 10), Seq: 1}.Layout(c, &state)
+	dims := widget.VideoProps{Frame: videoPicture(1920, 1080, 10), Seq: 1}.Layout(c, &state)
 
 	if dims.Size.Y > 200 || dims.Size.X*9 != dims.Size.Y*16 && (dims.Size.X*9-dims.Size.Y*16 > 16 || dims.Size.Y*16-dims.Size.X*9 > 16) {
 		t.Errorf("a 16:9 picture in 1000x200 took %v", dims.Size)
@@ -60,9 +60,9 @@ func TestALiveVideoNeverCropsToFitTheRoom(t *testing.T) {
 
 func TestSizeHoldsTheShapeUntilThePictureArrives(t *testing.T) {
 	c, _ := frame(t, theme.Light, 600)
-	var state widget.Live
+	var state widget.Video
 
-	dims := widget.LiveProps{Size: image.Pt(4, 3)}.Layout(c, &state)
+	dims := widget.VideoProps{Size: image.Pt(4, 3)}.Layout(c, &state)
 
 	if dims.Size.X != 600 || dims.Size.Y != 450 {
 		t.Errorf("a 4:3 placeholder took %v", dims.Size)
@@ -72,9 +72,9 @@ func TestSizeHoldsTheShapeUntilThePictureArrives(t *testing.T) {
 func TestADegenerateRoomDrawsNothingRatherThanFailing(t *testing.T) {
 	c, _ := frame(t, theme.Light, 0)
 	c.Constraints.Max.Y = 0
-	var state widget.Live
+	var state widget.Video
 
-	if dims := (widget.LiveProps{}).Layout(c, &state); dims.Size.X != 0 || dims.Size.Y != 0 {
+	if dims := (widget.VideoProps{}).Layout(c, &state); dims.Size.X != 0 || dims.Size.Y != 0 {
 		t.Errorf("no room still took %v", dims.Size)
 	}
 }
@@ -84,13 +84,13 @@ func TestADegenerateRoomDrawsNothingRatherThanFailing(t *testing.T) {
 // how those map onto the screen.
 func TestTheOverlayIsToldWhereThePictureWas(t *testing.T) {
 	c, _ := frame(t, theme.Light, 640)
-	var state widget.Live
-	var got widget.LiveArea
+	var state widget.Video
+	var got widget.VideoArea
 	calls := 0
 
-	dims := widget.LiveProps{
-		Frame: picture(1280, 720, 40), Seq: 1,
-		Overlay: func(c ayra.Context, area widget.LiveArea) {
+	dims := widget.VideoProps{
+		Frame: videoPicture(1280, 720, 40), Seq: 1,
+		Overlay: func(c ayra.Context, area widget.VideoArea) {
 			got = area
 			calls++
 			if c.Constraints.Max != area.Picture.Size() {
@@ -111,16 +111,16 @@ func TestTheOverlayIsToldWhereThePictureWas(t *testing.T) {
 	if box := got.Rect(image.Rect(100, 200, 300, 260)); box != image.Rect(50, 100, 150, 130) {
 		t.Errorf("a box in the camera's pixels mapped to %v", box)
 	}
-	if (widget.LiveArea{}).Scale() != 0 {
+	if (widget.VideoArea{}).Scale() != 0 {
 		t.Error("an empty area has a scale")
 	}
 }
 
 func TestACaptionOverAPictureIsDrawnAndTheVideoIsAnnounced(t *testing.T) {
-	var state widget.Live
+	var state widget.Video
 	nodes := tree(t, func(c ayra.Context) ayra.Dimensions {
-		return widget.LiveProps{
-			Frame: picture(160, 90, 200), Seq: 1,
+		return widget.VideoProps{
+			Frame: videoPicture(160, 90, 200), Seq: 1,
 			Label: "Gate camera, live", Caption: "No signal from the camera",
 		}.Layout(c, &state)
 	})
@@ -135,9 +135,9 @@ func TestACaptionOverAPictureIsDrawnAndTheVideoIsAnnounced(t *testing.T) {
 }
 
 func TestAVideoWithNoLabelAnnouncesNothingOfItsOwn(t *testing.T) {
-	var state widget.Live
+	var state widget.Video
 	nodes := tree(t, func(c ayra.Context) ayra.Dimensions {
-		return widget.LiveProps{Frame: picture(160, 90, 200), Seq: 1}.Layout(c, &state)
+		return widget.VideoProps{Frame: videoPicture(160, 90, 200), Seq: 1}.Layout(c, &state)
 	})
 	if said := spoken(nodes); len(said) != 0 {
 		t.Errorf("an unlabelled video announced %v", said)

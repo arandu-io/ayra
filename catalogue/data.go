@@ -370,28 +370,28 @@ func playerEntry() Entry {
 // it holds before the first picture.
 func liveEntry() Entry {
 	return Entry{
-		Control: "LiveProps",
+		Control: "VideoProps",
 		Summary: "A live video that draws the picture it is handed, a sentence over it, and what the application puts on top.",
 		Build: func() ayra.Widget {
-			var running, stopped, waiting widget.Live
+			var running, stopped, waiting widget.Video
 			scene := scenery(192, 108)
 
 			return func(c ayra.Context) ayra.Dimensions {
 				return stack(18,
 					labelled("a picture, with a box in the camera's own pixels", sized(480, func(c ayra.Context) ayra.Dimensions {
-						return widget.LiveProps{
+						return widget.VideoProps{
 							Frame: scene, Seq: 1, Label: "Gate camera",
-							Overlay: func(c ayra.Context, area widget.LiveArea) {
+							Overlay: func(c ayra.Context, area widget.VideoArea) {
 								box := area.Rect(image.Rect(100, 52, 156, 78))
 								frameBox(c, box)
 							},
 						}.Layout(c, &running)
 					})),
 					labelled("a stream that stopped, over the last picture", sized(480, func(c ayra.Context) ayra.Dimensions {
-						return widget.LiveProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
+						return widget.VideoProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
 					})),
 					labelled("before the first picture, holding its shape", sized(480, func(c ayra.Context) ayra.Dimensions {
-						return widget.LiveProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
+						return widget.VideoProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
 					})),
 				)(c)
 			}
