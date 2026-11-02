@@ -14,7 +14,8 @@ import (
 type DatePreset struct {
 	// Label is what the shortcut is called.
 	Label string
-	// From and To are the first and the last day, ends included.
+	// From and To are the first and the last day, ends included. A zero end
+	// leaves the period open on that side: only To is "until", only From is "from".
 	From, To time.Time
 }
 
@@ -56,10 +57,14 @@ type DateRange struct {
 	changed bool
 }
 
-// Range is the period chosen, ends included, and two zero times when none is. A
-// period is both ends or neither: while the end is still to be chosen this
-// answers neither, so a caller that asks the server on change never asks with
-// half of one.
+// Range is the period chosen, ends included, and two zero times when none is.
+// While the end is still to be chosen this answers neither, so a caller that
+// asks the server on change never asks with half of one a person is still
+// choosing.
+//
+// A period set with one end only -- [DateRange.Set] with a zero time on one side,
+// or a [DatePreset] that leaves one out -- is open on that side: "until 31/12/2026"
+// answers a zero from and the day, and the caller reads the zero as no limit.
 func (d *DateRange) Range() (from, to time.Time) {
 	if d.waiting {
 		return time.Time{}, time.Time{}
@@ -67,12 +72,18 @@ func (d *DateRange) Range() (from, to time.Time) {
 	return d.from, d.to
 }
 
-// Set chooses a period without opening the panel.
+// Set chooses a period without opening the panel. A zero time on one side leaves
+// the period open on that side, as "until" and "from" a day; both zero is
+// [DateRange.Clear].
 func (d *DateRange) Set(from, to time.Time) {
-	if to.Before(from) {
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
 		from, to = to, from
 	}
 	d.from, d.to, d.waiting = from, to, false
+	if from.IsZero() {
+		d.month.Show(to)
+		return
+	}
 	d.month.Show(from)
 }
 
@@ -111,7 +122,8 @@ type DateRangePickerProps struct {
 	// Presets are the shortcuts above the calendar. None draws none.
 	Presets []DatePreset
 	// DateFormat is the Go reference layout the field writes a day in:
-	// "02/01/2006" for the Brazilian one. Empty writes [DateFormat].
+	// "02/01/2006" for the Brazilian one. Empty takes the theme's locale, and
+	// then [DateFormat].
 	DateFormat string
 	// MonthNames and WeekdayNames are the calendar's words, in the application's
 	// language. Empty draws English.
@@ -132,11 +144,11 @@ func (p DateRangePickerProps) PartNames() []string { return []string{"root"} }
 
 // Layout draws the field and, while it is open, the panel under it.
 func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dimensions {
-	layoutName := orDefault(p.DateFormat, DateFormat)
+	layoutName := dayLayout(c, p.DateFormat)
 
 	label, ink := orDefault(p.Placeholder, orDefault(c.Theme.Locale.PickPeriod, "Choose a period")), c.Theme.Colours.MutedForeground
-	if from, to := state.Range(); !from.IsZero() {
-		label = from.Format(layoutName) + " – " + to.Format(layoutName)
+	if from, to := state.Range(); !from.IsZero() || !to.IsZero() {
+		label = periodText(c, from, to, layoutName)
 		ink = c.Theme.Colours.Foreground
 	}
 
@@ -154,6 +166,18 @@ func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dime
 
 	state.apply(p, c)
 	return dims
+}
+
+// periodText writes a period the way the field shows it: "01/11/2026 – 07/11/2026"
+// for both ends, and "Until 31/12/2026" or "From 01/01/2026" for one.
+func periodText(c ayra.Context, from, to time.Time, layout string) string {
+	switch {
+	case from.IsZero():
+		return orDefault(c.Theme.Locale.Until, "Until") + " " + to.Format(layout)
+	case to.IsZero():
+		return orDefault(c.Theme.Locale.Since, "From") + " " + from.Format(layout)
+	}
+	return from.Format(layout) + " – " + to.Format(layout)
 }
 
 // apply reads what was pressed in the panel and moves the period with it.
@@ -238,6 +262,10 @@ func (p DateRangePickerProps) panel(c ayra.Context, state *DateRange) ayra.Dimen
 				Range:      [2]time.Time{state.from, to},
 				MonthNames: p.MonthNames, WeekdayNames: p.WeekdayNames,
 				owned: "date-range-picker", bare: true,
+				// A period set with one end is open on the other side, and the days
+				// on that side are inside it. While the end is still to be chosen
+				// the start stands alone.
+				open: !state.waiting && state.from.IsZero() != state.to.IsZero(),
 			}.Layout(c.With(gtx), &state.month)
 		}),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),

@@ -1,11 +1,32 @@
 package widget
 
 import (
+	"image"
 	"testing"
 	"time"
 
+	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/font/gofont"
+	"github.com/arandu-io/ayra/frame"
 	"github.com/arandu-io/ayra/theme"
 )
+
+// drawnCell renders one control into a picture 120 by 60 at one pixel to the
+// point, in the light scheme, with the room it needs and no more.
+func drawnCell(t *testing.T, screen ayra.Widget) *image.RGBA {
+	t.Helper()
+	got, err := frame.Draw(frame.Options{
+		Width: 120, Height: 60, Density: 1, Scheme: theme.Light, Fonts: gofont.Collection(),
+	}, func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min = image.Point{}
+		c.Constraints.Max.X = 120
+		return screen(c)
+	})
+	if err != nil {
+		t.Skipf("no drawing surface on this machine: %v", err)
+	}
+	return got
+}
 
 // TestTheGridPutsTheFirstOfTheMonthOnItsOwnWeekday keeps the offset from being
 // applied to the wrong end of the row.
@@ -245,5 +266,54 @@ func TestACalendarWithNoDayDrawsNothing(t *testing.T) {
 		if drawn := props.Layout(c, &state); drawn.Size.Y <= 0 {
 			t.Errorf("with %s the calendar drew nothing", name)
 		}
+	}
+}
+
+// TestADayIsAsTallAsAFinger fixes the row of the grid: 36 points of cell and the
+// button's own padding on top of it made 48, by accident, and the label sat in
+// the top of it. The height is now the one asked for, padding included.
+func TestADayIsAsTallAsAFinger(t *testing.T) {
+	c, _ := field(t, theme.Light, 336)
+	c.Constraints.Min.X = 48
+	c.Constraints.Max.X = 48
+
+	var state Calendar
+	today := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
+	got := CalendarProps{Today: today}.day(c, &state, today, 3)
+
+	if got.Size.Y != 44 {
+		t.Errorf("a day is %d dp tall, want 44", got.Size.Y)
+	}
+}
+
+// TestTheNumberOfADayIsInTheMiddleOfItsCell reads the picture: the glyphs of the
+// number sit at the top of the cell when the button is told to be taller than
+// its line and puts the label where it started.
+func TestTheNumberOfADayIsInTheMiddleOfItsCell(t *testing.T) {
+	var state Button
+	picture := drawnCell(t, func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min.Y = 32
+		return ButtonProps{Label: "10", Variant: Ghost, Size: Small}.Layout(c, &state)
+	})
+
+	top, bottom := -1, -1
+	for y := 0; y < picture.Bounds().Dy(); y++ {
+		for x := 0; x < picture.Bounds().Dx(); x++ {
+			p := picture.RGBAAt(x, y)
+			if int(p.R)+int(p.G)+int(p.B) < 300 {
+				if top < 0 {
+					top = y
+				}
+				bottom = y
+				break
+			}
+		}
+	}
+	if top < 0 {
+		t.Fatal("the number was not drawn")
+	}
+	// The cell is 32 plus 6 above and 6 below: 44 tall, centre at 22.
+	if centre := (top + bottom) / 2; centre < 19 || centre > 25 {
+		t.Errorf("the number is centred on row %d of a cell 44 tall, whose middle is 22", centre)
 	}
 }

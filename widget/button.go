@@ -307,8 +307,34 @@ func buttonContent(c ayra.Context, label string, icon icons.Icon, trailing bool,
 // The name says which control it belongs to, and that is the fix for a real
 // mistake: it was called "label", the text field reused it, and centring it
 // here centred every placeholder in the product.
+//
+// It is centred in the height as well, when the button was given more than the
+// line needs. A calendar's day is told to be tall enough to press, and the
+// label sat against the top of it -- the number high in a square that was meant
+// to hold it in the middle.
 func buttonLabel(c ayra.Context, content string, style theme.Style) ayra.Dimensions {
-	return drawPart(c, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, font.Font{Weight: font.Medium})
+	face := font.Font{Weight: font.Medium}
+	room := c.Constraints.Min.Y
+	if room <= 0 {
+		return drawPart(c, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, face)
+	}
+
+	natural := c
+	natural.Constraints.Min.Y = 0
+	measured := op.Record(c.Ops)
+	line := drawPart(natural, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, face)
+	measured.Stop()
+	if line.Size.Y >= room {
+		return drawPart(c, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, face)
+	}
+
+	down := (room - line.Size.Y) / 2
+	shift := op.Offset(image.Pt(0, down)).Push(c.Ops)
+	dims := drawPart(natural, content, style, unit.Sp(c.Theme.Type.Body), 1, text.Middle, face)
+	shift.Pop()
+	dims.Size.Y = room
+	dims.Baseline += down
+	return dims
 }
 
 // underline draws the rule beneath a link's text.

@@ -10,13 +10,22 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// DateFormat is how a chosen day is written on the control.
+// DateFormat is how a chosen day is written on the control when neither the
+// props nor the theme's locale say otherwise.
 //
-// It is the ISO order rather than a local one, and that is a decision the
-// control has to make for itself: the two common local orders put the day and
-// the month in opposite places, so a date written in either is read wrongly by
-// half the people who see it. Year, month, day is ambiguous to nobody.
+// It is the ISO order rather than a local one, and that is the decision for a
+// control that does not know where it is: the two common local orders put the
+// day and the month in opposite places, so a date written in either is read
+// wrongly by half the people who see it. Year, month, day is ambiguous to
+// nobody. An application that knows its people writes the order they do, once,
+// in the theme's [theme.Locale] (DateLayout), and every picker follows.
 const DateFormat = "2006-01-02"
+
+// dayLayout is the Go reference layout a day is written in: the one the caller
+// gave, otherwise the locale's, otherwise the ISO order.
+func dayLayout(c ayra.Context, given string) string {
+	return orDefault(given, orDefault(c.Theme.Locale.DateLayout, DateFormat))
+}
 
 // DatePicker is the state of a field that opens a month to choose from.
 type DatePicker struct {
@@ -69,6 +78,10 @@ type DatePickerProps struct {
 	Today    time.Time
 	Min, Max time.Time
 	Monday   bool
+	// DateFormat is the Go reference layout the field writes the day in:
+	// "02/01/2006" for the Brazilian one. Empty takes the theme's locale, and
+	// then [DateFormat].
+	DateFormat string
 	// Disabled draws it as unavailable and stops it opening.
 	Disabled bool
 	// Above opens the month upwards, for a field near the foot of a page.
@@ -94,7 +107,7 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 	}
 	ink := c.Theme.Colours.MutedForeground
 	if day := state.month.Selected(); !day.IsZero() {
-		label = day.Format(DateFormat)
+		label = day.Format(dayLayout(c, p.DateFormat))
 		ink = c.Theme.Colours.Foreground
 	}
 
