@@ -245,6 +245,8 @@ type handler struct {
 type filter struct {
 	pointer   pointerFilter
 	focusable bool
+	// trap is whether the tag asked to keep Tab inside what it declares.
+	trap bool
 }
 
 // taggedFilter is a filter together with the tag that asked for it.
@@ -660,6 +662,7 @@ func (f *filter) Add(flt event.Filter) {
 	switch flt := flt.(type) {
 	case key.FocusFilter:
 		f.focusable = true
+		f.trap = f.trap || flt.Trap
 	case pointer.Filter:
 		f.pointer.Add(flt)
 	case transfer.SourceFilter, transfer.TargetFilter:
@@ -670,6 +673,7 @@ func (f *filter) Add(flt event.Filter) {
 // Merge folds f2 into f.
 func (f *filter) Merge(f2 filter) {
 	f.focusable = f.focusable || f2.focusable
+	f.trap = f.trap || f2.trap
 	f.pointer.Merge(f2.pointer)
 }
 
@@ -1304,6 +1308,9 @@ func (q *Router) collect() {
 			// scroll area, a drop target -- would otherwise be a stop on the
 			// way through the interface with nothing to do when it is reached.
 			if s.filter.focusable {
+				if s.filter.trap && s.key.orderPlusOne == 0 {
+					kq.trap = len(kq.order)
+				}
 				kq.inputOp(tag, &s.key, t, a, b)
 			}
 

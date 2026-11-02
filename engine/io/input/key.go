@@ -61,6 +61,9 @@ type keyQueue struct {
 	// constraints, and following it would make the tab order change with the
 	// window size.
 	order []event.Tag
+	// trap is where in order the last handler that asked to keep Tab inside
+	// itself was declared, and zero when none did. Tab walks order[trap:].
+	trap int
 	// dirOrder is the same handlers arranged in rows for the arrow keys, where
 	// what matters is where they ended up rather than when they were declared.
 	dirOrder []dirFocusEntry
@@ -147,6 +150,7 @@ func (k *keyHandler) Reset() {
 func (q *keyQueue) Reset() {
 	q.order = q.order[:0]
 	q.dirOrder = q.dirOrder[:0]
+	q.trap = 0
 }
 
 // ResetEvent answers the one event a handler gets for having asked about focus
@@ -255,19 +259,29 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 		if len(q.order) == 0 {
 			break
 		}
+		// Tab walks what a trap declares and nothing before it. A focus that is
+		// outside the region -- the page under a modal panel -- enters it at the
+		// end it is walking towards.
+		lo := q.trap
+		region := len(q.order) - lo
 		order := 0
 		if dir == key.FocusBackward {
 			order = -1
 		}
 		if placed {
-			order = handlers[state.focus].key.orderPlusOne - 1
-			if dir == key.FocusForward {
-				order++
-			} else {
-				order--
+			at := handlers[state.focus].key.orderPlusOne - 1 - lo
+			switch {
+			case at < 0 && dir == key.FocusForward:
+				order = 0
+			case at < 0:
+				order = -1
+			case dir == key.FocusForward:
+				order = at + 1
+			default:
+				order = at - 1
 			}
 		}
-		order = (order + len(q.order)) % len(q.order)
+		order = (order+region)%region + lo
 		return q.Focus(handlers, state, q.order[order])
 	case key.FocusRight, key.FocusLeft:
 		next := order

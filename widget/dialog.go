@@ -127,8 +127,42 @@ func (p DialogProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 		return ayra.Dimensions{}
 	}
 
-	area := c.Constraints.Max
-	state.overlay(c, area, p.Modal, p.Modal || p.Dismissible)
+	// In a window the dialog covers the window, not the box it was called from:
+	// it is recorded and drawn over the screen once the screen is done. A
+	// context with no window gives it the room it was given.
+	return inWindow(c, func(c ayra.Context, window image.Rectangle) ayra.Dimensions {
+		return p.place(c, state, content, window)
+	})
+}
+
+// inWindow runs draw over the window when there is one to draw over, and
+// answers what the caller is owed: nothing, since an overlay takes no room in
+// the box that opened it, or what draw answered when it drew in place.
+//
+// draw is handed a context whose room is the area the screen was given, whose
+// origin is that area's corner, and the window as a rectangle in those
+// coordinates -- the strips under the system bars are negative.
+func inWindow(c ayra.Context, draw func(ayra.Context, image.Rectangle) ayra.Dimensions) ayra.Dimensions {
+	if c.Overlay == nil {
+		return draw(c, image.Rectangle{Max: c.Constraints.Max})
+	}
+
+	safe, window := c.Overlay.Safe, c.Overlay.Window
+	inner := c
+	inner.Constraints = layout.Exact(safe.Size())
+
+	recording := op.Record(c.Ops)
+	at := op.Offset(safe.Min).Push(c.Ops)
+	draw(inner, window.Sub(safe.Min))
+	at.Pop()
+	c.Overlay.Add(recording.Stop())
+	return ayra.Dimensions{}
+}
+
+// place draws the scrim over the window and the panel in the room the context
+// has.
+func (p DialogProps) place(c ayra.Context, state *Dialog, content ayra.Widget, window image.Rectangle) ayra.Dimensions {
+	state.overlay(c, window, p.Modal, p.Modal || p.Dismissible)
 
 	width := p.Width
 	if width == 0 {
@@ -204,14 +238,14 @@ func (d *Dialog) scrolled(c ayra.Context, content ayra.Widget) ayra.Dimensions {
 // reached the barrier too, as a press outside: the dialog closed on the tap that
 // was meant for its own button, before the button answered. Drawn as a sibling,
 // the panel is not enclosed by the barrier, and a press on it never reaches it.
-func (d *Dialog) overlay(c ayra.Context, area image.Point, modal, listening bool) {
-	defer clip.Rect{Max: area}.Push(c.Ops).Pop()
+func (d *Dialog) overlay(c ayra.Context, area image.Rectangle, modal, listening bool) {
+	defer clip.Rect(area).Push(c.Ops).Pop()
 
 	if modal {
 		// The scrim, and the barrier behind it. Painting one without the other
 		// is the mistake that produces a dialog somebody can click straight
 		// through: it looks modal and is not.
-		paint.FillShape(c.Ops, scrim(), clip.Rect{Max: area}.Op())
+		paint.FillShape(c.Ops, scrim(), clip.Rect(area).Op())
 		d.outside.Add(c.Ops)
 		event.Op(c.Ops, &d.outside)
 	}
@@ -235,9 +269,20 @@ func (d *Dialog) dismiss(c ayra.Context, modal, dismissible bool) {
 	// the person just touched inside the sheet, and the field would never keep
 	// what is typed. Escape is read whatever holds the focus, for the same
 	// reason -- it has to close the dialog from inside a field as well.
-	if dismissible && !d.focused {
-		d.focused = true
-		c.Execute(key.FocusCmd{Tag: d})
+	if modal || dismissible {
+		// The panel is a stop of its own, and a modal one is the trap: Tab
+		// walks what is declared from here on, which is the panel's content,
+		// and never the page the scrim covers. Reading the filter is what
+		// asks for it.
+		for {
+			if _, ok := c.Event(key.FocusFilter{Target: d, Trap: modal}); !ok {
+				break
+			}
+		}
+		if !d.focused {
+			d.focused = true
+			c.Execute(key.FocusCmd{Tag: d})
+		}
 	}
 	if dismissible || modal {
 		for {

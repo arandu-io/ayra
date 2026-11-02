@@ -19,6 +19,8 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 	for _, s := range []sample{
 		{screen: screen{name: "dialog-phone", width: 390, height: 640, draw: dialogPhoneScreen}},
 		{screen: screen{name: "dialog-phone-keyboard", width: 390, height: 440, draw: dialogTallScreen}},
+		{screen: screen{name: "dialog-over-bars", width: 390, height: 640, draw: dialogOverBars}},
+		{screen: screen{name: "drawer-over-bars", width: 390, height: 640, draw: drawerOverBars}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -130,4 +132,78 @@ func popoverRowScreen() ayra.Widget {
 			)
 		})
 	}
+}
+
+// appFrame draws what an application is wrapped in -- a bar across the top and a
+// tab bar across the bottom -- around a card, and hands the card a box 120 points
+// high to draw its overlay in. The overlay is called from inside the card, as it
+// is from a row of a list.
+func appFrame(overlay func(c ayra.Context)) ayra.Widget {
+	var tabs widget.Tabs
+	return func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min = image.Point{}
+		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: 14, Bottom: 14, Left: 16, Right: 16}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return line("Câmeras", widget.Heading, true)(c.With(gtx))
+				})
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				size := gtx.Constraints.Max
+				layout.Inset{Left: 16, Right: 16, Top: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Max.Y = 120
+					inner := c.With(gtx)
+					line("Portão principal: 8 leituras por minuto.", widget.Body, false)(inner)
+					overlay(inner)
+					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, 120)}
+				})
+				return layout.Dimensions{Size: size}
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				return widget.TabsProps{Labels: []string{"Início", "Câmeras", "Leituras"}}.Layout(c.With(gtx), &tabs)
+			}),
+		)
+	}
+}
+
+// dialogOverBars is a dialog opened from inside a card: its scrim covers the bar
+// across the top and the tab bar across the bottom as well.
+func dialogOverBars() ayra.Widget {
+	var state widget.Dialog
+	var confirm, cancel widget.Button
+	state.Open()
+	return appFrame(func(c ayra.Context) {
+		widget.DialogProps{Modal: true, Dismissible: true}.Layout(c, &state, func(c ayra.Context) ayra.Dimensions {
+			return column(c, 300,
+				line("Excluir câmera", widget.Heading, true),
+				spacer(6),
+				line("As leituras dela continuam no histórico.", widget.Body, false),
+				spacer(14),
+				button(widget.ButtonProps{Label: "Excluir", Variant: widget.Destructive}, &confirm),
+				spacer(8),
+				button(widget.ButtonProps{Label: "Manter", Variant: widget.Outline}, &cancel),
+			)
+		})
+	})
+}
+
+// drawerOverBars is a sheet of filters opened from inside a card.
+func drawerOverBars() ayra.Widget {
+	var state widget.Dialog
+	var apply, clear widget.Button
+	state.Open()
+	return appFrame(func(c ayra.Context) {
+		widget.DrawerProps{Side: widget.Bottom, Size: 260, Modal: true, Dismissible: true}.Layout(c, &state, func(c ayra.Context) ayra.Dimensions {
+			return column(c, 340,
+				line("Filtros", widget.Heading, true),
+				spacer(8),
+				line("Mostrar só as leituras de uma câmera.", widget.Body, false),
+				spacer(14),
+				button(widget.ButtonProps{Label: "Aplicar"}, &apply),
+				spacer(8),
+				button(widget.ButtonProps{Label: "Limpar", Variant: widget.Outline}, &clear),
+			)
+		})
+	})
 }

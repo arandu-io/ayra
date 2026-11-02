@@ -96,7 +96,12 @@ func Draw(o Options, screen ayra.Widget) (*image.RGBA, error) {
 		ops.Reset()
 
 		gtx := app.NewContext(&ops, frameEvent(o, pixels, source))
+		overlay := &ayra.Overlay{
+			Window: image.Rectangle{Max: pixels},
+			Safe:   image.Rectangle{Max: pixels},
+		}
 		c := ayra.Context{
+			Overlay:    overlay,
 			Context:    gtx,
 			Theme:      palette,
 			Shaper:     shaper,
@@ -110,6 +115,7 @@ func Draw(o Options, screen ayra.Widget) (*image.RGBA, error) {
 		c.Fill(palette.Colours.Background)
 
 		screen(c)
+		overlay.Flush(gtx.Ops)
 		source = gtx.Source
 
 		if err := window.Frame(&ops); err != nil {
