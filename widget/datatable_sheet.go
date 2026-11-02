@@ -245,7 +245,6 @@ func (p DataTableProps) sheetLayout(c ayra.Context, state *DataTable) {
 		state.m.sheet.Close()
 		return
 	}
-	p.readSorts(c, state)
 
 	content := func(c ayra.Context) ayra.Dimensions { return p.sheet(c, state) }
 	if c.Constraints.Max.Y < boundedHeight {
@@ -255,30 +254,6 @@ func (p DataTableProps) sheetLayout(c ayra.Context, state *DataTable) {
 		return
 	}
 	content(c)
-}
-
-// readSorts cycles the order of the column whose line was pressed: ascending,
-// descending, none.
-func (p DataTableProps) readSorts(c ayra.Context, state *DataTable) {
-	for len(state.m.sorts) < len(p.Columns) {
-		state.m.sorts = append(state.m.sorts, Button{})
-	}
-	for i, column := range p.Columns {
-		if !column.Sortable || column.Key == "" || !state.m.sorts[i].Clicked(c) {
-			continue
-		}
-		switch {
-		case state.query.Sort.Key != column.Key:
-			state.query.Sort = Sort{Key: column.Key}
-		case !state.query.Sort.Descending:
-			state.query.Sort.Descending = true
-		default:
-			state.query.Sort = Sort{}
-		}
-		state.query.Page = 1
-		state.pages.Show(1)
-		state.fetch(c, p)
-	}
 }
 
 // sheet is what is inside the sheet: a title, the sections, and the two buttons.
@@ -291,40 +266,6 @@ func (p DataTableProps) sheet(c ayra.Context, state *DataTable) ayra.Dimensions 
 				return drawText(c.With(gtx), label, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, semibold())
 			})
 		})
-	}
-
-	if p.sortable() {
-		for len(state.m.sorts) < len(p.Columns) {
-			state.m.sorts = append(state.m.sorts, Button{})
-		}
-		sections = append(sections, heading(orDefault(p.Words.SortBy, "Sort by")))
-		for i, column := range p.Columns {
-			if !column.Sortable || column.Key == "" {
-				continue
-			}
-			i, column := i, column
-			sections = append(sections, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return state.m.sorts[i].click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Top: 8, Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-								return drawText(c.With(gtx), column.Title, unit.Sp(t.Type.Body), t.Colours.Foreground, 1, text.Start, plain())
-							}),
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								if state.query.Sort.Key != column.Key {
-									return layout.Dimensions{}
-								}
-								arrow := innerIcon("data-table", "ArrowUp")
-								if state.query.Sort.Descending {
-									arrow = innerIcon("data-table", "ArrowDown")
-								}
-								return drawInner(c.With(gtx), arrow, innerPixels(c, innerSide), t.Colours.Foreground, 0)
-							}),
-						)
-					})
-				})
-			}))
-		}
 	}
 
 	for _, facet := range p.Facets {

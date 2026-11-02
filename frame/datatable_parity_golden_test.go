@@ -19,6 +19,11 @@ import (
 
 func parityScreens() []screen {
 	return []screen{
+		{name: "listing-cards-bar", width: 390, height: 560, draw: func() ayra.Widget { return barListing(390, 560, widget.ModeAuto, 8, false) }},
+		{name: "listing-card-long", width: 390, height: 420, draw: func() ayra.Widget { return barListing(390, 420, widget.ModeAuto, 2, true) }},
+		{name: "listing-table-narrow", width: 390, height: 420, draw: func() ayra.Widget { return barListing(390, 420, widget.ModeTable, 5, false) }},
+		{name: "listing-empty-cards", width: 390, height: 300, draw: func() ayra.Widget { return barListing(390, 300, widget.ModeAuto, 0, false) }},
+		{name: "listing-empty-table", width: 768, height: 300, draw: func() ayra.Widget { return barListing(768, 300, widget.ModeAuto, 0, false) }},
 		{name: "listing-cards-parity", width: 390, height: 700, draw: func() ayra.Widget { return parityListing(390, 700, 14, 6) }},
 		{name: "listing-one-row", width: 390, height: 330, draw: func() ayra.Widget { return parityListing(390, 330, 1, 6) }},
 		{name: "listing-table-parity", width: 768, height: 360, draw: func() ayra.Widget { return parityListing(768, 360, 14, 4) }},
@@ -111,6 +116,43 @@ func parityListing(width, height, rows, size int) ayra.Widget {
 	props.Selectable = width >= 600
 	if props.Selectable {
 		table.Select("ABC1D01", true)
+	}
+	warm(props, &table, width, height)
+	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &table) }
+}
+
+// barListing is a list of cameras with the controls Kyse keeps on a phone: columns
+// that order the list, a menu of columns, a value on two lines against its label,
+// and the sentence of an empty list long enough to need the box it stands in.
+func barListing(width, height int, mode widget.DataTableMode, rows int, long bool) ayra.Widget {
+	var table widget.DataTable
+	source := widget.SourceFunc(func(_ context.Context, q widget.Query) (widget.Result, error) {
+		var out []widget.Row
+		for i := 0; i < rows; i++ {
+			name := []string{"Cancela leste", "Doca de carga", "Garagem subsolo", "Portaria principal"}[i%4]
+			place := "Bloco B"
+			if long {
+				place = "Estacionamento subterrâneo do bloco B, corredor leste, próximo à rampa"
+			}
+			out = append(out, widget.Row{Key: fmt.Sprint(i), Cells: []string{name, "RTSP", place, "Data e hora " + fmt.Sprint(i)}})
+		}
+		return widget.Result{Rows: out, Total: len(out)}, nil
+	})
+	props := widget.DataTableProps{
+		Source: source, Searchable: true, Mode: mode,
+		Columns: []widget.DataColumn{
+			{Key: "name", Title: "Nome", Sortable: true, Flex: 2},
+			{Key: "protocol", Title: "Protocolo", Sortable: true, Hideable: true},
+			{Key: "place", Title: "Local", Hideable: true, Flex: 2},
+			{Key: "when", Title: "Data e hora", Sortable: true, Align: widget.End},
+		},
+		PageSizes: []int{25},
+		Words: widget.DataTableWords{
+			Search: "Nome ou local", Columns: "Colunas", Filters: "Filtros",
+			Empty:   "Nenhuma câmera foi encontrada com esses filtros. Limpe a busca ou escolha outro período.",
+			RowsOne: "{total} linha.", RowsMany: "{total} linhas.", PerPage: "{n} por página", Previous: "Anterior", Next: "Próxima",
+			Page: "Página {n} de {total}",
+		},
 	}
 	warm(props, &table, width, height)
 	return func(c ayra.Context) ayra.Dimensions { return props.Layout(c, &table) }

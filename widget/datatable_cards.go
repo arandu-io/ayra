@@ -14,6 +14,7 @@ import (
 	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/pointer"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
@@ -109,7 +110,6 @@ type tableExtras struct {
 	toggle    map[string]*Toggle
 	typed     map[string]*Input
 	span      map[string]*DateRange
-	sorts     []Button
 	seen      map[string]string
 	seenAt    map[string]time.Time
 	sheetList layout.List
@@ -231,6 +231,12 @@ func (p DataTableProps) cards(c ayra.Context, state *DataTable) ayra.Dimensions 
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.cardsToolbar(c.With(gtx), state) }),
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),
 		}
+		if p.hasBar() {
+			children = append(children,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.cardsBar(c.With(gtx), state) }),
+				layout.Rigid(layout.Spacer{Height: 8}.Layout),
+			)
+		}
 		list := func(gtx layout.Context) layout.Dimensions {
 			return p.cardsList(c.With(gtx), state, result, loaded, err, loading, more, bounded)
 		}
@@ -267,7 +273,7 @@ func (p DataTableProps) cardsToolbar(c ayra.Context, state *DataTable) ayra.Dime
 	t := c.Theme
 	style := t.Resolve("datatable", "toolbar", p.VariantName("default"), theme.Style{}, p.ComponentProps)
 	filtered := p.activeFilters(state)
-	hasSheet := len(p.Facets) > 0 || p.sortable()
+	hasSheet := len(p.Facets) > 0
 
 	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
 		children := []layout.FlexChild{}
@@ -304,6 +310,88 @@ func (p DataTableProps) cardsToolbar(c ayra.Context, state *DataTable) ayra.Dime
 	})
 }
 
+// hasBar says whether the cards have a bar under the search: the controls that
+// order the list, and the menu of columns.
+func (p DataTableProps) hasBar() bool { return len(p.sorts()) > 0 || len(p.hideable()) > 0 }
+
+// sorts is the positions of the columns the list can be ordered by and the table
+// shows.
+func (p DataTableProps) sorts() []int {
+	var list []int
+	for i, column := range p.Columns {
+		if column.Sortable && column.Key != "" && !column.off {
+			list = append(list, i)
+		}
+	}
+	return list
+}
+
+// cardsBar draws what Kyse keeps of the head of the table once it is cards: the bar
+// of controls that order the list, one for each column that can be ordered, marked
+// with the way it is, and beside it the menu of columns. A press on one orders by
+// the column, ascending, then descending, then as the source has it.
+func (p DataTableProps) cardsBar(c ayra.Context, state *DataTable) ayra.Dimensions {
+	t := c.Theme
+	style := t.Resolve("datatable", "header", p.VariantName("default"), theme.Style{}, p.ComponentProps)
+	if !style.Padding.IsSet() {
+		style.Padding = theme.InsetXY(4, 4)
+	}
+	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
+		columns := len(p.hideable()) > 0
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(c.Context,
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return p.sortRow(c.With(gtx), state)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if !columns {
+					return layout.Dimensions{}
+				}
+				return layout.Inset{Left: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return p.columnsMenu(c.With(gtx), state) })
+			}),
+		)
+	})
+}
+
+// sortRow lays the order controls out in a row that goes on to the next line
+// where the width ends, so that a table of many columns is not cut off at the
+// edge of the phone.
+func (p DataTableProps) sortRow(c ayra.Context, state *DataTable) ayra.Dimensions {
+	inner := c
+	inner.Constraints.Min = image.Point{}
+	gap := c.Dp(4)
+	type placed struct {
+		draw op.CallOp
+		size image.Point
+	}
+	var items []placed
+	for _, i := range p.sorts() {
+		column := p.Columns[i]
+		arrow := innerIcon("data-table", "ArrowsDownUp")
+		if state.query.Sort.Key == column.Key {
+			arrow = innerIcon("data-table", "ArrowUp")
+			if state.query.Sort.Descending {
+				arrow = innerIcon("data-table", "ArrowDown")
+			}
+		}
+		record := op.Record(c.Ops)
+		dims := ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(inner, &state.headers[i])
+		items = append(items, placed{record.Stop(), dims.Size})
+	}
+	var x, y, line, width int
+	for _, item := range items {
+		if x > 0 && x+item.size.X > c.Constraints.Max.X {
+			x, y, line = 0, y+line+gap, 0
+		}
+		offset := op.Offset(image.Pt(x, y)).Push(c.Ops)
+		item.draw.Add(c.Ops)
+		offset.Pop()
+		x += item.size.X + gap
+		width = max(width, x-gap)
+		line = max(line, item.size.Y)
+	}
+	return ayra.Dimensions{Size: image.Pt(width, y+line)}
+}
+
 // sortable says whether any column can be ordered.
 func (p DataTableProps) sortable() bool {
 	for _, column := range p.Columns {
@@ -319,12 +407,12 @@ func (p DataTableProps) sortable() bool {
 // column that can is -1, and draws no title.
 func (p DataTableProps) primary() int {
 	for i, column := range p.Columns {
-		if column.Primary {
+		if column.Primary && !column.off {
 			return i
 		}
 	}
 	for i, column := range p.Columns {
-		if !column.CardHidden {
+		if !column.CardHidden && !column.off {
 			return i
 		}
 	}
@@ -343,7 +431,6 @@ func (p DataTableProps) blank(row Row, column int) bool {
 
 // cardsList draws the state of the list -- loading, failed, empty -- or the cards.
 func (p DataTableProps) cardsList(c ayra.Context, state *DataTable, result Result, loaded bool, err error, loading, more, bounded bool) ayra.Dimensions {
-	t := c.Theme
 	switch {
 	case err != nil:
 		return p.failure(c, state, err)
@@ -358,13 +445,7 @@ func (p DataTableProps) cardsList(c ayra.Context, state *DataTable, result Resul
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
 	case len(result.Rows) == 0:
-		empty := t.Resolve("datatable", "empty", p.VariantName("default"), theme.Style{}, p.ComponentProps)
-		return Surface(c, empty, func(c ayra.Context) ayra.Dimensions {
-			c.Constraints.Min.X = c.Constraints.Max.X
-			return layout.Inset{Top: 24, Bottom: 24}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-				return drawText(c.With(gtx), orDefault(p.Words.Empty, "No results."), unit.Sp(t.Type.Body), t.Colours.MutedForeground, 1, text.Middle, plain())
-			})
-		})
+		return p.emptyState(c)
 	}
 
 	n := len(result.Rows)
@@ -417,6 +498,24 @@ func (p DataTableProps) cardsList(c ayra.Context, state *DataTable, result Resul
 		state.next(c, p)
 	}
 	return dims
+}
+
+// emptyState is what a list with nothing in it says, the same in the table and in
+// the cards and in every list of an application: the sentence centred, across and
+// down, in a box 96 points tall, as Kyse's DataTable draws its "No results." cell
+// (h-24, text-center). A sentence longer than the line wraps inside the box, and
+// does not run off it or stand against the left edge.
+func (p DataTableProps) emptyState(c ayra.Context) ayra.Dimensions {
+	t := c.Theme
+	empty := t.Resolve("datatable", "empty", p.VariantName("default"), theme.Style{}, p.ComponentProps)
+	return Surface(c, empty, func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min = image.Pt(c.Constraints.Max.X, c.Dp(96))
+		return layout.Center.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: 8, Right: 8, Top: 8, Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return drawText(c.With(gtx), orDefault(p.Words.Empty, "No results."), unit.Sp(t.Type.Body), t.Colours.MutedForeground, 0, text.Middle, plain())
+			})
+		})
+	})
 }
 
 // tail is what stands under the last card: the line that says the list ended, the
@@ -503,7 +602,7 @@ func (p DataTableProps) card(c ayra.Context, state *DataTable, row Row, index in
 	// of the card under a rule. A row with neither has no foot.
 	foot := []int{}
 	for i, column := range p.Columns {
-		if column.Actions && i != title && !column.CardHidden && !p.blank(row, i) {
+		if column.Actions && i != title && !column.CardHidden && !column.off && !p.blank(row, i) {
 			foot = append(foot, i)
 		}
 	}
@@ -516,7 +615,7 @@ func (p DataTableProps) card(c ayra.Context, state *DataTable, row Row, index in
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.cell(c.With(gtx), row, title, true, false) }))
 			}
 			for i, column := range p.Columns {
-				if i == title || column.CardHidden || column.Actions || p.blank(row, i) {
+				if i == title || column.CardHidden || column.off || column.Actions || p.blank(row, i) {
 					continue
 				}
 				i, column := i, column
@@ -652,27 +751,20 @@ func (p DataTableProps) actionsWidth(c ayra.Context) int {
 
 // cells draws the values of a row in the table's columns, with the widgets of the
 // columns that have one.
-func (p DataTableProps) cells(c ayra.Context, grid TableProps, row Row) ayra.Dimensions {
-	custom := false
-	for _, column := range p.Columns {
-		custom = custom || column.Cell != nil
-	}
-	if !custom {
-		return grid.row(c, row.Cells, 8, false)
-	}
+func (p DataTableProps) cells(c ayra.Context, row Row) ayra.Dimensions {
+	widths := p.columnWidths(c, c.Constraints.Max.X)
 	children := make([]layout.FlexChild, 0, len(p.Columns))
 	for i, column := range p.Columns {
 		i, column := i, column
-		share := column.Flex
-		if share == 0 {
-			share = 1
+		if column.off {
+			continue
 		}
-		children = append(children, layout.Flexed(share, func(gtx layout.Context) layout.Dimensions {
-			// The cell takes the share it was allotted whatever it draws, so the
-			// columns of every row stand under their headings: a flex places the
-			// next child after what this one took and not after what it was given.
-			share := gtx.Constraints.Max.X
-			gtx.Constraints.Min.X = share
+		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			// The cell takes the width its column was given whatever it draws, the
+			// width the heading was given, so the columns of every row stand under
+			// their headings.
+			share := widths[i]
+			gtx.Constraints.Min.X, gtx.Constraints.Max.X = share, share
 			dims := layout.Inset{Top: 8, Bottom: 8, Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				// The cell is placed inside the whole share, so an End or Middle column
 				// puts its content at that edge and not at the start.

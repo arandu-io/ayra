@@ -196,3 +196,139 @@ func TestAFailureAfterTheFirstAnswerIsSaid(t *testing.T) {
 		t.Errorf("the rows of the question before were drawn %d times under a failure", drawn)
 	}
 }
+
+// A heading is given the width its title needs, and the rest of the row is shared
+// by the columns' Flex: "Data e hora" is not broken over two lines to make room
+// for a value, and a column that would be narrower takes the title's width.
+func TestAHeadingIsGivenTheWidthItNeeds(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		total  int
+		shares []float32
+		mins   []int
+		want   []int
+	}{
+		{"every share is wide enough", 300, []float32{1, 1, 1}, []int{10, 10, 10}, []int{100, 100, 100}},
+		{"one title needs more", 300, []float32{1, 1, 1}, []int{10, 160, 10}, []int{70, 160, 70}},
+		{"the rest shares what is left by its shares", 300, []float32{1, 1, 2}, []int{10, 150, 10}, []int{50, 150, 100}},
+		{"a column that is off takes no room", 200, []float32{1, -1, 1}, []int{10, 10, 10}, []int{100, 0, 100}},
+		{"titles that do not fit are scaled", 100, []float32{1, 1}, []int{80, 80}, []int{50, 50}},
+	} {
+		got := shareWidths(test.total, test.shares, test.mins)
+		sum := 0
+		for i := range got {
+			sum += got[i]
+			if got[i] != test.want[i] {
+				t.Errorf("%s: widths %v, want %v", test.name, got, test.want)
+				break
+			}
+		}
+		if sum != test.total {
+			t.Errorf("%s: the columns add up to %d of %d", test.name, sum, test.total)
+		}
+	}
+}
+
+// The table's heading never breaks: with a narrow row it is as tall as with a
+// wide one.
+func TestTheHeadingOfATableDoesNotBreakOverTwoLines(t *testing.T) {
+	c, _ := field(t, theme.Light, 360)
+	p := DataTableProps{Columns: []DataColumn{{Key: "a", Title: "Placa", Flex: 2}, {Key: "b", Title: "Câmera", Flex: 2}, {Key: "c", Title: "Data e hora", Align: End}}}
+	state := &DataTable{}
+	state.headers = make([]Button, 3)
+	narrow := p.headings(c, state, Result{}).Size.Y
+	wide, _ := field(t, theme.Light, 900)
+	if got := p.headings(wide, state, Result{}).Size.Y; narrow != got {
+		t.Errorf("the heading is %d tall in 360 points and %d in 900: it breaks over two lines", narrow, got)
+	}
+	widths := p.columnWidths(c, 360)
+	if need := headingWidth(c, "Data e hora"); widths[2] < need {
+		t.Errorf("the last column is %d wide, its title needs %d", widths[2], need)
+	}
+}
+
+// An empty list says so in a box: centred across and down, 96 points tall, and the
+// same in the table and in the cards, for a sentence of any length.
+func TestAnEmptyListIsCentredInABox(t *testing.T) {
+	short := DataTableProps{Words: DataTableWords{Empty: "Nada."}}
+	long := DataTableProps{Words: DataTableWords{Empty: "Nenhuma placa da lista de bloqueados foi vista ainda, volte quando houver passagens."}}
+	c, _ := field(t, theme.Light, 360)
+
+	a, b := short.emptyState(c), long.emptyState(c)
+	if a.Size.X != 360 || b.Size.X != 360 {
+		t.Errorf("the box is %d and %d wide, want the whole 360", a.Size.X, b.Size.X)
+	}
+	if a.Size.Y < 96 {
+		t.Errorf("the box of a short sentence is %d tall, want at least 96", a.Size.Y)
+	}
+	if b.Size.Y < a.Size.Y {
+		t.Errorf("a sentence that wraps drew a box %d tall, shorter than the short one's %d", b.Size.Y, a.Size.Y)
+	}
+}
+
+// A column switched off is not drawn, in the table or in the cards, and comes
+// back when it is switched on.
+func TestAColumnSwitchedOffIsNotDrawn(t *testing.T) {
+	drawn := 0
+	column := func(key string) DataColumn {
+		return DataColumn{Key: key, Title: key, Hideable: true, Cell: func(Row) ayra.Widget {
+			if key == "b" {
+				return func(c ayra.Context) ayra.Dimensions { drawn++; return ayra.Dimensions{Size: image.Pt(10, 10)} }
+			}
+			return nil
+		}}
+	}
+	p := DataTableProps{Columns: []DataColumn{{Key: "a", Title: "a"}, column("b")}}
+	row := Row{Key: "1", Cells: []string{"x", "y"}}
+	c, _ := field(t, theme.Light, 700)
+	state := &DataTable{}
+	state.rows, state.checks = make([]Button, 1), make([]Toggle, 1)
+
+	p.cells(c, row)
+	if drawn == 0 {
+		t.Fatal("the column is not drawn while it is showing")
+	}
+	drawn = 0
+	state.HideColumn("b", true)
+	hidden := p.shown(state)
+	hidden.cells(c, row)
+	hidden.card(c, state, row, 0, false)
+	if drawn != 0 {
+		t.Errorf("a column switched off was drawn %d times", drawn)
+	}
+	if !hidden.Columns[1].off || p.Columns[1].off {
+		t.Error("the table marked the caller's columns, or not its own")
+	}
+	state.HideColumn("b", false)
+	if shown := p.shown(state); shown.Columns[1].off {
+		t.Error("a column switched back on is still off")
+	}
+	if got := len(p.hideable()); got != 1 {
+		t.Errorf("the menu lists %d columns, want the one that is Hideable", got)
+	}
+}
+
+// The cards have the bar of order controls: one for each column that can be
+// ordered, so a phone orders the list without opening anything.
+func TestTheCardsCarryTheBarOfOrderControls(t *testing.T) {
+	columns := func(sortable bool) []DataColumn {
+		return []DataColumn{{Key: "a", Title: "Nome", Sortable: sortable}, {Key: "b", Title: "Local", Sortable: sortable}}
+	}
+	with, without := DataTableProps{Columns: columns(true)}, DataTableProps{Columns: columns(false)}
+	if !with.hasBar() || without.hasBar() {
+		t.Fatalf("the bar is drawn for %v and for %v, want sortable columns only", with.hasBar(), without.hasBar())
+	}
+	menu := DataTableProps{Columns: []DataColumn{{Key: "a", Title: "Nome", Hideable: true}}}
+	if !menu.hasBar() {
+		t.Error("a table with columns to switch off has no bar for their menu")
+	}
+	c, _ := field(t, theme.Light, 360)
+	state := &DataTable{}
+	state.headers = make([]Button, 2)
+	if h := with.cardsBar(c, state).Size.Y; h < 20 {
+		t.Errorf("the bar is %d tall, too short to hold the controls", h)
+	}
+	if got := with.sorts(); len(got) != 2 {
+		t.Errorf("the bar orders by %v, want both columns", got)
+	}
+}
