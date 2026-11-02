@@ -161,7 +161,7 @@ func (p OneTimeCodeProps) square(c ayra.Context, focus bool) theme.Style {
 	t, variant := c.Theme, p.VariantName("default")
 
 	style := t.Resolve("onetimecode", "square", variant, theme.Style{
-		Background:  theme.Colour(t.Colours.Background),
+		Background:  fieldFill(t),
 		Foreground:  theme.Colour(t.Colours.Foreground),
 		Border:      theme.Colour(t.Colours.Input),
 		BorderWidth: theme.Pt(1),

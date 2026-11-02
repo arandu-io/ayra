@@ -297,7 +297,7 @@ func GroupedParts() ComponentProps {
 func (p InputGroupProps) Layout(c ayra.Context, first ayra.Widget, rest ...ayra.Widget) ayra.Dimensions {
 	t := c.Theme
 	root := t.Resolve("inputgroup", "root", p.VariantName("default"), theme.Style{
-		Background: theme.Colour(t.Colours.Background),
+		Background: fieldFill(t),
 		Border:     theme.Colour(t.Colours.Input),
 		Radius:     theme.Pt(t.Metrics.Radius),
 	}, p.ComponentProps)

@@ -175,7 +175,7 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 	}
 
 	group := t.Resolve("password", "group", "default", theme.Style{
-		Background: theme.Colour(t.Colours.Background),
+		Background: fieldFill(t),
 		Border:     theme.Colour(border),
 		Radius:     theme.Pt(t.Metrics.Radius),
 	}, theme.Component{Parts: p.Parts})
