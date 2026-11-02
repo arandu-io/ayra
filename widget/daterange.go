@@ -152,8 +152,9 @@ func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dime
 		ink = c.Theme.Colours.Foreground
 	}
 
+	focused := !p.Disabled && c.Focused(&state.popover.open.click)
 	field := func(c ayra.Context) ayra.Dimensions {
-		return dateField(c, p.ComponentProps, "daterangepicker", "date-range-picker", label, ink, p.Disabled)
+		return dateField(c, p.ComponentProps, "daterangepicker", "date-range-picker", label, ink, p.Disabled, focused)
 	}
 	if p.Disabled {
 		state.popover.Close()
@@ -164,6 +165,7 @@ func (p DateRangePickerProps) Layout(c ayra.Context, state *DateRange) ayra.Dime
 		return p.panel(c, state)
 	})
 
+	fieldRing(c, dims, focused)
 	state.apply(p, c)
 	return dims
 }

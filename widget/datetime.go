@@ -241,8 +241,9 @@ func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimens
 		label, ink = text, c.Theme.Colours.Foreground
 	}
 
+	focused := !p.Disabled && c.Focused(&state.popover.open.click)
 	field := func(c ayra.Context) ayra.Dimensions {
-		return dateField(c, p.ComponentProps, "datetimepicker", "date-time-picker", label, ink, p.Disabled)
+		return dateField(c, p.ComponentProps, "datetimepicker", "date-time-picker", label, ink, p.Disabled, focused)
 	}
 	if p.Disabled {
 		state.popover.Close()
@@ -252,6 +253,8 @@ func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimens
 	dims := PopoverProps{Width: 320, Above: p.Above}.Layout(c, &state.popover, field, func(c ayra.Context) ayra.Dimensions {
 		return p.panel(c, state)
 	})
+
+	fieldRing(c, dims, focused)
 
 	if at := state.Value(p.Kind, p.Seconds); !at.Equal(state.seen) {
 		state.seen = at

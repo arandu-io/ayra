@@ -92,6 +92,8 @@ func screens() []screen {
 		{name: "surfaces", width: 360, height: 620, draw: surfaces},
 		{name: "choices", width: 360, height: 620, draw: choices},
 		{name: "select-form", width: 360, height: 420, draw: selectForm},
+		{name: "form-fields", width: 360, height: 420, draw: formFields},
+		{name: "segmented", width: 360, height: 200, draw: segmentedScreen},
 		{name: "indicators", width: 360, height: 500, draw: indicators},
 		{name: "lists", width: 360, height: 560, draw: lists},
 		{name: "forms", width: 360, height: 620, draw: forms},
@@ -663,6 +665,64 @@ func choices() ayra.Widget {
 			toggle(widget.SwitchProps{Label: "Two-step sign in"}, &states[5]),
 			spacer(8),
 			toggle(widget.SwitchProps{Label: "Unavailable", Disabled: true}, &states[7]),
+		)
+	}
+}
+
+// formFields draws a text field, a select, a day and a period one under the other,
+// which is a filter: they take the same fill, the same border and the same height,
+// so a row of them is one line.
+func formFields() ayra.Widget {
+	var name widget.Input
+	var plan widget.Select
+	plan.Choose(1)
+	var day widget.DatePicker
+	day.Select(reference)
+	var period widget.DateRange
+	var moment widget.DateTime
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Fields", widget.Heading, true),
+			spacer(10),
+			field(widget.InputProps{Placeholder: "Plate"}, &name),
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SelectProps{Options: []string{"Free", "Team", "Enterprise"}, Placeholder: "Plan"}.Layout(c, &plan)
+			},
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.DatePickerProps{Today: reference, DateFormat: "02/01/2006"}.Layout(c, &day)
+			},
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.DateRangePickerProps{Today: reference}.Layout(c, &period)
+			},
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.DateTimePickerProps{Today: reference}.Layout(c, &moment)
+			},
+		)
+	}
+}
+
+// segmentedScreen draws the bar of choices with the first chosen and with the
+// last, which is what tells whether the choice can be seen.
+func segmentedScreen() ayra.Widget {
+	var theme, days widget.Segments
+	days.Choose(2)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Segmented", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SegmentedProps{Options: []string{"Automático", "Claro", "Escuro"}}.Layout(c, &theme)
+			},
+			spacer(12),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.SegmentedProps{Options: []string{"Dom", "Seg", "Ter", "Qua", "Qui"}}.Layout(c, &days)
+			},
 		)
 	}
 }

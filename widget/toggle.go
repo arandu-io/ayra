@@ -180,8 +180,9 @@ func layoutToggle(c ayra.Context, state *Toggle, disabled bool, label string, ma
 		c.Context = c.Context.Disabled()
 	}
 
-	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		inner := c.With(gtx)
+	row := func(c ayra.Context) ayra.Dimensions {
+		gtx := c.Context
+		inner := c
 		inner.Constraints.Min = image.Point{}
 
 		// The first line of the label is what the mark is centred on. It is
@@ -223,8 +224,17 @@ func layoutToggle(c ayra.Context, state *Toggle, disabled bool, label string, ma
 		centred := op.Offset(image.Pt(0, (height-dims.Size.Y)/2)).Push(gtx.Ops)
 		row.Add(gtx.Ops)
 		centred.Pop()
-		return layout.Dimensions{Size: image.Pt(dims.Size.X, height), Baseline: dims.Baseline + (height-dims.Size.Y)/2}
-	})
+		return layout.Dimensions{Size: image.Pt(max(dims.Size.X, c.Constraints.Min.X), height), Baseline: dims.Baseline + (height-dims.Size.Y)/2}
+	}
+
+	if label == "" {
+		// A mark on its own is 18 points, or 36 by 20: the area that answers is
+		// grown to a finger and the picture does not move.
+		return TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+			return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+		}, row)
+	}
+	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return row(c.With(gtx)) })
 }
 
 // touchTarget is the least height, in dp, of a control a finger has to hit.

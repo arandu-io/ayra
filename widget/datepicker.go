@@ -121,12 +121,13 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 		// shown once, under a control the person can see is unavailable.
 		state.popover.Close()
 		state.seen = state.month.Selected()
-		return p.field(c, label, ink)
+		return p.field(c, label, ink, false)
 	}
 
+	focused := c.Focused(&state.popover.open.click)
 	dims := PopoverProps{Width: 320, Above: p.Above}.Layout(c, &state.popover,
 		func(c ayra.Context) ayra.Dimensions {
-			return p.field(c, label, ink)
+			return p.field(c, label, ink, focused)
 		},
 		func(c ayra.Context) ayra.Dimensions {
 			return CalendarProps{
@@ -137,6 +138,8 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 			}.Layout(c, &state.month)
 		},
 	)
+
+	fieldRing(c, dims, focused)
 
 	if chosen := state.month.Selected(); !chosen.Equal(state.seen) {
 		state.seen = chosen
@@ -153,11 +156,14 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 
 // field draws the closed control: the day, or what stands in for it, with the
 // border a text field has.
-func (p DatePickerProps) field(c ayra.Context, label string, ink color.NRGBA) ayra.Dimensions {
-	fill, border := c.Theme.Colours.Background, c.Theme.Colours.Border
+func (p DatePickerProps) field(c ayra.Context, label string, ink color.NRGBA, focused bool) ayra.Dimensions {
+	fill, border := fieldFill(c.Theme).NRGBA(), c.Theme.Colours.Input
 	if p.Disabled {
-		fill, border, ink = fade(fill), fade(border), fade(ink)
+		ground := c.Theme.Colours.Background
+		fill, border, ink = fadeOver(fill, ground), fadeOver(border, ground), fadeOver(ink, ground)
 		c.Context = c.Context.Disabled()
+	} else if focused {
+		border = c.Theme.Colours.Ring
 	}
 
 	return surface(c, fill, border, controlRadius(c), func(c ayra.Context) ayra.Dimensions {

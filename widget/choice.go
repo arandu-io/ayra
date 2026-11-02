@@ -122,18 +122,32 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 	}
 	caret := c.Theme.Colours.MutedForeground
 	if p.Disabled {
-		ink, caret = fade(ink), fade(caret)
+		ground := c.Theme.Colours.Background
+		ink, caret = fadeOver(ink, ground), fadeOver(caret, ground)
 	}
 
-	border := c.Theme.Colours.Border
+	// The border Kyse's select has is the input colour, as the text field's is, and
+	// the ring colour on the keyboard focus, with the ring around it.
+	border := c.Theme.Colours.Input
 	if p.Invalid {
 		border = c.Theme.Colours.Destructive
 	}
+	focused := !p.Disabled && c.Focused(&state.open.click)
+	if focused {
+		border = c.Theme.Colours.Ring
+	}
+	fill := fieldFill(c.Theme).NRGBA()
+	if p.Disabled {
+		fill = fadeOver(fill, c.Theme.Colours.Background)
+		border = fadeOver(border, c.Theme.Colours.Background)
+	}
 
-	return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		inner := c.With(gtx)
-		return surface(inner, inner.Theme.Colours.Background, border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-			return layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+	// The area that answers is grown to a finger; the field is drawn as it was.
+	dims := TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+		return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+	}, func(inner ayra.Context) ayra.Dimensions {
+		return surface(inner, fill, border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
+			return layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 				row := c.With(gtx)
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(row.Context,
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -148,6 +162,10 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 			})
 		})
 	})
+	if focused {
+		focusRing(c, dims.Size, controlRadius(c), c.Theme.Colours.Ring)
+	}
+	return dims
 }
 
 // label answers the text on the closed control, and whether it is a value
@@ -300,7 +318,7 @@ func (p NumberProps) layout(c ayra.Context, state *Stepper) ayra.Dimensions {
 			return layout.Inset{Left: 12, Right: 12}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				ink := c.Theme.Colours.Foreground
 				if p.Disabled {
-					ink = fade(ink)
+					ink = fadeOver(ink, c.Theme.Colours.Background)
 				}
 				return drawText(inner.With(gtx), strconv.Itoa(state.value), unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, mono())
 			})
