@@ -76,7 +76,7 @@ func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	}
 
 	area := c.Constraints.Max
-	state.overlay(c, area, p.Modal, p.Dismissible)
+	state.overlay(c, area, p.Modal, p.Modal || p.Dismissible)
 
 	size := p.Size
 	if size == 0 {
@@ -104,6 +104,9 @@ func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	offset.Pop()
 
 	_ = dims
+	// Read after the content, as the dialog does, so what is open over the
+	// drawer answers the back key first.
+	state.dismiss(c, p.Modal, p.Dismissible)
 	return ayra.Dimensions{Size: area}
 }
 
