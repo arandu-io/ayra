@@ -45,6 +45,16 @@
 
 ### Fixed
 
+- `internal/jni`: `Do` holds the goroutine to its thread. A `JNIEnv` is the
+  environment of one operating-system thread, and the scheduler could move the
+  function to another between two calls: on an emulator the machine answered with
+  `StackOverflowError` from a MediaCodec call and then aborted on a local
+  reference it found in no table, with the process gone. The live video and the
+  push registration both call Java through it.
+- `push` (Android): a package whose manifest lost the messaging component makes
+  `FirebaseMessaging.getInstance` throw a `NullPointerException`, and it threw
+  inside the permission's result callback. Any runtime failure there now answers
+  that the application has nothing to register with.
 - `TestHowMuchOfThisIsStillSomebodyElses` failed in CI from v0.7.0 and passed on
   every laptop. It skips when `gioui.org@v0.10.2` is not in the module cache, and
   the workflow fetches that tree, so the count is only real there: 66 files of the
