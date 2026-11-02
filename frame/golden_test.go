@@ -96,6 +96,7 @@ func screens() []screen {
 		{name: "select-form", width: 360, height: 420, draw: selectForm},
 		{name: "form-fields", width: 360, height: 420, draw: formFields},
 		{name: "segmented", width: 360, height: 200, draw: segmentedScreen},
+		{name: "breadcrumb-phone", width: 390, height: 360, draw: breadcrumbScreen},
 		{name: "indicators", width: 360, height: 500, draw: indicators},
 		{name: "lists", width: 360, height: 560, draw: lists},
 		{name: "forms", width: 360, height: 620, draw: forms},
@@ -774,6 +775,32 @@ func formFields() ayra.Widget {
 			spacer(8),
 			func(c ayra.Context) ayra.Dimensions {
 				return widget.DateTimePickerProps{Today: reference}.Layout(c, &moment)
+			},
+		)
+	}
+}
+
+// breadcrumbScreen draws a trail across a phone and the same trail in a slice of
+// 120 points, where a step has its least room and is cut with an ellipsis rather
+// than broken a letter to a line.
+func breadcrumbScreen() ayra.Widget {
+	var wide, narrow widget.Crumbs
+	steps := []string{"Workspace", "Projects", "Ayra", "Feedback", "Settings"}
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 358,
+			line("Phone", widget.Heading, true),
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.BreadcrumbProps{Steps: steps}.Layout(c, &wide)
+			},
+			spacer(18),
+			line("120 points", widget.Heading, true),
+			spacer(8),
+			func(c ayra.Context) ayra.Dimensions {
+				return column(c, 120, func(c ayra.Context) ayra.Dimensions {
+					return widget.BreadcrumbProps{Steps: []string{"Workspaces of the account", "Feedback", "Settings and billing"}}.Layout(c, &narrow)
+				})
 			},
 		)
 	}

@@ -173,3 +173,33 @@ func TestTheShadeOfAnIconIsAFifthOfTheInkInBothSchemes(t *testing.T) {
 
 // widgetInk is the text colour of a scheme.
 func widgetInk(scheme theme.Scheme) color.NRGBA { return theme.New(scheme).Colours.Foreground }
+
+// TestAStepOfTheBreadcrumbIsNotSetALetterToALineInANarrowColumn is the trail in a
+// slice of a toolbar: the step was offered what the caret left of a column of 75
+// points, less than the word, and broke it after every letter. A step has at least
+// 48 points to be laid out in, and one that does not fit is cut with an ellipsis.
+func TestAStepOfTheBreadcrumbIsNotSetALetterToALineInANarrowColumn(t *testing.T) {
+	c, _ := frame(t, theme.Light, 75)
+	var state widget.Crumbs
+
+	got := widget.BreadcrumbProps{Steps: []string{"Feedback", "Workspaces and the projects of the whole account", "Billing"}}.Layout(c, &state).Size
+
+	// Each step is a line of its own at this width. The two links are as tall as a
+	// finger and the page is one line of text: a step broken into letters, or into
+	// words, is taller.
+	if got.Y < 2*44 || got.Y > 2*44+20 {
+		t.Errorf("the trail is %d tall, want two fingers and a line: a step is on one line", got.Y)
+	}
+	if got.X > 90 {
+		t.Errorf("the trail is %d wide in a column of 75", got.X)
+	}
+
+	// The page the person is on is never left out, and in a column of 60 -- less
+	// than the caret and the word -- it still has a step's room and is one line.
+	narrow, _ := frame(t, theme.Light, 60)
+	var again widget.Crumbs
+	page := widget.BreadcrumbProps{Steps: []string{"Home", "Settings"}}.Layout(narrow, &again).Size
+	if page.Y > 44+20 {
+		t.Errorf("a page in a column of 60 is %d tall with its link, want a finger and one line", page.Y)
+	}
+}

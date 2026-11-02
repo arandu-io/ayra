@@ -12,6 +12,10 @@ import (
 	"github.com/arandu-io/ayra/theme"
 )
 
+// breadcrumbStep is the least width, in points, a step of a breadcrumb is laid
+// out in, however narrow the column it is in.
+const breadcrumbStep unit.Dp = 48
+
 // Crumbs is the state half of a breadcrumb: the press on each step.
 type Crumbs struct {
 	clicks []engine.Clickable
@@ -70,6 +74,14 @@ func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 	}
 	pieces := make([]piece, 0, len(p.Steps))
 	least := c.Dp(touchTarget)
+
+	// What a step may be laid out in: the line, less the caret before it, and never
+	// less than breadcrumbStep. A step offered the few points a narrow column had
+	// left was set a letter to a line; one that does not fit in this is cut with an
+	// ellipsis -- the page the person is on included, which is cut and never left
+	// out.
+	caret := c.Dp(unit.Dp(12 + innerSideSmall))
+	stepRoom := max(c.Constraints.Max.X-caret, c.Dp(breadcrumbStep))
 	for index, step := range p.Steps {
 		index, step := index, step
 		recording := op.Record(c.Ops)
@@ -86,9 +98,10 @@ func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Min = image.Point{}
+				gtx.Constraints.Max.X = stepRoom
 				in := c.With(gtx)
 				if index == len(p.Steps)-1 {
-					return drawText(in, step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.Foreground, 0, text.Start, semibold())
+					return drawText(in, step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.Foreground, 1, text.Start, semibold())
 				}
 				// The press area is as high as a finger, and the words are in
 				// the middle of it.
@@ -97,7 +110,7 @@ func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							gtx.Constraints.Min = image.Point{}
-							return drawText(c.With(gtx), step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 0, text.Start, plain())
+							return drawText(c.With(gtx), step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
 						}),
 					)
 				})
