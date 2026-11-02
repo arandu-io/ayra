@@ -38,6 +38,10 @@ type Input struct {
 // Text is what the field holds.
 func (i *Input) Text() string { return i.editor.Text() }
 
+// Focused reports whether the field holds the keyboard, for a group that draws
+// the ring around its controls.
+func (i *Input) Focused(c ayra.Context) bool { return c.Focused(&i.editor) }
+
 // SetText replaces what the field holds, and puts the caret at the start of it.
 func (i *Input) SetText(s string) { i.editor.SetText(s) }
 

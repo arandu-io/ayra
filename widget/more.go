@@ -2,6 +2,7 @@ package widget
 
 import (
 	"fmt"
+	"image"
 	"strings"
 	"time"
 
@@ -279,18 +280,54 @@ type InputGroupProps struct {
 	// ComponentProps is what the caller changes on this one instance. It
 	// publishes one part, "root", the shared border.
 	ComponentProps
+	// Focused draws the group's border as the focus ring does. The group cannot
+	// know that a control inside it holds the keyboard, and the controls inside
+	// draw no border of their own, so the caller says it: [Input.Focused] and
+	// [Masked.Focused] answer it.
+	Focused bool
+	// Invalid draws the group's border as rejected.
+	Invalid bool
 }
 
 // PartNames are the parts this widget publishes, by the names the web
 // component publishes in data-part.
 func (p InputGroupProps) PartNames() []string { return []string{"root"} }
 
+// InputAddonProps is a prefix or a suffix of an [InputGroupProps]: a currency
+// sign before an amount, a domain after a name -- Kyse's "addon". It is the text
+// in the muted ink with the room Kyse gives it at either side, which a bare text
+// put in the group had not: the text touched the group's border.
+type InputAddonProps struct {
+	// ComponentProps is what the caller changes on this one instance. It
+	// publishes one part, "root".
+	ComponentProps
+	// Text is what is written.
+	Text string
+}
+
+// PartNames are the parts this widget publishes, by the names the web
+// component publishes in data-part.
+func (p InputAddonProps) PartNames() []string { return []string{"root"} }
+
+// Layout draws the addon and returns the room it took.
+func (p InputAddonProps) Layout(c ayra.Context) ayra.Dimensions {
+	style := c.Theme.Resolve("inputaddon", "root", p.VariantName("default"), theme.Style{
+		Foreground: theme.Colour(c.Theme.Colours.MutedForeground),
+		Padding:    theme.InsetXY(12, 0),
+	}, p.ComponentProps)
+	c.Constraints.Min = image.Point{}
+	return insetOf(style.Padding).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+		return drawPart(c.With(gtx), p.Text, style, unit.Sp(c.Theme.Type.Body), 1, text.Start, plain())
+	})
+}
+
 // GroupedParts is the style a control takes inside a group: no border, no
 // background, no corners of its own.
 func GroupedParts() ComponentProps {
-	return ComponentProps{Parts: theme.Parts{
-		"root": {Border: theme.Transparent, Background: theme.Transparent, Radius: theme.Pt(0)},
-	}}
+	// Focus and invalid are bare too: a control that held the keyboard drew a
+	// square ring inside the group's rounded one.
+	bare := theme.Style{Border: theme.Transparent, Background: theme.Transparent, Radius: theme.Pt(0)}
+	return ComponentProps{Parts: theme.Parts{"root": bare, "focus": bare, "invalid": bare}}
 }
 
 // Layout draws the group. The first widget takes the room the others leave.
@@ -301,6 +338,12 @@ func (p InputGroupProps) Layout(c ayra.Context, first ayra.Widget, rest ...ayra.
 		Border:     theme.Colour(t.Colours.Input),
 		Radius:     theme.Pt(t.Metrics.Radius),
 	}, p.ComponentProps)
+	switch {
+	case p.Invalid && !p.ComponentProps.Parts["root"].Border.IsSet():
+		root.Border = theme.Colour(t.Colours.Destructive)
+	case p.Focused && !p.ComponentProps.Parts["root"].Border.IsSet():
+		root.Border = theme.Colour(t.Colours.Ring)
+	}
 
 	return Surface(c, root, func(c ayra.Context) ayra.Dimensions {
 		children := []layout.FlexChild{layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return first(c.With(gtx)) })}
