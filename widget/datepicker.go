@@ -10,13 +10,22 @@ import (
 	"github.com/arandu-io/ayra/engine/unit"
 )
 
-// DateFormat is how a chosen day is written on the control.
+// DateFormat is how a chosen day is written on the control when neither the
+// props nor the theme's locale say otherwise.
 //
-// It is the ISO order rather than a local one, and that is a decision the
-// control has to make for itself: the two common local orders put the day and
-// the month in opposite places, so a date written in either is read wrongly by
-// half the people who see it. Year, month, day is ambiguous to nobody.
+// It is the ISO order rather than a local one, and that is the decision for a
+// control that does not know where it is: the two common local orders put the
+// day and the month in opposite places, so a date written in either is read
+// wrongly by half the people who see it. Year, month, day is ambiguous to
+// nobody. An application that knows its people writes the order they do, once,
+// in the theme's [theme.Locale] (DateLayout), and every picker follows.
 const DateFormat = "2006-01-02"
+
+// dayLayout is the Go reference layout a day is written in: the one the caller
+// gave, otherwise the locale's, otherwise the ISO order.
+func dayLayout(c ayra.Context, given string) string {
+	return orDefault(given, orDefault(c.Theme.Locale.DateLayout, DateFormat))
+}
 
 // DatePicker is the state of a field that opens a month to choose from.
 type DatePicker struct {
@@ -69,6 +78,10 @@ type DatePickerProps struct {
 	Today    time.Time
 	Min, Max time.Time
 	Monday   bool
+	// DateFormat is the Go reference layout the field writes the day in:
+	// "02/01/2006" for the Brazilian one. Empty takes the theme's locale, and
+	// then [DateFormat].
+	DateFormat string
 	// Disabled draws it as unavailable and stops it opening.
 	Disabled bool
 	// Above opens the month upwards, for a field near the foot of a page.
@@ -94,7 +107,7 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 	}
 	ink := c.Theme.Colours.MutedForeground
 	if day := state.month.Selected(); !day.IsZero() {
-		label = day.Format(DateFormat)
+		label = day.Format(dayLayout(c, p.DateFormat))
 		ink = c.Theme.Colours.Foreground
 	}
 
@@ -108,12 +121,13 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 		// shown once, under a control the person can see is unavailable.
 		state.popover.Close()
 		state.seen = state.month.Selected()
-		return p.field(c, label, ink)
+		return p.field(c, label, ink, false)
 	}
 
+	focused := c.Focused(&state.popover.open.click)
 	dims := PopoverProps{Width: 320, Above: p.Above}.Layout(c, &state.popover,
 		func(c ayra.Context) ayra.Dimensions {
-			return p.field(c, label, ink)
+			return p.field(c, label, ink, focused)
 		},
 		func(c ayra.Context) ayra.Dimensions {
 			return CalendarProps{
@@ -124,6 +138,8 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 			}.Layout(c, &state.month)
 		},
 	)
+
+	fieldRing(c, dims, focused)
 
 	if chosen := state.month.Selected(); !chosen.Equal(state.seen) {
 		state.seen = chosen
@@ -140,11 +156,14 @@ func (p DatePickerProps) layout(c ayra.Context, state *DatePicker) ayra.Dimensio
 
 // field draws the closed control: the day, or what stands in for it, with the
 // border a text field has.
-func (p DatePickerProps) field(c ayra.Context, label string, ink color.NRGBA) ayra.Dimensions {
-	fill, border := c.Theme.Colours.Background, c.Theme.Colours.Border
+func (p DatePickerProps) field(c ayra.Context, label string, ink color.NRGBA, focused bool) ayra.Dimensions {
+	fill, border := fieldFill(c.Theme).NRGBA(), c.Theme.Colours.Input
 	if p.Disabled {
-		fill, border, ink = fade(fill), fade(border), fade(ink)
+		ground := c.Theme.Colours.Background
+		fill, border, ink = fadeOver(fill, ground), fadeOver(border, ground), fadeOver(ink, ground)
 		c.Context = c.Context.Disabled()
+	} else if focused {
+		border = c.Theme.Colours.Ring
 	}
 
 	return surface(c, fill, border, controlRadius(c), func(c ayra.Context) ayra.Dimensions {

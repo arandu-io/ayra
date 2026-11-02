@@ -67,12 +67,19 @@ func (p SliderProps) layout(c ayra.Context, state *Slider) ayra.Dimensions {
 	// given and writes the value. The margin is half a knob, so a press just
 	// past the end of the track still takes hold of the handle rather than
 	// jumping it.
-	c.Constraints.Min = image.Pt(width, height)
+	//
+	// The area is as tall as a finger, 44 points, and the track is drawn as it was:
+	// the area is moved up by what it adds and made that much taller, and only the
+	// horizontal position is read from a press, so nothing else moves.
+	grow := max(c.Dp(TouchTarget)-height, 0) / 2
+	c.Constraints.Min = image.Pt(width, height+2*grow)
+	reach := op.Offset(image.Pt(0, -grow)).Push(c.Ops)
 	state.value.Layout(c.Context, layout.Horizontal, unit.Dp(8))
+	reach.Pop()
 
 	fill, ink := c.Theme.Colours.Muted, c.Theme.Colours.Primary
 	if p.Disabled {
-		fill, ink = fade(fill), fade(ink)
+		fill, ink = fadeOver(fill, c.Theme.Colours.Background), fadeOver(ink, c.Theme.Colours.Background)
 	}
 
 	middle := height / 2
@@ -141,9 +148,16 @@ func (p RatingProps) layout(c ayra.Context, state *Rating) ayra.Dimensions {
 	area := image.Pt(width, side)
 
 	if !p.ReadOnly {
-		defer clip.Rect(image.Rectangle{Max: area}).Push(c.Ops).Pop()
+		// The area is as tall as a finger, moved up by what it adds; a press is read
+		// by its horizontal position, which is unchanged. It cannot be wider than a
+		// star, since the stars touch.
+		grow := max(c.Dp(TouchTarget)-side, 0) / 2
+		reach := op.Offset(image.Pt(0, -grow)).Push(c.Ops)
+		zone := clip.Rect(image.Rect(0, 0, area.X, area.Y+2*grow)).Push(c.Ops)
 		state.click.Add(c.Ops)
 		event.Op(c.Ops, state)
+		zone.Pop()
+		reach.Pop()
 
 		for {
 			press, ok := state.click.Update(c.Source)

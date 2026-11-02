@@ -75,7 +75,11 @@ func (d *DateTime) Select(at time.Time, seconds bool) {
 	if seconds {
 		layout = "150405"
 	}
-	d.clock.SetValue(nil, at.Format(layout))
+	// Through the mask, so the field holds 09:30 and not the digits 0930. The
+	// digits are not a time, and a field chosen with a time on it drew midnight
+	// -- or no time at all, for a time of day -- until the panel had been opened
+	// once and the mask had formatted what was in it.
+	d.clock.SetValue(clockMask(seconds), at.Format(layout))
 	d.seen = d.Selected(seconds)
 }
 
@@ -148,7 +152,8 @@ type DateTimePickerProps struct {
 	// Seconds asks for seconds as well as minutes.
 	Seconds bool
 	// Format is the Go reference layout the field writes the value in. Empty
-	// writes [DateTimeFormat], or the same with seconds.
+	// writes the day as the theme's locale does, and then the time: [DateTimeFormat]
+	// with no locale, or the same with seconds.
 	Format string
 	// MonthNames and WeekdayNames are the calendar's words, in the application's
 	// language. Empty draws English.
@@ -168,7 +173,11 @@ func (p DateTimePickerProps) PartNames() []string { return []string{"root"} }
 
 // layoutFor is the layout a value of this kind is written in, unless the caller
 // gave one.
-func (p DateTimePickerProps) layoutFor() string {
+//
+// The day is written the way the theme's locale writes one, so a Brazilian
+// application reads 02/11/2026 09:30 and not 2026-11-02 09:30; with no locale it
+// is the ISO order.
+func (p DateTimePickerProps) layoutFor(locale theme.Locale) string {
 	if p.Format != "" {
 		return p.Format
 	}
@@ -176,15 +185,16 @@ func (p DateTimePickerProps) layoutFor() string {
 	if p.Seconds {
 		clock = "15:04:05"
 	}
+	day := orDefault(locale.DateLayout, DateFormat)
 	switch p.Kind {
 	case DateOnly:
-		return DateFormat
+		return day
 	case TimeOnly:
 		return clock
 	case MonthOnly:
 		return "2006-01"
 	}
-	return DateFormat + " " + clock
+	return day + " " + clock
 }
 
 // Text writes the value the way the field shows it: the ISO week for a week, and
@@ -213,7 +223,7 @@ func (p DateTimePickerProps) text(locale theme.Locale, state *DateTime) string {
 			return names[value.Month()-1] + " " + strconv.Itoa(value.Year())
 		}
 	}
-	return value.Format(p.layoutFor())
+	return value.Format(p.layoutFor(locale))
 }
 
 // Layout draws the field and, while it is open, the panel under it.
@@ -231,8 +241,9 @@ func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimens
 		label, ink = text, c.Theme.Colours.Foreground
 	}
 
+	focused := !p.Disabled && c.Focused(&state.popover.open.click)
 	field := func(c ayra.Context) ayra.Dimensions {
-		return dateField(c, p.ComponentProps, "datetimepicker", "date-time-picker", label, ink, p.Disabled)
+		return dateField(c, p.ComponentProps, "datetimepicker", "date-time-picker", label, ink, p.Disabled, focused)
 	}
 	if p.Disabled {
 		state.popover.Close()
@@ -242,6 +253,8 @@ func (p DateTimePickerProps) Layout(c ayra.Context, state *DateTime) ayra.Dimens
 	dims := PopoverProps{Width: 320, Above: p.Above}.Layout(c, &state.popover, field, func(c ayra.Context) ayra.Dimensions {
 		return p.panel(c, state)
 	})
+
+	fieldRing(c, dims, focused)
 
 	if at := state.Value(p.Kind, p.Seconds); !at.Equal(state.seen) {
 		state.seen = at
@@ -352,9 +365,7 @@ func (p DateTimePickerProps) months(c ayra.Context, state *DateTime) ayra.Dimens
 					}
 					if len(names) == 12 {
 						name = names[index]
-						if r := []rune(name); len(r) > 4 {
-							name = string(r[:3])
-						}
+						name = shortMonth(name)
 					}
 					variant := Ghost
 					if state.chosenMonth == time.Month(index+1) && state.year == state.chosenYear {
@@ -369,6 +380,16 @@ func (p DateTimePickerProps) months(c ayra.Context, state *DateTime) ayra.Dimens
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
+}
+
+// shortMonth is a month's name cut to three letters, for the cell of the month
+// picker. Every name is cut: one of four was left whole, so "Maio" stood among
+// "Abr" and "Jun" and drew wider than the cells around it.
+func shortMonth(name string) string {
+	if letters := []rune(name); len(letters) > 3 {
+		return string(letters[:3])
+	}
+	return name
 }
 
 // parseClock reads 09:30 or 09:30:15, and says whether it was a time: hours

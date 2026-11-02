@@ -9,7 +9,12 @@ import (
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/theme"
 )
+
+// dayCell is the height of a day in the grid, in dp: the least a finger can be
+// asked to hit, which is also what a row of it has to be to stay one row.
+const dayCell = 44
 
 // Calendar is the state half of a grid of days: which month is shown, what is
 // chosen, and the press on each day.
@@ -113,6 +118,10 @@ type CalendarProps struct {
 	// bare says the calendar sits in a widget that has its own controls under
 	// it, as the date range does, and draws none.
 	bare bool
+
+	// open says a zero end of Range is no limit and not a day still to be
+	// chosen: the days on that side of the other end are inside the period.
+	open bool
 }
 
 // localised fills what the caller left empty from the application's locale, in
@@ -327,7 +336,7 @@ func (p CalendarProps) day(c ayra.Context, state *Calendar, day time.Time, index
 		// beginning on a Tuesday drew its first day under Monday. Nothing
 		// failed: the numbers were right, the grid was square, and it was the
 		// wrong weekday.
-		return ayra.Dimensions{Size: image.Pt(c.Constraints.Min.X, c.Dp(unit.Dp(36)))}
+		return ayra.Dimensions{Size: image.Pt(c.Constraints.Min.X, c.Dp(unit.Dp(dayCell)))}
 	}
 
 	allowed := p.allowed(day)
@@ -344,13 +353,26 @@ func (p CalendarProps) day(c ayra.Context, state *Calendar, day time.Time, index
 		variant = Outline
 	}
 
-	c.Constraints.Min.Y = c.Dp(unit.Dp(36))
-	return ButtonProps{
+	props := ButtonProps{
 		Label:    strconv.Itoa(day.Day()),
 		Variant:  variant,
 		Size:     Small,
 		Disabled: !allowed,
-	}.Layout(c, &state.days[index])
+	}
+
+	if variant == Secondary {
+		// The inside of a period is one band, as Kyse draws it, and not a tile for
+		// each day: the cells touch, so a square corner on each is what makes them
+		// join, and the ends of the period keep theirs rounded.
+		props.ComponentProps = ComponentProps{Parts: theme.Parts{"root": {Radius: theme.Pt(0)}}}
+	}
+
+	// The cell is as tall as a finger needs, 44 dp, padding included: the
+	// button's own room above and below the number is part of it, and what is
+	// asked of the label is the rest.
+	padding := props.style(c.Theme).Padding
+	c.Constraints.Min.Y = max(c.Dp(unit.Dp(dayCell))-c.Dp(unit.Dp(padding.Top+padding.Bottom)), 0)
+	return props.Layout(c, &state.days[index])
 }
 
 // edge reports whether a day is one end of the marked period.
@@ -361,10 +383,18 @@ func (p CalendarProps) edge(day time.Time) bool {
 // within reports whether a day is inside the marked period, ends excluded.
 func (p CalendarProps) within(day time.Time) bool {
 	from, to := p.Range[0], p.Range[1]
+	at := startOfDay(day)
+	if p.open {
+		switch {
+		case from.IsZero() && !to.IsZero():
+			return at.Before(startOfDay(to))
+		case to.IsZero() && !from.IsZero():
+			return at.After(startOfDay(from))
+		}
+	}
 	if from.IsZero() || to.IsZero() {
 		return false
 	}
-	at := startOfDay(day)
 	return at.After(startOfDay(from)) && at.Before(startOfDay(to))
 }
 

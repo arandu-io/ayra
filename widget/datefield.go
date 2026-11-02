@@ -15,22 +15,27 @@ import (
 // small calendar that says it opens a month: Kyse's CalendarBlank. owner is the
 // Kyse component the field belongs to. It is restylable under the name of
 // the widget that draws it, by the part "root".
-func dateField(c ayra.Context, inst ComponentProps, name, owner, label string, ink color.NRGBA, disabled bool) ayra.Dimensions {
+func dateField(c ayra.Context, inst ComponentProps, name, owner, label string, ink color.NRGBA, disabled, focused bool) ayra.Dimensions {
 	t := c.Theme
 	style := t.Resolve(name, "root", inst.VariantName("default"), theme.Style{
-		Background: theme.Colour(t.Colours.Background),
+		Background: fieldFill(t),
 		Foreground: theme.Colour(ink),
-		Border:     theme.Colour(t.Colours.Border),
+		Border:     theme.Colour(t.Colours.Input),
 		Radius:     theme.Pt(t.Metrics.Radius),
 		Padding:    theme.InsetXY(12, 8),
 		Font:       theme.Font{Size: theme.Pt(t.Type.Body)},
 	}, inst)
 
 	if disabled {
-		style.Background = theme.Colour(fade(style.Background.NRGBA()))
-		style.Border = theme.Colour(fade(style.Border.NRGBA()))
-		style.Foreground = theme.Colour(fade(style.Foreground.NRGBA()))
+		ground := t.Colours.Background
+		style.Background = theme.Colour(fadeOver(style.Background.NRGBA(), ground))
+		style.Border = theme.Colour(fadeOver(style.Border.NRGBA(), ground))
+		style.Foreground = theme.Colour(fadeOver(style.Foreground.NRGBA(), ground))
 		c.Context = c.Context.Disabled()
+	} else if focused {
+		// The ring colour on the border; the ring around the field is drawn by
+		// the caller, outside the area the press is registered on.
+		style.Border = theme.Colour(t.Colours.Ring)
 	}
 
 	inner := style
@@ -45,6 +50,14 @@ func dateField(c ayra.Context, inst ComponentProps, name, owner, label string, i
 			}),
 		)
 	})
+}
+
+// fieldRing draws the focus ring around a field that holds the keyboard focus,
+// outside the area its press is registered on, which clips to the field.
+func fieldRing(c ayra.Context, field ayra.Dimensions, focused bool) {
+	if focused {
+		focusRing(c, field.Size, controlRadius(c), c.Theme.Colours.Ring)
+	}
 }
 
 // textStart is where a line of text begins.

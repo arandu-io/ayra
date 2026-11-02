@@ -65,6 +65,7 @@ func TestTheCalendarsSpeakPortuguese(t *testing.T) {
 		{screen: screen{name: "calendar-pt-br", width: 360, height: 420, draw: calendarPortuguese}, locale: pt},
 		{screen: screen{name: "datepicker-pt-br", width: 360, height: 460, draw: datePickerPortuguese}, locale: pt},
 		{screen: screen{name: "daterange-pt-br", width: 380, height: 560, draw: dateRangePortuguese}, locale: pt},
+		{screen: screen{name: "daterange-until-pt-br", width: 380, height: 560, draw: dateRangeUntilPortuguese}, locale: pt},
 		{screen: screen{name: "datetime-pt-br", width: 380, height: 640, draw: dateTimePortuguese}, locale: pt},
 		{screen: screen{name: "datemonth-pt-br", width: 380, height: 520, draw: monthPortuguese}, locale: pt},
 	} {
@@ -366,6 +367,21 @@ func dateRangePortuguese() ayra.Widget {
 					Today: reference, DateFormat: "02/01/2006",
 					Presets: []widget.DatePreset{widget.LastDays("Hoje", reference, 1), widget.LastDays("7 dias", reference, 7), widget.ThisMonth("Este mês", reference)},
 				}.Layout(c.With(gtx), &empty)
+			}),
+		)
+	})
+}
+
+// dateRangeUntilPortuguese is a period with only its last day: "Até 31/12/2026",
+// with the days before it marked as one band.
+func dateRangeUntilPortuguese() ayra.Widget {
+	var state widget.DateRange
+	state.Set(time.Time{}, time.Date(2026, time.September, 24, 0, 0, 0, 0, time.UTC))
+	state.Open()
+	return top(func(c ayra.Context) ayra.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return widget.DateRangePickerProps{Today: reference, DateFormat: "02/01/2006"}.Layout(c.With(gtx), &state)
 			}),
 		)
 	})
