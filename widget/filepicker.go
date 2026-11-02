@@ -215,6 +215,19 @@ type FilePickerProps struct {
 	// Disabled draws the rows and the filter as unavailable, and nothing is
 	// reported while it is set.
 	Disabled bool
+	// Words are the picker's own sentences, in the application's language. Zero
+	// values draw English.
+	Words FilePickerWords
+}
+
+// FilePickerWords are the sentences a picker says.
+type FilePickerWords struct {
+	// Filter is the hint of the empty filter field.
+	Filter string
+	// NoMatches and NoMatchesBody are said when the filter matched nothing.
+	NoMatches, NoMatchesBody string
+	// Empty and EmptyBody are said of a directory with nothing in it.
+	Empty, EmptyBody string
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -249,7 +262,7 @@ func (p FilePickerProps) layout(c ayra.Context, state *FilePicker) ayra.Dimensio
 		}),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return InputProps{Placeholder: "Filter", Disabled: p.Disabled}.Layout(c.With(gtx), &state.filter)
+			return InputProps{Placeholder: orDefault(p.Words.Filter, "Filter"), Disabled: p.Disabled}.Layout(c.With(gtx), &state.filter)
 		}),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -396,9 +409,9 @@ func (p FilePickerProps) listing(c ayra.Context, state *FilePicker, entries []Fi
 // to find, and the second is somewhere there is, behind a word somebody typed.
 func (p FilePickerProps) nothing(c ayra.Context, state *FilePicker) ayra.Dimensions {
 	if state.Filter() != "" {
-		return EmptyProps{Title: "No matches", Body: "Nothing in this directory matches the filter."}.Layout(c)
+		return EmptyProps{Title: orDefault(p.Words.NoMatches, "No matches"), Body: orDefault(p.Words.NoMatchesBody, "Nothing in this directory matches the filter.")}.Layout(c)
 	}
-	return EmptyProps{Title: "Empty", Body: "There is nothing in this directory."}.Layout(c)
+	return EmptyProps{Title: orDefault(p.Words.Empty, "Empty"), Body: orDefault(p.Words.EmptyBody, "There is nothing in this directory.")}.Layout(c)
 }
 
 // row draws one entry as a pressable line.
@@ -409,8 +422,13 @@ func (p FilePickerProps) row(c ayra.Context, entry FileEntry, state *Button, sel
 			fill = c.Theme.Colours.Accent
 		}
 		return surface(c, fill, fill, controlRadius(c), func(c ayra.Context) ayra.Dimensions {
-			return layout.Inset{Top: 8, Bottom: 8, Left: 10, Right: 10}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-				return p.line(c.With(gtx), entry)
+			// A row is as tall as a finger, and the line sits in the middle of it.
+			c.Constraints.Min.Y = c.Dp(unit.Dp(44))
+			return layout.W.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Point{}
+				return layout.Inset{Top: 8, Bottom: 8, Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return p.line(c.With(gtx), entry)
+				})
 			})
 		})
 	}
