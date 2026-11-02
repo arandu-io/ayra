@@ -472,7 +472,7 @@ func (p FilePickerProps) line(c ayra.Context, entry FileEntry) ayra.Dimensions {
 		ink = c.Theme.Colours.Foreground
 	}
 	if p.Disabled {
-		ink = fade(ink)
+		ink = fadeOver(ink, c.Theme.Colours.Background)
 	}
 
 	mark := entryMark(c, entry.Dir, side, dims.Size.Y, ink)
@@ -489,7 +489,8 @@ func (p FilePickerProps) names(c ayra.Context, entry FileEntry) ayra.Dimensions 
 	ink := c.Theme.Colours.Foreground
 	quiet := c.Theme.Colours.MutedForeground
 	if p.Disabled {
-		ink, quiet = fade(ink), fade(quiet)
+		ground := c.Theme.Colours.Background
+		ink, quiet = fadeOver(ink, ground), fadeOver(quiet, ground)
 	}
 
 	figure := entryFigure(entry)

@@ -345,7 +345,11 @@ func (p InputGroupProps) Layout(c ayra.Context, first ayra.Widget, rest ...ayra.
 		root.Border = theme.Colour(t.Colours.Ring)
 	}
 
-	return Surface(c, root, func(c ayra.Context) ayra.Dimensions {
+	ring := t.Colours.Ring
+	if p.Invalid {
+		ring = t.Colours.Destructive
+	}
+	dims := Surface(c, root, func(c ayra.Context) ayra.Dimensions {
 		children := []layout.FlexChild{layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return first(c.With(gtx)) })}
 		for _, widget := range rest {
 			widget := widget
@@ -368,6 +372,12 @@ func (p InputGroupProps) Layout(c ayra.Context, first ayra.Widget, rest ...ayra.
 		}
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
 	})
+	if p.Focused {
+		// The ring of a group that holds the keyboard, in the destructive colour
+		// when it was rejected: Kyse draws it around the group, from has-[:focus].
+		focusRing(c, dims.Size, c.Dp(unit.Dp(root.Radius.Points())), ring)
+	}
+	return dims
 }
 
 // ThemeToggleProps is the button that switches between the light and the dark

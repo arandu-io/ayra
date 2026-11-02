@@ -217,11 +217,13 @@ func fieldFill(t theme.Theme) theme.Paint {
 
 // Layout draws the field and returns the room it took.
 func (p InputProps) Layout(c ayra.Context, state *Input) ayra.Dimensions {
-	box, hint := p.styles(c, c.Focused(&state.editor))
+	focused := c.Focused(&state.editor) && !p.Disabled
+	box, hint := p.styles(c, focused)
 	border, ink := box.Border.NRGBA(), box.Foreground.NRGBA()
 	if p.Disabled {
-		ink = fade(ink)
-		border = fade(border)
+		ground := c.Theme.Colours.Background
+		ink = fadeOver(ink, ground)
+		border = fadeOver(border, ground)
 		c.Context = c.Context.Disabled()
 	}
 	box.Border, box.Foreground = theme.Colour(border), theme.Colour(ink)
@@ -249,7 +251,19 @@ func (p InputProps) Layout(c ayra.Context, state *Input) ayra.Dimensions {
 	c.Constraints.Min.X = c.Constraints.Max.X
 
 	p.focusOnTap(c, state)
-	return p.surface(c, state, box, func(inner ayra.Context) ayra.Dimensions {
+	// The ring Kyse draws around a field that holds the keyboard: the border takes
+	// the ring colour, and three points at half strength stand outside it. A
+	// rejected field has the same ring in the destructive colour.
+	var ring color.NRGBA
+	// A field in a group has no border of its own, and so no ring: the group
+	// draws the ring around all of it.
+	if focused && box.Border.NRGBA().A > 0 {
+		ring = c.Theme.Colours.Ring
+		if p.Invalid {
+			ring = c.Theme.Colours.Destructive
+		}
+	}
+	return p.surface(c, state, box, ring, func(inner ayra.Context) ayra.Dimensions {
 		return insetOf(box.Padding).Layout(inner.Context,
 			func(gtx layout.Context) layout.Dimensions {
 				return p.withIcons(inner.With(gtx), box, func(c ayra.Context) ayra.Dimensions {
@@ -345,7 +359,7 @@ func (p InputProps) focusOnTap(c ayra.Context, state *Input) {
 }
 
 // surface paints the field's background and border behind its content.
-func (p InputProps) surface(c ayra.Context, state *Input, box theme.Style, content ayra.Widget) ayra.Dimensions {
+func (p InputProps) surface(c ayra.Context, state *Input, box theme.Style, ring color.NRGBA, content ayra.Widget) ayra.Dimensions {
 	measure := op.Record(c.Ops)
 	dims := content(c)
 	drawn := measure.Stop()
@@ -361,6 +375,9 @@ func (p InputProps) surface(c ayra.Context, state *Input, box theme.Style, conte
 	paint.FillShape(c.Ops, box.Background.NRGBA(), shape.Op(c.Ops))
 	stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(c.Dp(unit.Dp(box.BorderWidth.Points())))}
 	paint.FillShape(c.Ops, box.Border.NRGBA(), stroke.Op())
+	if ring.A > 0 {
+		focusRing(c, dims.Size, radius, ring)
+	}
 
 	// Beneath the editor, so a tap on the text is still the editor's.
 	area := clip.Rect(image.Rectangle{Max: dims.Size}).Push(c.Ops)

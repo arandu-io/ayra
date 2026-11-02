@@ -141,6 +141,16 @@ func (p OneTimeCodeProps) Layout(c ayra.Context, state *OneTimeCode) ayra.Dimens
 					return drawPart(inner, digit, style, unit.Sp(t.Type.Heading), 1, text.Middle, font.Font{Weight: font.Medium})
 				})
 			})
+			if i == current && focused && !p.Disabled {
+				// The square the next character goes into holds the ring Kyse
+				// draws around a focused field, in the destructive colour when the
+				// code was refused.
+				ring := t.Colours.Ring
+				if p.Invalid {
+					ring = t.Colours.Destructive
+				}
+				focusRing(sc, image.Pt(side, height), c.Dp(unit.Dp(style.Radius.Points())), ring)
+			}
 			origin.Pop()
 		}
 
@@ -176,8 +186,9 @@ func (p OneTimeCodeProps) square(c ayra.Context, focus bool) theme.Style {
 		style = t.Resolve("onetimecode", "focus", variant, theme.Style{Border: theme.Colour(t.Colours.Ring)}, theme.Component{Parts: p.Parts}).Or(style)
 	}
 	if p.Disabled {
-		style.Border = theme.Colour(fade(style.Border.NRGBA()))
-		style.Foreground = theme.Colour(fade(style.Foreground.NRGBA()))
+		ground := t.Colours.Background
+		style.Border = theme.Colour(fadeOver(style.Border.NRGBA(), ground))
+		style.Foreground = theme.Colour(fadeOver(style.Foreground.NRGBA(), ground))
 	}
 	return style
 }
