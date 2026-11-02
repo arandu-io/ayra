@@ -51,3 +51,29 @@ func TestTheChosenSegmentCanBeToldFromTheTrack(t *testing.T) {
 		}
 	}
 }
+
+// TestTheChosenSegmentStaysInsideTheTrack is the heavier weight of the chosen
+// label: the slot was measured in the lighter, so the chosen segment was wider than
+// its slot and ran past the end of the track.
+func TestTheChosenSegmentStaysInsideTheTrack(t *testing.T) {
+	for _, size := range []widget.Size{widget.Small, widget.Large} {
+		var state widget.Segments
+		state.Choose(1)
+		picture := drawn(t, 240, 80, theme.Light, func(c ayra.Context) ayra.Dimensions {
+			return widget.SegmentedProps{Options: []string{"Off", "default"}, Size: size}.Layout(c, &state)
+		})
+
+		// Past the track's right end, level with its middle, nothing is drawn.
+		c, _ := frame(t, theme.Light, 240)
+		var again widget.Segments
+		again.Choose(1)
+		track := widget.SegmentedProps{Options: []string{"Off", "default"}, Size: size}.Layout(c, &again).Size
+		for y := 0; y < 80; y++ {
+			for x := track.X + 2; x < 240; x++ {
+				if luminance(picture.RGBAAt(x, y)) < 254 {
+					t.Fatalf("size %v: something is drawn past the end of the track, %d wide, at %d,%d", size, track.X, x, y)
+				}
+			}
+		}
+	}
+}

@@ -116,6 +116,38 @@ is the corner of the room the screen was given.
 A modal dialog or drawer keeps Tab inside itself (`key.FocusFilter.Trap`), and the
 back key closes it, or the menu open over it first.
 
+## Unreleased -- what the form and display widgets draw differently
+
+Nothing stops compiling. A golden picture of yours that holds one of the widgets
+below changes, and `go test ./frame -update` regenerates it once you have looked.
+
+- **Rows that are a finger tall.** A checkbox, radio or switch with a label is at
+  least 44 points tall, a calendar's day is 44, a tab, a summary, a breadcrumb step
+  and a file row are 44. A screen laid out around the old heights is longer. A box with
+  no label keeps its size, and the area that answers is grown to 44 without moving
+  anything (`TouchArea`).
+- **Labels wrap.** The label of a checkbox, radio, switch or field, a summary, a table
+  cell and an item no longer ends in an ellipsis after one line.
+- **Dates follow the locale.** A date field writes `2026-11-02` unless the theme has a
+  locale. Set `theme.PortugueseBrazil()` (or a `Locale` with `DateLayout`) once and every
+  picker writes `02/11/2026`; `DatePickerProps.DateFormat` overrides it for one field.
+  A period with one end is written "Até 31/12/2026" in that locale.
+- **Fields take the surface they sit on.** The fill of a text field, a select and the
+  date fields is nothing in the light scheme and the input colour mixed over the card in
+  the dark one, and the border is the input colour. A field inside a card is no longer a
+  grey box on a white one.
+- **Overlays are in the window's layer.** A menu, a popover, a tooltip and a suggestion
+  list are drawn over what follows them and flip over the control when there is no room.
+  A screen that kept a gap under such a control for the panel (a spacer of the list's
+  height) can delete it. A dialog or drawer covers the whole window; a screen that
+  drew the application bar over a modal cannot any more.
+- **The shade of an icon.** The lighter half of a duotone icon is painted at the strength
+  the browser shows, not at a fifth of the alpha: lighter in the light scheme and much
+  fainter in the dark one.
+- **Segmented** is Kyse's bar: a muted track with equal segments and the chosen one raised.
+  Code that styled `buttongroup` parts to restyle a segmented control styles `segmented`
+  now.
+
 ## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard

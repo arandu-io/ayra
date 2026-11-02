@@ -148,7 +148,9 @@ func (p SegmentedProps) layout(c ayra.Context, state *Segments) ayra.Dimensions 
 
 	t := c.Theme
 	size := p.Size
-	if size == Medium {
+	if size == Medium || size == Icon {
+		// A square segment is a button that holds one mark; a bar of words has no
+		// use for it, and its width is the widest word's.
 		size = Small
 	}
 
@@ -164,6 +166,10 @@ func (p SegmentedProps) layout(c ayra.Context, state *Segments) ayra.Dimensions 
 	for _, label := range p.Options {
 		props := ButtonProps{Label: label, Variant: Ghost, Size: size}
 		style := props.style(t)
+		// Measured as the chosen one is drawn, in the heavier weight: the widest
+		// word is wider in it, and a chosen segment sized for the lighter one ran
+		// out of its slot and past the end of the track.
+		style.Font.Weight = theme.SemiBold
 		measured := op.Record(inner.Ops)
 		text := buttonLabel(inner, label, style)
 		measured.Stop()
@@ -185,13 +191,19 @@ func (p SegmentedProps) layout(c ayra.Context, state *Segments) ayra.Dimensions 
 				Foreground: theme.Colour(t.Colours.Foreground),
 				Border:     theme.Colour(edge),
 				Radius:     theme.Pt(max(t.Metrics.Radius-1, 0)),
-				Font:       theme.Font{Weight: theme.SemiBold},
+				// The size is the button's own: a Font with only a weight in it is a
+				// font with no size, and the chosen label was drawn a size larger.
+				Font: theme.Font{Size: theme.Pt(ButtonProps{Size: size}.textSize(t)), Weight: theme.SemiBold},
 			}
 		} else {
 			style.Radius = theme.Pt(max(t.Metrics.Radius-1, 0))
 		}
+		// The least width is what the content is asked for, and the button's own
+		// padding is added to it: asking for the whole slot made a segment as wide
+		// as the slot and the padding over.
+		padding := ButtonProps{Size: size}.style(t).Padding
 		cell := inner
-		cell.Constraints.Min.X = widest
+		cell.Constraints.Min.X = max(widest-c.Dp(unit.Dp(padding.Left+padding.Right)), 0)
 		record := op.Record(inner.Ops)
 		dims := ButtonProps{ComponentProps: ComponentProps{Style: style}, Label: label, Variant: Ghost, Size: size}.Layout(cell, &state.group.buttons[index])
 		segments[index] = record.Stop()

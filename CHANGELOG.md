@@ -60,6 +60,121 @@
   the workflow fetches that tree, so the count is only real there: 66 files of the
   engine are still the original, and the ceiling still said 71.
 
+### Widgets
+
+What each widget does differently, found by drawing them under the Alpr.sh theme
+at 390 dp, in both schemes, and set beside Kyse. Pictures were regenerated for
+all of it.
+
+**Button, and everything drawn from one.** The area that answers a press is grown
+to 44 points on each side that falls short, evenly and outward, without moving the
+layout (`TouchArea`, `Clickable.Reach`, `TouchTarget`). A button on the keyboard
+focus takes the ring colour on its border and a 3 point ring outside, as Kyse's
+`focus-visible` does. Large is the body size and 41 tall (it was the heading size,
+48). A disabled button mixes with its ground (`fadeOver`) instead of halving the
+alpha, which the engine blends in linear light and left a disabled control four
+fifths as bright as an available one in the dark. A label is centred in a button
+given more height than its line.
+
+**Icon.** `IconProps` reports a baseline an eighth of its side above its bottom
+edge, so a row aligned by baseline sits the square on the word's line. The shade of
+a duotone icon is painted at the strength that lands a fifth of the way from the
+ground to the ink in the colours as written, as the browser does: the minus of a
+stepper was a grey square in the dark scheme.
+
+**Alert and toast.** A note's title is in the card foreground and its message in
+the muted one. A failure is drawn on the card with the destructive ink and border,
+which holds 4.8:1 in the light scheme and 6.5:1 in the dark for the 12 point
+message.
+
+**Progress, Skeleton.** An indeterminate bar moves (a third of the track, 1.4 s,
+eased); a skeleton pulses (half strength and back every two seconds). Both ask for
+the next frame only while drawn. `ayra.Context.ReduceMotion` and
+`shell.Config.ReduceMotion` make both stand still; the engine reads no platform
+setting, so the application supplies the answer.
+
+**Collapsible, accordion, tabs, breadcrumb, carousel.** A long summary wraps and
+the line is at least 44 points. Tabs scroll sideways when wider than the room, a
+tab chosen by the screen is brought into view, and each is 44 high. A breadcrumb
+longer than the room breaks into lines. A carousel's steps are arrows with
+`PreviousLabel` and `NextLabel` for a screen reader; they took 150 of a phone's
+358 points as words.
+
+**Checkbox, radio, switch.** A long label wraps beside the mark instead of ending in
+an ellipsis, with the mark level with the first line. A control with a label is 44
+points tall; one with none keeps its size and reaches a finger through
+`TouchArea`. The knob of an off switch is drawn (it was drawn in no ink, so an off
+switch was a grey pill). `CheckboxProps.Mixed` draws a dash for the box that
+stands for a group of which some are set.
+
+**Select.** The list is drawn over what follows it and takes the presses over it;
+it is at most eight rows tall and scrolls inside that. It is 33 points tall like a
+text field, takes Kyse's input fill and border, and draws the focus ring.
+`Select.Open` puts it up. A disabled select fades its caret with its text.
+
+**Date, period and date-time fields; calendar.** A day is written in the order of the
+theme's locale: `theme.Locale.DateLayout` ("02/01/2006" in pt-BR),
+`DatePickerProps.DateFormat`, and the period and the date-time fall back to it. A
+period with one end is open on the other side and is written "Até 31/12/2026" or
+"A partir de 01/01/2026" (`Locale.Until`, `Locale.Since`); `DateRange.Set` no longer
+swaps a missing end, and the days on the open side are drawn as one band. A
+`DateTime` chosen with a time showed 00:00 until its panel had been opened. The
+month picker cuts every name to three letters. A day is 44 points tall with its
+number in the middle. The fields take the fill and border of Kyse's input, are 33
+tall, draw the focus ring, and reach a finger.
+
+**Slider, rating, stepper, month arrows.** Their touch area is 44 points tall
+(the stars only vertically, since they touch).
+
+**Segmented.** A muted track with every segment as wide as the widest, 33 points
+tall, the chosen one on the page's colour with an edge and a semibold label, as
+Kyse's segmented control is. The chosen item was a grey a shade from the track.
+
+**Input, textarea, masked, password, input group, one-time code, field.** A text box
+takes the surface it sits on: no fill in the light scheme, 30% of the input colour
+mixed over the card in the dark one (`fieldFill`). The focus ring is Kyse's three
+points at half strength, in the destructive colour for a rejected field; a control in
+a group draws none of its own and the group draws it (`Focused`, `Invalid`). A field's
+label wraps and keeps its required mark. `InputAddonProps` is Kyse's addon. Disabled
+text uses `fadeOver`. A plate is written in capitals: `mask` takes hesape's `U` and
+`X` tokens and `brazil.Plate` is `UUU0X00` (the copy is the one in hesape v0.98.0).
+
+**Combobox, autocomplete, command palette.** The keys a suggestion list answers to
+reach it (arrows, escape, return); the list is drawn over what follows and keeps to
+the window; rows are 44 tall. A failed search is said under the field and marks it
+`Invalid`. The palette takes the keyboard when it opens.
+
+**File picker, file upload.** Rows are 44 points tall and the sentences are the
+application's (`FilePickerWords`). The upload zone is Kyse's dropzone: a dashed frame
+with a prompt and a hint (`Words.Hint`), the whole area opens the chooser, and a
+cancelled file says so (`Words.Cancelled`).
+
+**DataTable, table, list, pagination.** Drawn as Kyse v0.48 and v0.49 do: "1 row." and
+"{total} rows.", "{n} of {total} row(s) selected.", a card's title and empty cells,
+`DataColumn.Actions` as the foot of the card. The footer fits a phone, "/ page",
+"Previous" and "Next" are the application's words (`PaginationProps.PreviousLabel`,
+`NextLabel`), a sortable heading is aligned with its values, the heading box follows the
+selection, an error after the first answer is shown and cleared on retry, icon actions
+are 44 points. The text of a cell and of an item wraps instead of ending in an
+ellipsis.
+
+**Menu, popover, tooltip, dialog, drawer.** The window has an overlay layer
+(`ayra.Context.Overlay`, played back by `shell.Run` and `frame.Draw`): a menu, a
+popover or a tooltip is drawn over what follows, flips over its control when there is
+no room under it, is held to the window with a tall panel scrolling, and closes on a
+press outside, on escape and on the back key (`End` lines the right edges up). A modal
+dialog or drawer covers the whole window, under the bars, and keeps Tab inside
+(`key.FocusFilter.Trap`); a dialog stays 16 points off the edges of a phone and
+scrolls when taller than the window; the panel's corners are Kyse's rounded-xl.
+`Context.KeyboardOpen` says when the keyboard is up. The router answers where a
+control was drawn (`Source.Bounds`).
+
+### Fixed (engine)
+
+- `engine/io/input`: the router looked the focused control's bounds up through an
+  index a frame behind the list it pointed into, and panicked when a frame drew one
+  handler fewer or more. It looks the tag up.
+
 ## [v0.8.0](https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0) - 2026-11-01
 
 ### Fixed
