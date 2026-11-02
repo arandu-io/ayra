@@ -25,6 +25,8 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "tabs-phone", width: 390, height: 260, draw: tabsPhone}},
 		{screen: screen{name: "menu-flip-phone", width: 390, height: 520, draw: menuAtTheFootOfAForm}},
 		{screen: screen{name: "menu-capped-phone", width: 390, height: 400, draw: menuLongerThanTheRoom}},
+		{screen: screen{name: "disclosure-phone", width: 390, height: 400, draw: disclosurePhone}},
+		{screen: screen{name: "carousel-phone", width: 390, height: 260, draw: carouselPhone}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -292,6 +294,50 @@ func menuLongerThanTheRoom() ayra.Widget {
 			return widget.MenuProps{Entries: entries, Width: 220}.Layout(c.With(gtx), &menu, func(c ayra.Context) ayra.Dimensions {
 				return widget.ButtonProps{Label: "Câmeras", Variant: widget.Outline}.Layout(c, &trigger)
 			})
+		})
+	}
+}
+
+// disclosurePhone is a collapsible and an accordion whose summaries are longer
+// than a line of a phone.
+func disclosurePhone() ayra.Widget {
+	var open, closed widget.Disclosure
+	open.Open()
+	var acc widget.Accordion
+	acc.Open(1)
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			inner := c.With(gtx)
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.CollapsibleProps{Summary: "Configurações avançadas da câmera do portão principal da garagem"}.
+						Layout(inner.With(gtx), &open, line("As leituras continuam no histórico.", widget.Body, false))
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.CollapsibleProps{Summary: "Fechada"}.Layout(inner.With(gtx), &closed, line("x", widget.Body, false))
+				}),
+				layout.Rigid(layout.Spacer{Height: 16}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.AccordionProps{Sections: []string{"Câmeras do portão principal", "Leituras de placas dos últimos trinta dias", "Faturamento e cobrança pelo Peráta da organização"}}.
+						Layout(inner.With(gtx), &acc, func(int) ayra.Widget { return line("Onze câmeras leem placas no portão.", widget.Body, false) })
+				}),
+			)
+		})
+	}
+}
+
+// carouselPhone is a carousel with its steps on a phone: arrows, not words, and
+// the slide left the room.
+func carouselPhone() ayra.Widget {
+	var one widget.Carousel
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = image.Point{}
+			return widget.CarouselProps{Count: 4, Arrows: true, Dots: true, PreviousLabel: "Anterior", NextLabel: "Próxima"}.
+				Layout(c.With(gtx), &one, func(c ayra.Context, i int) ayra.Dimensions {
+					return line("Portão principal, leituras ao vivo", widget.Heading, true)(c)
+				})
 		})
 	}
 }
