@@ -79,19 +79,13 @@ type ButtonProps struct {
 // component publishes in data-part.
 func (p ButtonProps) PartNames() []string { return []string{"root"} }
 
-// touchTarget is the least a finger is given to press, in points: the side of
-// the square the platforms' guidelines ask of anything that is pressed.
-const touchTarget = 44
-
 // Layout draws the button and returns the room it took.
 //
 // What a button takes and what it answers to are not the same room. It is
 // drawn at the size its variant says -- 24 points tall for the smallest, 34 for
-// the ordinary one -- and a finger is not that precise, so the area that
-// answers the press is grown to [touchTarget] on each side that falls short of
-// it, evenly, and the room reported to the layout stays what was drawn. Growing
-// the drawing instead would move every screen that was laid out around the
-// smaller button.
+// the ordinary one -- and the area that answers the press is grown to
+// [TouchTarget] by [TouchArea], while the room reported to the layout stays
+// what was drawn.
 func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 	style := p.style(c.Theme)
 	fill, ink, border := style.Background.NRGBA(), style.Foreground.NRGBA(), style.Border.NRGBA()
@@ -138,12 +132,10 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		c.Constraints.Min.X = 0
 	}
 
-	var drawn ayra.Dimensions
-	var grow image.Point
-	area := op.Record(c.Ops)
-	state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		measure := op.Record(gtx.Ops)
-		drawn = p.surface(c.With(gtx), style, func(inner ayra.Context) ayra.Dimensions {
+	drawn := TouchArea(c, func(c ayra.Context, content ayra.Widget) ayra.Dimensions {
+		return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return content(c.With(gtx)) })
+	}, func(inner ayra.Context) ayra.Dimensions {
+		return p.surface(inner, style, func(inner ayra.Context) ayra.Dimensions {
 			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
 				shown := p.Label
@@ -157,27 +149,7 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 				return dims
 			})
 		})
-		body := measure.Stop()
-
-		// The drawing is moved in by what the area adds, and the whole is
-		// moved back out below, so the two coincide on the screen.
-		least := c.Dp(unit.Dp(touchTarget))
-		grow = image.Pt(max(least-drawn.Size.X, 0)/2, max(least-drawn.Size.Y, 0)/2)
-		// It is still clipped to its own shape, as it was when the press area was
-		// that shape: a border is a stroke on the edge, and what the larger area
-		// would let out is the half of it that was never drawn.
-		shift := op.Offset(grow).Push(gtx.Ops)
-		clipped := clip.Rect(image.Rectangle{Max: drawn.Size}).Push(gtx.Ops)
-		body.Add(gtx.Ops)
-		clipped.Pop()
-		shift.Pop()
-		return layout.Dimensions{Size: drawn.Size.Add(grow.Mul(2))}
 	})
-	whole := area.Stop()
-
-	back := op.Offset(grow.Mul(-1)).Push(c.Ops)
-	whole.Add(c.Ops)
-	back.Pop()
 
 	if focused {
 		focusRing(c, drawn.Size, c.Dp(unit.Dp(style.Radius.Points())), c.Theme.Colours.Ring)
