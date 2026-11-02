@@ -2,9 +2,11 @@ package widget
 
 import (
 	"image"
+	"time"
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
@@ -62,9 +64,12 @@ type ProgressProps struct {
 	// Fraction is between 0 and 1. Anything outside is clamped, because a bar
 	// drawn past its own track is a bar that has overwritten what is beside it.
 	Fraction float32
-	// Indeterminate draws a bar for work whose length is unknown, as a track
-	// with no fill: something that pretends to know how far along it is lies
-	// every time it reaches ninety percent and stops.
+	// Indeterminate draws a bar for work whose length is unknown: a third of
+	// the track that travels across it and starts again, as Kyse's does. It is
+	// a sliver that moves rather than a width that grows, so it claims no
+	// position -- something that pretends to know how far along it is lies every
+	// time it reaches ninety percent and stops -- and an empty track, which is
+	// what this drew before, was indistinguishable from a bar at nothing.
 	Indeterminate bool
 }
 
@@ -94,7 +99,9 @@ func (p ProgressProps) Layout(c ayra.Context) ayra.Dimensions {
 	}
 	paint.FillShape(c.Ops, root.Background.NRGBA(), clip.UniformRRect(track, trackRadius).Op(c.Ops))
 
-	if !p.Indeterminate {
+	if p.Indeterminate {
+		p.slide(c, fill, track, barRadius)
+	} else {
 		fraction := min(max(p.Fraction, 0), 1)
 		filled := int(float32(width) * fraction)
 		if filled > 0 {
@@ -104,6 +111,36 @@ func (p ProgressProps) Layout(c ayra.Context) ayra.Dimensions {
 	}
 
 	return ayra.Dimensions{Size: track.Max}
+}
+
+// travel is how long the indeterminate bar takes to cross the track.
+const travel = 1400 * time.Millisecond
+
+// slide draws the traveling third of the track, and asks for the next frame.
+//
+// The position comes from the frame's own clock, so two bars drawn in one frame
+// are at the same place and a test can draw it at a chosen moment. It eases at
+// both ends, as Kyse's keyframes do. A context with no clock -- the zero time of
+// a picture drawn without a window -- is at the start, where the bar is still
+// off the left edge and the track is empty.
+func (p ProgressProps) slide(c ayra.Context, fill theme.Style, track image.Rectangle, radius int) {
+	phase := float32(c.Now.UnixNano()%int64(travel)) / float32(travel)
+	if c.Now.IsZero() {
+		phase = 0
+	}
+	// Smoothstep: slow at the ends, quick in the middle.
+	eased := phase * phase * (3 - 2*phase)
+
+	width := track.Dx() / 3
+	left := -width + int(eased*float32(track.Dx()+width))
+
+	defer clip.UniformRRect(track, track.Dy()/2).Push(c.Ops).Pop()
+	bar := image.Rect(left, 0, left+width, track.Dy())
+	paint.FillShape(c.Ops, fill.Background.NRGBA(), clip.UniformRRect(bar, radius).Op(c.Ops))
+
+	if !c.Now.IsZero() {
+		c.Execute(op.InvalidateCmd{At: c.Now.Add(16 * time.Millisecond)})
+	}
 }
 
 // AvatarProps is the mark that stands for a person.
