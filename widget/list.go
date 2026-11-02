@@ -75,9 +75,11 @@ func (p ItemProps) layout(c ayra.Context, state *Button, trailing ayra.Widget) a
 	if !p.Pressable {
 		return draw(c)
 	}
-	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return draw(c.With(gtx))
-	})
+	// The row is drawn as tall as it is, and the area that answers a press is grown
+	// to a finger: a row of a sidebar or of a menu is 37 points.
+	return TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+		return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+	}, draw)
 }
 
 // fill is the colour a row paints behind itself.
