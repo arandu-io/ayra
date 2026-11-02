@@ -80,17 +80,29 @@ type ButtonProps struct {
 func (p ButtonProps) PartNames() []string { return []string{"root"} }
 
 // Layout draws the button and returns the room it took.
+//
+// What a button takes and what it answers to are not the same room. It is
+// drawn at the size its variant says -- 24 points tall for the smallest, 34 for
+// the ordinary one -- and the area that answers the press is grown to
+// [TouchTarget] by [TouchArea], while the room reported to the layout stays
+// what was drawn.
 func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 	style := p.style(c.Theme)
 	fill, ink, border := style.Background.NRGBA(), style.Foreground.NRGBA(), style.Border.NRGBA()
 
+	// Asked before the context is made disabled: a control that cannot be
+	// pressed cannot hold the focus either, so a disabled one never shows it.
+	focused := !p.Disabled && c.Focused(&state.click)
+
 	if p.Disabled {
-		// Half opacity rather than a grey of its own: a grey is a colour the
-		// palette would have to name for every variant, and six greys that
-		// mean "not now" is six chances for one of them to be wrong.
-		fill = fade(fill)
-		ink = fade(ink)
-		border = fade(border)
+		// Half opacity, as the browser half draws it, rather than a grey of its
+		// own: a grey is a colour the palette would have to name for every
+		// variant, and six greys that mean "not now" is six chances for one of
+		// them to be wrong.
+		ground := c.Theme.Colours.Background
+		fill = fadeOver(fill, ground)
+		ink = fadeOver(ink, ground)
+		border = fadeOver(border, ground)
 		c.Context = c.Context.Disabled()
 	}
 
@@ -104,6 +116,11 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 			fill = press(fill, state.Pressed())
 		}
 	}
+	if focused {
+		// The border takes the ring's colour, as Kyse's focus-visible does; the
+		// ring around the shape is drawn below.
+		border = c.Theme.Colours.Ring
+	}
 	style.Background, style.Foreground, style.Border = theme.Colour(fill), theme.Colour(ink), theme.Colour(border)
 
 	if p.Size == Icon {
@@ -115,8 +132,9 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 		c.Constraints.Min.X = 0
 	}
 
-	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		inner := c.With(gtx)
+	drawn := TouchArea(c, func(c ayra.Context, content ayra.Widget) ayra.Dimensions {
+		return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return content(c.With(gtx)) })
+	}, func(inner ayra.Context) ayra.Dimensions {
 		return p.surface(inner, style, func(inner ayra.Context) ayra.Dimensions {
 			return insetOf(style.Padding).Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				content := c.With(gtx)
@@ -132,6 +150,29 @@ func (p ButtonProps) Layout(c ayra.Context, state *Button) ayra.Dimensions {
 			})
 		})
 	})
+
+	if focused {
+		focusRing(c, drawn.Size, c.Dp(unit.Dp(style.Radius.Points())), c.Theme.Colours.Ring)
+	}
+	return drawn
+}
+
+// focusRing draws the ring that says a control holds the keyboard focus: three
+// points around the shape, outside it, at half the strength of the ring colour --
+// Kyse's focus-visible:ring-ring/50 ring-[3px].
+//
+// It is drawn after the press area rather than inside it, because the area
+// clips to the shape it answers for and a ring outside the shape would be
+// cut off exactly where it is wanted.
+func focusRing(c ayra.Context, size image.Point, radius int, ring color.NRGBA) {
+	width := max(c.Dp(unit.Dp(3)), 1)
+	ring.A /= 2
+
+	half := width / 2
+	rect := image.Rect(-half, -half, size.X+half, size.Y+half)
+	shape := clip.UniformRRect(rect, radius+half)
+	stroke := clip.Stroke{Path: shape.Path(c.Ops), Width: float32(width)}
+	paint.FillShape(c.Ops, ring, stroke.Op())
 }
 
 // style answers how the button looks: what the variant and the size say on
@@ -197,8 +238,6 @@ func (p ButtonProps) textSize(t theme.Theme) float32 {
 	switch p.Size {
 	case ExtraSmall, Small:
 		return t.Type.Small
-	case Large:
-		return t.Type.Heading
 	}
 	return t.Type.Body
 }
@@ -363,6 +402,25 @@ func underline(c ayra.Context, dims ayra.Dimensions, content string, style theme
 func fade(c color.NRGBA) color.NRGBA {
 	c.A /= 2
 	return c
+}
+
+// fadeOver is [fade] drawn the way a browser draws opacity: the colour mixed
+// half and half with the ground it sits on, in the colours' own space.
+//
+// Halving the alpha is not the same picture. The compositor blends in linear
+// light, where half of white over black is a light grey and not the middle one,
+// so a disabled control in the dark scheme came out at four fifths of the
+// strength of an enabled one and the two could not be told apart: the secondary
+// and ghost buttons looked the same pressed and unavailable. Mixing the two
+// colours directly lands on the grey a person expects, in both schemes.
+//
+// A colour with nothing to mix -- the fill of a ghost -- stays as it is.
+func fadeOver(c, ground color.NRGBA) color.NRGBA {
+	if c.A == 0 {
+		return c
+	}
+	mix := func(a, b uint8) uint8 { return uint8((uint16(a) + uint16(b) + 1) / 2) }
+	return color.NRGBA{R: mix(c.R, ground.R), G: mix(c.G, ground.G), B: mix(c.B, ground.B), A: c.A}
 }
 
 // press darkens a fill while the pointer is over it or on it.
