@@ -33,6 +33,7 @@ func forms() []Entry {
 		fileUploadEntry(),
 		editInPlaceEntry(),
 		inputGroupEntry(),
+		inputAddonEntry(),
 		themeToggleEntry(),
 	}
 }

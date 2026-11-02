@@ -164,7 +164,7 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 		border = t.Colours.Ring
 	}
 	if p.Disabled {
-		border = fade(border)
+		border = fadeOver(border, t.Colours.Background)
 	}
 	bare := theme.Style{Border: theme.Transparent, Background: theme.Transparent, Radius: theme.Pt(0)}
 	box := ComponentProps{Parts: theme.Parts{"root": bare, "focus": bare, "invalid": bare}}
@@ -175,7 +175,7 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 	}
 
 	group := t.Resolve("password", "group", "default", theme.Style{
-		Background: theme.Colour(t.Colours.Background),
+		Background: fieldFill(t),
 		Border:     theme.Colour(border),
 		Radius:     theme.Pt(t.Metrics.Radius),
 	}, theme.Component{Parts: p.Parts})
@@ -183,7 +183,12 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 		group.Border = theme.Colour(border)
 	}
 
-	return Surface(c, group, func(c ayra.Context) ayra.Dimensions {
+	focused := c.Focused(&state.editor) && !p.Disabled
+	ring := t.Colours.Ring
+	if p.Invalid {
+		ring = t.Colours.Destructive
+	}
+	dims := Surface(c, group, func(c ayra.Context) ayra.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				return InputProps{
@@ -203,4 +208,8 @@ func (p PasswordProps) layout(c ayra.Context, state *Secret) ayra.Dimensions {
 			}),
 		)
 	})
+	if focused {
+		focusRing(c, dims.Size, c.Dp(unit.Dp(group.Radius.Points())), ring)
+	}
+	return dims
 }

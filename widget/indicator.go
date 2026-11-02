@@ -55,7 +55,7 @@ func (p LabelProps) Layout(c ayra.Context) ayra.Dimensions {
 		content += " *"
 	}
 	return insetOf(style.Padding).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return drawPart(c.With(gtx), content, style, unit.Sp(c.Theme.Type.Small), 1, text.Start, plain())
+		return drawPart(c.With(gtx), content, style, unit.Sp(c.Theme.Type.Small), 0, text.Start, plain())
 	})
 }
 

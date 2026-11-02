@@ -2,9 +2,11 @@ package widget_test
 
 import (
 	"image"
+	"image/color"
 	"testing"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/icons"
 	"github.com/arandu-io/ayra/theme"
 	"github.com/arandu-io/ayra/widget"
 )
@@ -146,3 +148,28 @@ func TestAnOffSwitchHasAKnobInBothSchemes(t *testing.T) {
 		}
 	}
 }
+
+// TestTheShadeOfAnIconIsAFifthOfTheInkInBothSchemes is the minus of a stepper in
+// the dark scheme: the engine blends in linear light, one fifth of a white ink was
+// half of it, and the shade of the minus was a grey square beside a thin bar.
+// The shade lands where a browser puts it: about a fifth of the way from the
+// ground to the ink.
+func TestTheShadeOfAnIconIsAFifthOfTheInkInBothSchemes(t *testing.T) {
+	for scheme, want := range map[theme.Scheme][2]int{
+		theme.Dark:  {45, 80},   // white on #0a0a0a: 59 in the colours as written
+		theme.Light: {190, 225}, // #181818 on white: 209
+	} {
+		ink := widgetInk(scheme)
+		picture := drawn(t, 40, 40, scheme, func(c ayra.Context) ayra.Dimensions {
+			widget.DrawIcon(c, icons.Minus(), 32, ink)
+			return ayra.Dimensions{Size: image.Pt(32, 32)}
+		})
+		// Inside the square the shade fills, away from the bar through its middle.
+		if got := luminance(picture.RGBAAt(9, 9)); got < want[0] || got > want[1] {
+			t.Errorf("%v: the shade of the minus is %d, want between %d and %d", scheme, got, want[0], want[1])
+		}
+	}
+}
+
+// widgetInk is the text colour of a scheme.
+func widgetInk(scheme theme.Scheme) color.NRGBA { return theme.New(scheme).Colours.Foreground }

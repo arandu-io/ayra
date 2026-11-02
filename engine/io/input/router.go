@@ -1020,9 +1020,11 @@ func (q *Router) ContinueReveal(viewport image.Rectangle) (again bool) {
 // control that has the focus: that is where the control was, and where a scroll
 // has to be delivered to bring it back.
 func (q *Router) rememberFocus() {
-	if kh, ok := q.focusedKeyHandler(); ok {
-		q.seen.tag = q.lastState().focus
-		q.seen.bounds = q.key.queue.BoundsFor(kh)
+	if _, ok := q.focusedKeyHandler(); ok {
+		if bounds, drawn := q.key.queue.BoundsOf(q.lastState().focus); drawn {
+			q.seen.tag = q.lastState().focus
+			q.seen.bounds = bounds
+		}
 	} else if q.seen.tag != q.lastState().focus {
 		q.seen.tag = nil
 	}

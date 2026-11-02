@@ -367,6 +367,38 @@ func inputGroupEntry() Entry {
 	}
 }
 
+// inputAddonEntry draws the prefix and the suffix of a group.
+func inputAddonEntry() Entry {
+	return Entry{
+		Control: "InputAddonProps",
+		Summary: "The text before or after what is typed, inside the group's border: a currency sign, a domain.",
+		Build: func() ayra.Widget {
+			var field widget.Input
+			var money widget.Masked
+			return sized(360, func(c ayra.Context) ayra.Dimensions {
+				return stack(12,
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.InputGroupProps{Focused: field.Focused(c)}.Layout(c,
+							func(c ayra.Context) ayra.Dimensions {
+								return widget.InputProps{Placeholder: "your-name", ComponentProps: widget.GroupedParts()}.Layout(c, &field)
+							},
+							func(c ayra.Context) ayra.Dimensions { return widget.InputAddonProps{Text: ".example.org"}.Layout(c) },
+						)
+					},
+					func(c ayra.Context) ayra.Dimensions {
+						return widget.InputGroupProps{}.Layout(c,
+							func(c ayra.Context) ayra.Dimensions {
+								return widget.MaskedProps{Mask: brazil.Real, Placeholder: "0,00", ComponentProps: widget.GroupedParts()}.Layout(c, &money)
+							},
+							func(c ayra.Context) ayra.Dimensions { return widget.InputAddonProps{Text: "BRL"}.Layout(c) },
+						)
+					},
+				)(c)
+			})
+		},
+	}
+}
+
 // themeToggleEntry draws the button that switches the palette.
 func themeToggleEntry() Entry {
 	return Entry{

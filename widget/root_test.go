@@ -248,6 +248,9 @@ func everyWidget() []each {
 		{"inputgroup", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.InputGroupProps{ComponentProps: i}.Layout(c, noop)
 		}},
+		{"inputaddon", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.InputAddonProps{Text: ".com.br", ComponentProps: i}.Layout(c)
+		}},
 		{"themetoggle", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.ThemeToggleProps{ComponentProps: i}.Layout(c, new(widget.Button))
 		}},

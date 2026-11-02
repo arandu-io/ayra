@@ -3,6 +3,7 @@ package widget
 import (
 	"image"
 	"image/color"
+	"math"
 	"sync"
 
 	"github.com/arandu-io/ayra"
@@ -92,10 +93,34 @@ func DrawIcon(c ayra.Context, icon icons.Icon, pixels int, ink color.NRGBA) {
 
 	if icon.Shade() != "" {
 		shade := ink
-		shade.A /= 5
+		shade.A = shadeAlpha(ink)
 		fillPath(c.Ops, icon.Shade(), scale, shade)
 	}
 	fillPath(c.Ops, icon.Body(), scale, ink)
+}
+
+// shadeAlpha is the strength the lighter half of an icon is painted at so that it
+// looks like a fifth of the ink, as the browser draws it.
+//
+// The engine blends a translucent paint in linear light and a browser blends in
+// the colours as written, so one fifth of a light ink on a dark ground was close to
+// half of it on screen -- the shade of a minus was a grey square -- and one fifth of
+// a dark ink on a light one was a quarter of what the browser shows. The strength
+// that lands on the colour a browser would show is worked out against the ground the
+// ink is read on, which is the opposite end of the scale to the ink itself: dark
+// ink on light, light on dark.
+func shadeAlpha(ink color.NRGBA) uint8 {
+	lightness := (float64(ink.R)*0.299 + float64(ink.G)*0.587 + float64(ink.B)*0.114) / 255
+	ground := 1 - lightness
+	linear := func(v float64) float64 { return math.Pow(v, 2.2) }
+
+	target := linear(0.2*lightness + 0.8*ground)
+	span := linear(lightness) - linear(ground)
+	strength := 0.2
+	if math.Abs(span) > 0.05 {
+		strength = min(max((target-linear(ground))/span, 0), 1)
+	}
+	return uint8(strength*float64(ink.A) + 0.5)
 }
 
 // parsed keeps the segments of every path drawn, by the path that was parsed. An

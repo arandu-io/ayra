@@ -345,6 +345,22 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 	return state, nil
 }
 
+// BoundsOf answers where the control with this tag was drawn this frame, and
+// whether it was.
+//
+// It looks the tag up and does not follow the index each handler is told by
+// updateFocusLayout, which is a frame behind until the frame has been closed: the
+// router asks while it is still reading, when the index is last frame's and the
+// list it points into is this one's -- one entry longer or shorter, and a panic.
+func (q *keyQueue) BoundsOf(tag event.Tag) (image.Rectangle, bool) {
+	for _, entry := range q.dirOrder {
+		if entry.tag == tag {
+			return entry.bounds, true
+		}
+	}
+	return image.Rectangle{}, false
+}
+
 // BoundsFor answers where the handler was drawn this frame.
 func (q *keyQueue) BoundsFor(k *keyHandler) image.Rectangle {
 	return q.dirOrder[k.dirOrder].bounds

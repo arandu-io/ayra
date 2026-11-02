@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
 	"io"
+	"math"
 	"path"
 	"strings"
 	"sync"
@@ -12,7 +15,10 @@ import (
 	"time"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/f32"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op/clip"
+	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/theme"
@@ -231,8 +237,11 @@ type FileUploadProps struct {
 // FileUploadWords are the sentences a field says, in the application's language.
 type FileUploadWords struct {
 	Choose, Cancel, Retry, Remove, Empty string
-	Sent, Queued                         string
+	Sent, Queued, Cancelled              string
 	TooLarge, WrongKind, TooMany         string
+	// Hint is the small line under the prompt of the zone: the kinds and the
+	// size the field takes, as "PDF, up to 10 MB". Empty draws none.
+	Hint string
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -407,21 +416,7 @@ func (p FileUploadProps) Layout(c ayra.Context, state *FileUpload) ayra.Dimensio
 	return Surface(c, root, func(c ayra.Context) ayra.Dimensions {
 		rows := []layout.FlexChild{
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return Surface(c.With(gtx), zone, func(c ayra.Context) ayra.Dimensions {
-					c.Constraints.Min.X = c.Constraints.Max.X
-					return layout.Inset{Top: 14, Bottom: 14}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-						inner := c.With(gtx)
-						inner.Constraints.Min = inner.Constraints.Max
-						return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							inner := c.With(gtx)
-							inner.Constraints.Min = layout.Constraints{}.Min
-							if p.Chooser == nil {
-								return drawText(inner, orDefault(p.Words.Empty, "Drop files here"), unit.Sp(t.Type.Body), t.Colours.MutedForeground, 1, text.Middle, plain())
-							}
-							return ButtonProps{Label: orDefault(p.Words.Choose, "Choose files"), Variant: Outline, Disabled: p.Disabled}.Layout(inner, &state.choose)
-						})
-					})
-				})
+				return p.zone(c.With(gtx), state, zone)
 			}),
 		}
 		if chooseError != nil {
@@ -527,7 +522,7 @@ func (p FileUploadProps) statusText(item *upload, state UploadStatus, sent int64
 	case Sent:
 		return orDefault(p.Words.Sent, "Sent")
 	case Cancelled:
-		return "-"
+		return orDefault(p.Words.Cancelled, "Cancelled")
 	}
 	return byteSize(item.file.Size)
 }
@@ -544,4 +539,96 @@ func byteSize(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// zone draws the area files are chosen from, as Kyse draws its dropzone: a
+// dashed frame with the prompt in it, the whole of which is the press that opens
+// the chooser. A field with no chooser says the files arrive some other way.
+func (p FileUploadProps) zone(c ayra.Context, state *FileUpload, style theme.Style) ayra.Dimensions {
+	t := c.Theme
+	interactive := p.Chooser != nil && !p.Disabled
+
+	prompt := orDefault(p.Words.Choose, "Choose files")
+	if p.Chooser == nil {
+		prompt = orDefault(p.Words.Empty, "Drop files here")
+	}
+	ink, quiet := t.Colours.Foreground, t.Colours.MutedForeground
+	frame := t.Colours.Input
+	if p.Disabled {
+		ground := t.Colours.Background
+		ink, quiet, frame = fadeOver(ink, ground), fadeOver(quiet, ground), fadeOver(frame, ground)
+	}
+	if p.Chooser == nil {
+		ink = quiet
+	}
+
+	content := func(c ayra.Context) ayra.Dimensions {
+		c.Constraints.Min.X = c.Constraints.Max.X
+		dims := Surface(c, style, func(c ayra.Context) ayra.Dimensions {
+			c.Constraints.Min.X = c.Constraints.Max.X
+			return layout.Inset{Top: 18, Bottom: 18, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				inner := c.With(gtx)
+				lines := []layout.FlexChild{layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return drawText(inner.With(gtx), prompt, unit.Sp(t.Type.Body), ink, 0, text.Middle, plain())
+				})}
+				if p.Words.Hint != "" {
+					lines = append(lines, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Top: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Constraints.Max.X
+							return drawText(inner.With(gtx), p.Words.Hint, unit.Sp(t.Type.Small), quiet, 0, text.Middle, plain())
+						})
+					}))
+				}
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx, lines...)
+			})
+		})
+		dashedFrame(c, dims.Size, controlRadius(c), frame)
+		return dims
+	}
+	if !interactive {
+		return content(c)
+	}
+	return state.choose.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return content(c.With(gtx)) })
+}
+
+// dashedFrame draws a rounded rectangle with a dashed edge, which the engine's
+// stroke does not do: the straight sides are cut into dashes and the corners are
+// drawn whole, so the frame closes at every corner.
+func dashedFrame(c ayra.Context, size image.Point, radius int, ink color.NRGBA) {
+	width := float32(max(c.Dp(unit.Dp(1.5)), 1))
+	half := width / 2
+	dash, gap := float32(c.Dp(6)), float32(c.Dp(4))
+	r := float32(radius)
+	w, h := float32(size.X)-half, float32(size.Y)-half
+
+	var path clip.Path
+	path.Begin(c.Ops)
+	line := func(x0, y0, x1, y1 float32) {
+		length := float32(math.Hypot(float64(x1-x0), float64(y1-y0)))
+		if length <= 0 {
+			return
+		}
+		dx, dy := (x1-x0)/length, (y1-y0)/length
+		for at := float32(0); at < length; at += dash + gap {
+			end := min(at+dash, length)
+			path.MoveTo(f32.Pt(x0+dx*at, y0+dy*at))
+			path.LineTo(f32.Pt(x0+dx*end, y0+dy*end))
+		}
+	}
+	corner := func(x0, y0, cx, cy, x1, y1 float32) {
+		path.MoveTo(f32.Pt(x0, y0))
+		path.QuadTo(f32.Pt(cx, cy), f32.Pt(x1, y1))
+	}
+	line(half+r, half, w-r, half)
+	line(w, half+r, w, h-r)
+	line(w-r, h, half+r, h)
+	line(half, h-r, half, half+r)
+	corner(half, half+r, half, half, half+r, half)
+	corner(w-r, half, w, half, w, half+r)
+	corner(w, h-r, w, h, w-r, h)
+	corner(half+r, h, half, h, half, h-r)
+
+	stroke := clip.Stroke{Path: path.End(), Width: width}
+	paint.FillShape(c.Ops, ink, stroke.Op())
 }

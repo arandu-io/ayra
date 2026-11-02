@@ -1,6 +1,9 @@
 package mask
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // Pattern is a mask written in tokens.
 //
@@ -12,6 +15,8 @@ import "strings"
 //	#  a digit, repeated to the end of the value
 //	A  a letter or a digit
 //	S  a letter
+//	U  a letter, written in capitals
+//	X  a letter or a digit, written in capitals
 //
 // Every other character is written through as it stands. A pattern that needs a
 // literal token character is not expressible, and that is the price of the
@@ -25,16 +30,31 @@ type token struct {
 	accepts   func(rune) bool
 	optional  bool
 	repeating bool
+	// upper writes what was accepted in capitals: a licence plate is typed in
+	// lower case as often as not and is stored as it is printed.
+	upper bool
 }
 
-// tokens is the dictionary. It is closed: a mask that needed a sixth token
-// would be a mask nobody could read without this table beside them.
+// tokens is the dictionary. It is closed: a mask that needed a new token would
+// be a mask nobody could read without this table beside them, and the two that
+// were added after the first five -- the same two with capitals -- were added
+// for one field whose letters are always capitals.
 var tokens = map[rune]token{
 	'0': {accepts: isDigit},
 	'9': {accepts: isDigit, optional: true},
 	'#': {accepts: isDigit, repeating: true},
 	'A': {accepts: isAlphanumeric},
 	'S': {accepts: isLetter},
+	'U': {accepts: isLetter, upper: true},
+	'X': {accepts: isAlphanumeric, upper: true},
+}
+
+// write is the character as the token keeps it.
+func (t token) write(r rune) rune {
+	if t.upper {
+		return unicode.ToUpper(r)
+	}
+	return r
 }
 
 func isDigit(r rune) bool  { return r >= '0' && r <= '9' }
@@ -79,7 +99,7 @@ func (p Pattern) Apply(value string) string {
 			at++
 			continue
 		}
-		out = append(out, input[at])
+		out = append(out, tk.write(input[at]))
 		at++
 		if !tk.repeating {
 			cursor++
@@ -120,7 +140,7 @@ func (p Pattern) Unmask(value string) string {
 			at++
 			continue
 		}
-		out.WriteRune(input[at])
+		out.WriteRune(tk.write(input[at]))
 		at++
 		if !tk.repeating {
 			cursor++
