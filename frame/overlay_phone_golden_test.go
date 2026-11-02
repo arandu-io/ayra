@@ -21,6 +21,7 @@ func TestTheOverlaysFitAPhone(t *testing.T) {
 		{screen: screen{name: "dialog-phone-keyboard", width: 390, height: 440, draw: dialogTallScreen}},
 		{screen: screen{name: "dialog-over-bars", width: 390, height: 640, draw: dialogOverBars}},
 		{screen: screen{name: "drawer-over-bars", width: 390, height: 640, draw: drawerOverBars}},
+		{screen: screen{name: "tabs-phone", width: 390, height: 260, draw: tabsPhone}},
 		{screen: screen{name: "menu-phone", width: 390, height: 300, draw: menuRowScreen}},
 		{screen: screen{name: "popover-phone", width: 390, height: 260, draw: popoverRowScreen}},
 	} {
@@ -206,4 +207,31 @@ func drawerOverBars() ayra.Widget {
 			)
 		})
 	})
+}
+
+// tabsPhone is three rows of tabs on a phone: a few short ones, five with long
+// words that scroll and the last of them selected, and three with icons.
+func tabsPhone() ayra.Widget {
+	var few, many, iconic widget.Tabs
+	many.Select(4)
+	iconic.Select(1)
+	return func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{Top: 16, Left: 16, Right: 16}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			inner := c.With(gtx)
+			inner.Constraints.Min = image.Point{}
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.TabsProps{Labels: []string{"Detalhes", "Atividade", "Permissões"}}.Layout(inner.With(gtx), &few)
+				}),
+				layout.Rigid(layout.Spacer{Height: 16}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.TabsProps{Labels: []string{"Visão geral das câmeras", "Leituras de placas do dia", "Configurações avançadas do motor", "Faturamento", "Integrações com outros sistemas"}}.Layout(inner.With(gtx), &many)
+				}),
+				layout.Rigid(layout.Spacer{Height: 16}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.TabsProps{Labels: []string{"Câmeras", "Leituras", "Alertas"}, Icons: []icons.Icon{icons.Camera(), icons.Gear(), icons.Camera()}}.Layout(inner.With(gtx), &iconic)
+				}),
+			)
+		})
+	}
 }

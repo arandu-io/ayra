@@ -20,20 +20,26 @@ import (
 type Tabs struct {
 	selected int
 	clicks   []engine.Clickable
+
+	// row is the strip the tabs are laid out in, which scrolls sideways when
+	// they are wider than the room, and reveal says that the selected one is to
+	// be brought into view on the next frame.
+	row    layout.List
+	reveal bool
 }
 
 // Selected is the index showing.
 func (t *Tabs) Selected() int { return t.selected }
 
 // Select shows one, for the state a screen arrives with.
-func (t *Tabs) Select(index int) { t.selected = index }
+func (t *Tabs) Select(index int) { t.selected, t.reveal = index, true }
 
 // Changed reports that somebody chose a different tab, and consumes that.
 func (t *Tabs) Changed(c ayra.Context) bool {
 	changed := false
 	for index := range t.clicks {
 		if t.clicks[index].Clicked(c.Context) && t.selected != index {
-			t.selected, changed = index, true
+			t.selected, t.reveal, changed = index, true, true
 		}
 	}
 	return changed
@@ -78,15 +84,20 @@ func (p TabsProps) layout(c ayra.Context, state *Tabs) ayra.Dimensions {
 		state.selected = 0
 	}
 
-	children := make([]layout.FlexChild, 0, len(p.Labels))
-	for index, label := range p.Labels {
-		index, label := index, label
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return p.tab(c.With(gtx), state, index, label)
-		}))
+	// The tabs are a strip that scrolls: more of them, or longer words, than the
+	// room has were cut off at its edge, and the ones past it could not be
+	// reached by any means. A strip is as wide as the room and the tabs take what
+	// they need.
+	state.row.Axis = layout.Horizontal
+	if state.reveal {
+		state.row.ScrollTo(state.selected)
+		state.reveal = false
 	}
-
-	dims := layout.Flex{Axis: layout.Horizontal}.Layout(c.Context, children...)
+	room := c
+	room.Constraints.Min = image.Point{}
+	dims := state.row.Layout(room.Context, len(p.Labels), func(gtx layout.Context, index int) layout.Dimensions {
+		return p.tab(c.With(gtx), state, index, p.Labels[index])
+	})
 
 	// The rule under the whole row, drawn after the tabs so the selected one's
 	// own marker sits on top of it rather than beside it.
@@ -108,13 +119,21 @@ func (p TabsProps) tab(c ayra.Context, state *Tabs, index int, label string) ayr
 		inner := c.With(gtx)
 		inner.Constraints.Min = image.Point{}
 
-		dims := layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 12}.Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
+		// A tab is at least 44 points high: a finger is not a pointer, and the
+		// text and its padding are 33.
+		dims := layout.Inset{Left: 12, Right: 12}.Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min.Y = c.Dp(touchTarget)
 			var icon icons.Icon
 			if index < len(p.Icons) {
 				icon = p.Icons[index]
 			}
-			if icon.IsZero() {
+			// Centred in the height, whatever the tab holds.
+			words := layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Point{}
 				return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, face)
+			})
+			if icon.IsZero() {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, words)
 			}
 			side := c.Dp(unit.Dp(c.Theme.Type.Body))
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
@@ -123,9 +142,7 @@ func (p TabsProps) tab(c ayra.Context, state *Tabs, index int, label string) ayr
 					return layout.Dimensions{Size: image.Pt(side, side)}
 				}),
 				layout.Rigid(layout.Spacer{Width: 6}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return drawText(inner.With(gtx), label, unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, face)
-				}),
+				words,
 			)
 		})
 
