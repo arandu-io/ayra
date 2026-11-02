@@ -24,6 +24,9 @@ func TestAPasteIsFormattedWhateverItCarries(t *testing.T) {
 		{"cep with accent noise", brazil.CEP, "CEP: 01310-100", "01310-100"},
 		{"phone", brazil.Phone, "+(11) 98765-4321", "(11) 98765-4321"},
 		{"plate old", brazil.Plate, "ABC1234", "ABC1234"},
+		{"plate lower case", brazil.Plate, "abc1234", "ABC1234"},
+		{"plate mercosul lower case", brazil.Plate, "abc1d23", "ABC1D23"},
+		{"plate pasted with a hyphen in lower case", brazil.Plate, "abc-1d23", "ABC1D23"},
 		{"plate with hyphen", brazil.Plate, "ABC-1234", "ABC1234"},
 		{"money", brazil.Real, "1234567", "R$ 12.345,67"},
 	}

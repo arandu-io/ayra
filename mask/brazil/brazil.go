@@ -33,8 +33,9 @@ var Phone = mask.Alternatives{"(00) 0000-0000", "(00) 00000-0000"}
 // Plate is a licence plate, the old shape (ABC-1234) and the Mercosul one
 // (ABC1D23) alike: three letters, a digit, a letter or digit, and two digits.
 // The old plate is typed without the hyphen: ABC1234 is the plate, and the
-// hyphen is only how it is printed.
-const Plate mask.Pattern = "SSS0A00"
+// hyphen is only how it is printed. The letters are written in capitals whatever
+// was typed, which is how a plate is printed and stored.
+const Plate mask.Pattern = "UUU0X00"
 
 // Real is the Brazilian currency: R$ 1.234,56, stored as 123456 centavos.
 var Real = mask.Money{Symbol: "R$", Decimals: 2, Thousands: ".", Decimal: ","}

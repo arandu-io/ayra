@@ -23,7 +23,9 @@ func TestTheBrazilianShapes(t *testing.T) {
 		{"landline", brazil.Phone, "1133334444", "(11) 3333-4444", "1133334444"},
 		{"mobile", brazil.Phone, "11987654321", "(11) 98765-4321", "11987654321"},
 		{"cep", brazil.CEP, "01310100", "01310-100", "01310100"},
-		{"old plate", brazil.Plate, "abc1234", "abc1234", "abc1234"},
+		{"old plate", brazil.Plate, "ABC1234", "ABC1234", "ABC1234"},
+		{"old plate typed in lower case", brazil.Plate, "abc1234", "ABC1234", "ABC1234"},
+		{"mercosul plate typed in lower case", brazil.Plate, "abc1d23", "ABC1D23", "ABC1D23"},
 		{"mercosul plate", brazil.Plate, "ABC1D23", "ABC1D23", "ABC1D23"},
 		{"date", mask.Date, "10092026", "10/09/2026", "10092026"},
 		{"time", mask.Time, "0930", "09:30", "0930"},
@@ -48,7 +50,7 @@ func TestAPlateGrowsIntoTheMercosulShape(t *testing.T) {
 	if brazil.Plate.Complete("ABC1D2") {
 		t.Error("six characters are not a plate")
 	}
-	if got := brazil.Plate.Apply("ab1"); got != "ab" {
+	if got := brazil.Plate.Apply("ab1"); got != "AB" {
 		t.Errorf("a digit where a letter goes was kept: %q", got)
 	}
 }
