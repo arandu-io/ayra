@@ -141,7 +141,10 @@ func (p TableProps) row(c ayra.Context, values []string, padding unit.Dp, headin
 				if heading {
 					size = unit.Sp(inner.Theme.Type.Small)
 				}
-				return drawText(inner.With(gtx), value, size, ink, 1, column.Align.alignment(), face)
+				// The text of a cell wraps instead of being cut short: a table over a
+				// phone's width keeps every column, and a column too narrow for a plate
+				// or a name loses the characters that tell one row from the next.
+				return drawText(inner.With(gtx), value, size, ink, 0, column.Align.alignment(), face)
 			})
 		}))
 	}

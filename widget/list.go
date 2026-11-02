@@ -125,14 +125,14 @@ func (p ItemProps) edge(c ayra.Context) color.NRGBA {
 func (p ItemProps) lines(c ayra.Context) ayra.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return drawText(c.With(gtx), p.Title, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, plain())
+			return drawText(c.With(gtx), p.Title, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 0, text.Start, plain())
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if p.Body == "" {
 				return layout.Dimensions{}
 			}
 			return layout.Inset{Top: 2}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return drawText(c.With(gtx), p.Body, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
+				return drawText(c.With(gtx), p.Body, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 0, text.Start, plain())
 			})
 		}),
 	)

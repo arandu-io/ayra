@@ -47,6 +47,48 @@ For iOS, enable Push Notifications for the application identifier and download
 the provisioning profile again; `aru` refuses to sign a push application with a
 profile that lacks the `aps-environment` entitlement.
 
+## Unreleased -- the listing as Kyse v0.48 and v0.49 draw it
+
+Nothing stops compiling. What is drawn changes in the places below, and a golden
+picture or a test of yours that reads the words of a table may need the new ones.
+
+**The footer of a `DataTable` says "1 row." and "{total} rows."** in English, no
+longer "{total} row(s).". `DataTableWords` gains `RowsOne` and `RowsMany`, the
+two forms of Kyse's `DataTableLines`; `Rows` still says one sentence for every
+count, and a form written beside it wins for its own count. A table that passes
+`Rows` draws exactly what it drew.
+
+| it was | it can be |
+| --- | --- |
+| `Words{Rows: "{total} linha(s)."}` | `Words{RowsOne: "{total} linha.", RowsMany: "{total} linhas."}` |
+
+A selectable table says "{n} of {total} row(s) selected." (`Words.Selected`, and
+`Words.SelectedCount` for a source that does not count), as Kyse does, and no
+longer "2 / 37 row(s).". The size menu is `Words.PerPage` ("{n} / page") and the
+pager's two ends are `Words.Previous` and `Words.Next`; `PaginationProps` gains
+`PreviousLabel` and `NextLabel` for the same, under Kyse's names. A table in
+Portuguese that did not set them drew "Previous", "Next" and "/ page" in English.
+
+**A card leaves an empty cell out**, so the name of a column is never drawn
+alone in front of nothing; the title is drawn even when it is empty. A column
+with no `Title` gives its value the whole line. With no column marked `Primary`
+the title is the first column that is not `CardHidden`, and a `CardHidden` column
+is never the title: before, column 0 was the title whatever it was marked.
+
+**`DataColumn.Actions` marks the column of a row's own controls**, Kyse's
+`TableColumn.Actions`. A card draws its cell as the foot of the card, at the end
+and under a rule, with no name in front of it, and leaves it out when the row has
+nothing there. The `RowAction`s of a table stand in the same foot, under the same
+rule. Their square is 44 points, as a thumb needs, and not 40.
+
+**The text of a cell wraps** in a card, in a table, in `TableProps` and in
+`ItemProps` (and so in a `Tree`), instead of ending in an ellipsis after one
+line. A row is as tall as its longest cell.
+
+**An error after the first answer is said.** The rows on screen are the last
+question's, so a failure replaces them with the message and the retry button, as
+it did for a table that had never loaded; asking again clears it.
+
 ## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard

@@ -5,6 +5,7 @@ import (
 	"image"
 	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -241,7 +242,9 @@ func (p DataTableProps) cards(c ayra.Context, state *DataTable) ayra.Dimensions 
 		if !p.Infinite {
 			children = append(children,
 				layout.Rigid(layout.Spacer{Height: 8}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.footer(c.With(gtx), state, result, loaded) }),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return p.footer(c.With(gtx), state, result, loaded && err == nil)
+				}),
 			)
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
@@ -311,21 +314,38 @@ func (p DataTableProps) sortable() bool {
 	return false
 }
 
-// primary is the column that titles a card.
+// primary is the column that titles a card: the first one marked Primary, and
+// with none marked the first that the card does not leave out. A table with no
+// column that can is -1, and draws no title.
 func (p DataTableProps) primary() int {
 	for i, column := range p.Columns {
 		if column.Primary {
 			return i
 		}
 	}
-	return 0
+	for i, column := range p.Columns {
+		if !column.CardHidden {
+			return i
+		}
+	}
+	return -1
+}
+
+// blank is whether the cell of a column draws nothing for a row: no widget of the
+// column's own and no text. A card leaves such a cell out, so the name of its
+// column is never drawn in front of nothing.
+func (p DataTableProps) blank(row Row, column int) bool {
+	if column < len(p.Columns) && p.Columns[column].Cell != nil && p.Columns[column].Cell(row) != nil {
+		return false
+	}
+	return column >= len(row.Cells) || strings.TrimSpace(row.Cells[column]) == ""
 }
 
 // cardsList draws the state of the list -- loading, failed, empty -- or the cards.
 func (p DataTableProps) cardsList(c ayra.Context, state *DataTable, result Result, loaded bool, err error, loading, more, bounded bool) ayra.Dimensions {
 	t := c.Theme
 	switch {
-	case err != nil && !loaded:
+	case err != nil:
 		return p.failure(c, state, err)
 	case !loaded:
 		children := make([]layout.FlexChild, 0, 4)
@@ -479,29 +499,44 @@ func (p DataTableProps) card(c ayra.Context, state *DataTable, row Row, index in
 		state.checks[index].Set(state.selected[row.Key])
 	}
 
+	// The foot is the column marked Actions and the row's own buttons, at the end
+	// of the card under a rule. A row with neither has no foot.
+	foot := []int{}
+	for i, column := range p.Columns {
+		if column.Actions && i != title && !column.CardHidden && !p.blank(row, i) {
+			foot = append(foot, i)
+		}
+	}
+	hasFoot := len(foot) > 0 || len(p.Actions) > 0
+
 	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
 		content := func(c ayra.Context) ayra.Dimensions {
-			children := []layout.FlexChild{
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.cell(c.With(gtx), row, title, true, false) }),
+			children := []layout.FlexChild{}
+			if title >= 0 {
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.cell(c.With(gtx), row, title, true, false) }))
 			}
 			for i, column := range p.Columns {
-				if i == title || column.CardHidden {
+				if i == title || column.CardHidden || column.Actions || p.blank(row, i) {
 					continue
 				}
 				i, column := i, column
-				children = append(children,
-					layout.Rigid(layout.Spacer{Height: 6}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-							layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
-								return drawText(c.With(gtx), column.Title, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
-							}),
-							layout.Flexed(3, func(gtx layout.Context) layout.Dimensions {
-								return p.cell(c.With(gtx), row, i, false, false)
-							}),
-						)
-					}),
-				)
+				if len(children) > 0 {
+					children = append(children, layout.Rigid(layout.Spacer{Height: 6}.Layout))
+				}
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					// A column with no name gives its value the whole line.
+					if column.Title == "" {
+						return p.cell(c.With(gtx), row, i, false, false)
+					}
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(gtx,
+						layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
+							return drawText(c.With(gtx), column.Title, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 0, text.Start, plain())
+						}),
+						layout.Flexed(3, func(gtx layout.Context) layout.Dimensions {
+							return p.cell(c.With(gtx), row, i, false, false)
+						}),
+					)
+				}))
 			}
 			return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
 		}
@@ -528,13 +563,35 @@ func (p DataTableProps) card(c ayra.Context, state *DataTable, row Row, index in
 					return state.rows[index].click.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return content(c.With(gtx)) })
 				}),
 			}
-			if len(p.Actions) > 0 {
+			if hasFoot {
 				rows = append(rows,
 					layout.Rigid(layout.Spacer{Height: 8}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return SeparatorProps{}.Layout(c.With(gtx)) }),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						inner := c.With(gtx)
 						inner.Constraints.Min = image.Point{}
-						return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions { return p.actions(inner.With(gtx), state, row, index) })
+						return layout.Inset{Top: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Constraints.Max.X
+							return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+								children := make([]layout.FlexChild, 0, len(foot)+1)
+								for _, i := range foot {
+									i := i
+									if len(children) > 0 {
+										children = append(children, layout.Rigid(layout.Spacer{Width: 12}.Layout))
+									}
+									children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										return p.cell(inner.With(gtx), row, i, false, false)
+									}))
+								}
+								if len(p.Actions) > 0 {
+									if len(children) > 0 {
+										children = append(children, layout.Rigid(layout.Spacer{Width: 12}.Layout))
+									}
+									children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.actions(inner.With(gtx), state, row, index) }))
+								}
+								return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, children...)
+							})
+						})
 					}),
 				)
 			}
@@ -563,16 +620,20 @@ func (p DataTableProps) cell(c ayra.Context, row Row, column int, title, table b
 	} else if column < len(p.Columns) && p.Columns[column].Numeric {
 		face = mono()
 	}
-	maxLines := 1
-	if title {
-		maxLines = 2
-	}
+	// A cell says all of its text: one line cut short with an ellipsis loses the
+	// part of a camera's name that tells it from the one beside it. It wraps, and
+	// the row is as tall as its longest cell.
+	maxLines := 0
 	align := text.Start
 	if table && column < len(p.Columns) {
 		align = p.Columns[column].Align.alignment()
 	}
 	return drawText(c, value, size, t.Colours.Foreground, maxLines, align, face)
 }
+
+// rowActionSide is the side, in points, of the square an icon action is drawn in:
+// the smallest target a thumb is held to.
+const rowActionSide = 44
 
 // actionsWidth is the room the actions of a row keep at the end of it in the table,
 // the same for every row and for the heading over them, so the columns line up:
@@ -581,7 +642,7 @@ func (p DataTableProps) actionsWidth(c ayra.Context) int {
 	width := 0
 	for _, action := range p.Actions {
 		if action.Icon != nil {
-			width += c.Dp(40)
+			width += c.Dp(rowActionSide)
 		} else {
 			width += c.Dp(92)
 		}
@@ -613,7 +674,8 @@ func (p DataTableProps) cells(c ayra.Context, grid TableProps, row Row) ayra.Dim
 			share := gtx.Constraints.Max.X
 			gtx.Constraints.Min.X = share
 			dims := layout.Inset{Top: 8, Bottom: 8, Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min.X = 0
+				// The cell is placed inside the whole share, so an End or Middle column
+				// puts its content at that edge and not at the start.
 				place := layout.W
 				switch column.Align {
 				case End:
@@ -669,7 +731,7 @@ func (p DataTableProps) action(c ayra.Context, button *Button, action RowAction)
 		c.Constraints.Min = image.Point{}
 		return ButtonProps{Label: action.Label, Variant: variant, Size: Small}.Layout(c, button)
 	}
-	side := c.Dp(40)
+	side := c.Dp(rowActionSide)
 	return button.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints = layout.Exact(image.Pt(side, side))
 		fill := ink
