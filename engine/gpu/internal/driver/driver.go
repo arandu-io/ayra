@@ -155,9 +155,13 @@ const (
 )
 
 const (
-	TextureFormatSRGBA TextureFormat = iota
+	// TextureFormatRGBA8 is 8 bits per channel that the hardware does not bend:
+	// the bytes written are the bytes read back, and a blend adds them as they
+	// are. They hold colours in the space a picture is written in, which is the
+	// space the browser half blends in. It is the format of every frame, layer
+	// and image the engine draws.
+	TextureFormatRGBA8 TextureFormat = iota
 	TextureFormatFloat
-	TextureFormatRGBA8
 	// TextureFormatOutput denotes the format used by the output framebuffer.
 	TextureFormatOutput
 )

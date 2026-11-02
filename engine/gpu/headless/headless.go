@@ -71,7 +71,7 @@ func NewWindow(width, height int) (*Window, error) {
 			return err
 		}
 		fboTex, err := dev.NewTexture(
-			driver.TextureFormatSRGBA,
+			driver.TextureFormatRGBA8,
 			width, height,
 			driver.FilterNearest, driver.FilterNearest,
 			driver.BufferBindingFramebuffer,

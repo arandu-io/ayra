@@ -1708,7 +1708,7 @@ func CreateSwapChain(dev *Device, hwnd windows.Handle) (*IDXGISwapChain, error) 
 		(*IUnknown)(unsafe.Pointer(dev)),
 		&DXGI_SWAP_CHAIN_DESC{
 			BufferDesc: DXGI_MODE_DESC{
-				Format: DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+				Format: DXGI_FORMAT_R8G8B8A8_UNORM,
 			},
 			SampleDesc: DXGI_SAMPLE_DESC{
 				Count: 1,

@@ -77,10 +77,7 @@ fifths as bright as an available one in the dark. A label is centred in a button
 given more height than its line.
 
 **Icon.** `IconProps` reports a baseline an eighth of its side above its bottom
-edge, so a row aligned by baseline sits the square on the word's line. The shade of
-a duotone icon is painted at the strength that lands a fifth of the way from the
-ground to the ink in the colours as written, as the browser does: the minus of a
-stepper was a grey square in the dark scheme.
+edge, so a row aligned by baseline sits the square on the word's line. 
 
 **Alert and toast.** A note's title is in the card foreground and its message in
 the muted one. A failure is drawn on the card with the destructive ink and border,
@@ -156,7 +153,12 @@ cancelled file says so (`Words.Cancelled`).
 `NextLabel`), a sortable heading is aligned with its values, the heading box follows the
 selection, an error after the first answer is shown and cleared on retry, icon actions
 are 44 points. The text of a cell and of an item wraps instead of ending in an
-ellipsis.
+ellipsis. The cards have the bar of order controls Kyse keeps of the table's head on a
+phone -- a control for each sortable column, marked with its order -- and a Columns menu
+(`DataColumn.Hideable`, `DataColumn.Hidden`, `DataTable.HideColumn`); the sheet of
+filters loses its "Sort by" section. A column is as wide as its heading, in the heading
+and in every row. An empty list is a 96-point box with the sentence centred. The label
+of a card stays at the top against a value on two lines.
 
 **Menu, popover, tooltip, dialog, drawer.** The window has an overlay layer
 (`ayra.Context.Overlay`, played back by `shell.Run` and `frame.Draw`): a menu, a
@@ -168,6 +170,17 @@ dialog or drawer covers the whole window, under the bars, and keeps Tab inside
 scrolls when taller than the window; the panel's corners are Kyse's rounded-xl.
 `Context.KeyboardOpen` says when the keyboard is up. The router answers where a
 control was drawn (`Source.Bounds`).
+
+### Changed (engine)
+
+- Translucent colours blend as the browser blends them. The compositor mixed in linear
+  light, so one half of white over black came out a light grey and one fifth of an ink
+  was nearly half of it on screen; it now mixes in sRGB with the colours premultiplied
+  in sRGB, targets are RGBA8 UNORM instead of SRGBA, the swapchains are UNORM on Metal,
+  Vulkan, Direct3D 11 and iOS's GL layer, EGL asks for no sRGB colour space, and
+  `srgb.go` is gone. Every translucent edge, scrim, shade and fade moves a little, in
+  both schemes; the stripes in the logo are fixed. A picture of yours that holds one
+  changes, and `go test ./frame -update` regenerates it.
 
 ### Fixed (engine)
 

@@ -306,3 +306,20 @@ func BenchmarkLinearFromSRGB(b *testing.B) {
 		})
 	}
 }
+
+// The rasteriser is handed a colour whose channels are the bytes it arrived as,
+// multiplied by its alpha, and not straightened first: blending happens in the
+// space a picture is written in, which is what a browser does.
+func TestPremulFromSRGBKeepsTheSpaceTheColourIsWrittenIn(t *testing.T) {
+	got := PremulFromSRGB(color.NRGBA{R: 255, G: 128, B: 0, A: 38})
+	a := float32(38) / 255
+	want := RGBA{R: a, G: 128.0 / 255 * a, B: 0, A: a}
+	for name, pair := range map[string][2]float32{"R": {got.R, want.R}, "G": {got.G, want.G}, "B": {got.B, want.B}, "A": {got.A, want.A}} {
+		if d := pair[0] - pair[1]; d > 1e-6 || d < -1e-6 {
+			t.Errorf("%s is %v, want %v", name, pair[0], pair[1])
+		}
+	}
+	if opaque := PremulFromSRGB(color.NRGBA{R: 10, G: 20, B: 30, A: 255}); opaque.R != 10.0/255 || opaque.G != 20.0/255 || opaque.B != 30.0/255 {
+		t.Errorf("an opaque colour changed: %v", opaque)
+	}
+}

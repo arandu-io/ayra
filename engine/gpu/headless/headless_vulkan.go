@@ -48,7 +48,7 @@ func (c *vkContext) API() gpu.API {
 	return gpu.Vulkan{
 		PhysDevice:  unsafe.Pointer(c.physDev),
 		Device:      unsafe.Pointer(c.dev),
-		Format:      int(vk.FORMAT_R8G8B8A8_SRGB),
+		Format:      int(vk.FORMAT_R8G8B8A8_UNORM),
 		QueueFamily: c.queueFam,
 		QueueIndex:  0,
 	}

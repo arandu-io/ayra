@@ -154,7 +154,7 @@ func newVulkanDevice(api driver.Vulkan) (driver.Device, error) {
 		b.caps |= driver.FeatureFloatRenderTargets
 	}
 	reqs = vk.FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT | vk.FORMAT_FEATURE_SAMPLED_IMAGE_BIT | vk.FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT
-	props = vk.GetPhysicalDeviceFormatProperties(b.physDev, vk.FORMAT_R8G8B8A8_SRGB)
+	props = vk.GetPhysicalDeviceFormatProperties(b.physDev, vk.FORMAT_R8G8B8A8_UNORM)
 	if props&reqs == reqs {
 		b.caps |= driver.FeatureSRGB
 	}
@@ -1139,8 +1139,6 @@ func formatFor(format driver.TextureFormat) vk.Format {
 	switch format {
 	case driver.TextureFormatRGBA8:
 		return vk.FORMAT_R8G8B8A8_UNORM
-	case driver.TextureFormatSRGBA:
-		return vk.FORMAT_R8G8B8A8_SRGB
 	case driver.TextureFormatFloat:
 		return vk.FORMAT_R16_SFLOAT
 	default:

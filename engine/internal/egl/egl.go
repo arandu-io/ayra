@@ -156,13 +156,15 @@ func hasExtension(exts []string, ext string) bool {
 }
 
 func createContext(disp _EGLDisplay) (*eglContext, error) {
-	major, minor, ret := eglInitialize(disp)
+	_, _, ret := eglInitialize(disp)
 	if !ret {
 		return nil, fmt.Errorf("eglInitialize failed: 0x%x", eglGetError())
 	}
-	// sRGB framebuffer support on EGL 1.5 or if EGL_KHR_gl_colorspace is supported.
 	exts := strings.Split(eglQueryString(disp, _EGL_EXTENSIONS), " ")
-	srgb := major > 1 || minor >= 5 || hasExtension(exts, "EGL_KHR_gl_colorspace")
+	// The surface is never asked to be sRGB: the engine blends in the space a
+	// picture is written in, and a surface that bent what was written would
+	// undo that.
+	srgb := false
 	attribs := []_EGLint{
 		_EGL_RENDERABLE_TYPE, _EGL_OPENGL_ES2_BIT,
 		_EGL_SURFACE_TYPE, _EGL_WINDOW_BIT,

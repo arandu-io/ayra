@@ -242,8 +242,8 @@ func TestAPeriodsPanelIsOverTheListBelowIt(t *testing.T) {
 	alone, crowded := screen(false), screen(true)
 	for y := 60; y < 360; y++ {
 		for x := 24; x < 300; x++ {
-			if alone.RGBAAt(x, y) != crowded.RGBAAt(x, y) {
-				t.Fatalf("the panel is not on top at %d,%d: the item after it was drawn over the month", x, y)
+			if near(alone.RGBAAt(x, y), crowded.RGBAAt(x, y)) > 3 {
+				t.Fatalf("the panel is not on top at %d,%d: the item after it was drawn over the month (%v against %v)", x, y, alone.RGBAAt(x, y), crowded.RGBAAt(x, y))
 			}
 		}
 	}
@@ -294,4 +294,17 @@ func TestAFieldOnTheKeyboardFocusHasKyses3PointRing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// near is the largest difference in any channel between two pixels. Translucent
+// edges and antialiased glyphs differ by a level between two drawings of the
+// same thing, and a panel with a card drawn over it differs by far more.
+func near(a, b color.RGBA) int {
+	diff := func(x, y uint8) int {
+		if x > y {
+			return int(x - y)
+		}
+		return int(y - x)
+	}
+	return max(diff(a.R, b.R), diff(a.G, b.G), diff(a.B, b.B), diff(a.A, b.A))
 }

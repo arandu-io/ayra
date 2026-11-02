@@ -53,7 +53,7 @@ func (c *mtlContext) API() gpu.API {
 	return gpu.Metal{
 		Device:      uintptr(c.dev),
 		Queue:       uintptr(c.queue),
-		PixelFormat: int(C.MTLPixelFormatRGBA8Unorm_sRGB),
+		PixelFormat: int(C.MTLPixelFormatRGBA8Unorm),
 	}
 }
 
