@@ -72,7 +72,11 @@ func (p IconProps) Layout(c ayra.Context) ayra.Dimensions {
 		}
 		DrawIcon(inner, p.Icon, pixels, style.Foreground.NRGBA())
 		close()
-		return ayra.Dimensions{Size: image.Pt(pixels, pixels), Baseline: pixels}
+		// The text's baseline runs a little above the bottom of the square, as the
+		// browser half sets an icon beside a word (vertical-align: -0.125em). A
+		// baseline at the top edge, which is what Baseline: pixels said, hung the
+		// whole icon below the line of the word it stands beside.
+		return ayra.Dimensions{Size: image.Pt(pixels, pixels), Baseline: pixels / 8}
 	})
 }
 
