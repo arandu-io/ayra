@@ -38,6 +38,7 @@ import (
 var innerIcons = map[string]map[string]func() icons.Icon{
 	"accordion":         {"CaretDown": icons.CaretDown},
 	"breadcrumb":        {"CaretRight": icons.CaretRight},
+	"carousel":          {"CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"calendar":          {"CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"checkbox":          {"Check": icons.Check},
 	"collapsible":       {"CaretDown": icons.CaretDown},

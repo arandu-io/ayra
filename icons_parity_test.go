@@ -91,6 +91,10 @@ var withoutIcons = map[string]map[string]string{
 
 // extraIcons are icons this half draws that Kyse does not, and why.
 var extraIcons = map[string]map[string]string{
+	"carousel": {
+		"CaretLeft":  "Kyse draws the steps as the characters of the stylesheet; the native half draws them as the arrows of the set, which are the same shape, so that the step has a name for a screen reader and no word of any language on it",
+		"CaretRight": "Kyse draws the steps as the characters of the stylesheet; the native half draws them as the arrows of the set, which are the same shape, so that the step has a name for a screen reader and no word of any language on it",
+	},
 	"date-time-picker": {
 		"CaretLeft":  "the year stepper of the month picker, where Kyse relies on the browser's own month field; the arrows are those of the calendar",
 		"CaretRight": "the year stepper of the month picker, where Kyse relies on the browser's own month field; the arrows are those of the calendar",
