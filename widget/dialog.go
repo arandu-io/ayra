@@ -190,8 +190,11 @@ func (p DialogProps) place(c ayra.Context, state *Dialog, content ayra.Widget, w
 		root := panel.Theme.Resolve("dialog", "root", p.VariantName("default"), theme.Style{
 			Background: theme.Colour(panel.Theme.Colours.Popover),
 			Border:     theme.Colour(panel.Theme.Colours.Border),
-			Radius:     theme.Pt(panel.Theme.Metrics.Radius),
-			Padding:    theme.Uniform(20),
+			// Kyse draws the panel with rounded-xl: the radius of the theme and
+			// four points more. It was the radius of a control, and a panel
+			// that size with the corners of a button reads as square.
+			Radius:  theme.Pt(panel.Theme.Metrics.Radius + 4),
+			Padding: theme.Uniform(20),
 		}, p.ComponentProps)
 		dims := Surface(panel, root, func(c ayra.Context) ayra.Dimensions {
 			return state.scrolled(c, content)
