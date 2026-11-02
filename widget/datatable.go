@@ -118,8 +118,17 @@ type DataColumn struct {
 	// screen. None marked is the first column.
 	Primary bool
 	// CardHidden leaves the column out of the card, for a value that only makes
-	// sense under a heading.
+	// sense under a heading. The title of the card is never left out: a column
+	// marked both is passed over when the title is chosen, and with none marked
+	// Primary the title is the first column that is not CardHidden.
 	CardHidden bool
+	// Actions marks the column that holds a row's own controls -- the widgets
+	// [DataColumn.Cell] draws, as the [RowAction]s of the table are. The card
+	// draws it as its foot: at the end of the card, under a rule, with no name
+	// in front of it, and leaves it out when the row has nothing there. Wide, it
+	// is a column like any other, heading included. It is Kyse's
+	// TableColumn.Actions.
+	Actions bool
 	// Cell draws the column's value with a widget of the application's own. It
 	// is asked for each row, and returns the widget that draws that row's cell,
 	// so that a plate, a status or a badge is the application's component and
@@ -316,8 +325,26 @@ type DataTableWords struct {
 	Refresh, Release, Refreshing, LoadMore, End string
 	// Actions names the buttons at the end of a row for a screen reader.
 	Actions string
-	// Rows is the count: "%d row(s)" with the number put where the text has {n}.
+	// Rows is the count in one form for every total: "{total} row(s).", with the
+	// number put where the text has {total} or {n}. It is what a table said
+	// before the footer had a singular and a plural, and it is still the sentence
+	// of any count that RowsOne or RowsMany does not name.
 	Rows string
+	// RowsOne is the footer when there is exactly one row ("{total} row."), and
+	// RowsMany the one for every other total, zero included ("{total} rows."),
+	// as Kyse's DataTableLines carries them. A language whose singular is more
+	// than a suffix writes the whole sentence in each. Either wins over Rows for
+	// its own count.
+	RowsOne, RowsMany string
+	// Selected is the footer of a selectable table: "{n} of {total} row(s)
+	// selected.". SelectedCount is the one for a source that does not count:
+	// "{n} row(s) selected.".
+	Selected, SelectedCount string
+	// PerPage is the button of the size menu: "{n} / page", with the size where
+	// the text has {n}.
+	PerPage string
+	// Previous and Next are the two ends of the pager.
+	Previous, Next string
 	// Page is the position: "Page {page} of {pages}".
 	Page string
 }
@@ -326,8 +353,23 @@ type DataTableWords struct {
 // number -- {n}, and {total} as Kyse's DataTableLines.Rows writes it -- so a
 // sentence taken from the web half's catalogue works here unchanged.
 func (w DataTableWords) rows(n int) string {
-	text := strings.ReplaceAll(orDefault(w.Rows, "{total} row(s)."), "{total}", strconv.Itoa(n))
+	sentence, fallback := w.RowsMany, "{total} rows."
+	if n == 1 {
+		sentence, fallback = w.RowsOne, "{total} row."
+	}
+	text := strings.ReplaceAll(orDefault(orDefault(sentence, w.Rows), fallback), "{total}", strconv.Itoa(n))
 	return strings.ReplaceAll(text, "{n}", strconv.Itoa(n))
+}
+
+// selected is the footer of a selectable table: how many rows are ticked of the
+// whole list, or of the rows it has when the source does not say how many that is.
+func (w DataTableWords) selected(ticked, total int) string {
+	text := orDefault(w.Selected, "{n} of {total} row(s) selected.")
+	if total < 0 {
+		text = orDefault(w.SelectedCount, "{n} row(s) selected.")
+	}
+	text = strings.ReplaceAll(text, "{total}", strconv.Itoa(total))
+	return strings.ReplaceAll(text, "{n}", strconv.Itoa(ticked))
 }
 
 // page is the position line, with Kyse's placeholders ({n} of {total}) or the
@@ -400,6 +442,12 @@ func (d *DataTable) ask(c ayra.Context, p DataTableProps, mode fetchMode) {
 	d.seq++
 	seq := d.seq
 	d.loading = mode != fetchSilent
+	if mode != fetchSilent {
+		// A question being asked again has no failure yet: the one on screen was
+		// the last question's, and leaving it up while the new answer is on its
+		// way says the retry did nothing.
+		d.err = nil
+	}
 	d.m.more = mode == fetchAppend
 	query := d.query
 	pages := d.m.pages
@@ -494,7 +542,9 @@ func (p DataTableProps) Layout(c ayra.Context, state *DataTable) ayra.Dimensions
 				return p.table(c.With(gtx), state, result, loaded, err, loading)
 			}),
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return p.footer(c.With(gtx), state, result, loaded) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return p.footer(c.With(gtx), state, result, loaded && err == nil)
+			}),
 		)
 	})
 }
@@ -664,7 +714,7 @@ func (p DataTableProps) table(c ayra.Context, state *DataTable, result Result, l
 	}
 
 	switch {
-	case err != nil && !loaded:
+	case err != nil:
 		rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -728,6 +778,9 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 					state.selected[row.Key] = state.everyone.On()
 				}
 			}
+			// The box says what is so: ticked when every row on the page is, and not
+			// when one is not -- by a press on a row, a page turned or a search.
+			state.everyone.Set(state.allSelected(result.Rows))
 			return CheckboxProps{}.Layout(inner, &state.everyone)
 		}))
 	}
@@ -744,7 +797,6 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 					return drawText(inner.With(gtx), column.Title, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, column.Align.alignment(), semibold())
 				})
 			}
-			inner.Constraints.Min = image.Point{}
 			// The arrow Kyse puts after a sortable heading: both ways while the
 			// column is not the one in order, then the way it is.
 			arrow := innerIcon("data-table", "ArrowsDownUp")
@@ -754,7 +806,26 @@ func (p DataTableProps) headings(c ayra.Context, state *DataTable, result Result
 					arrow = innerIcon("data-table", "ArrowDown")
 				}
 			}
-			return ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(inner.With(gtx), &state.headers[index])
+			// The button is as wide as its label and sits where the column's text
+			// does, on the side the column is aligned to, so a heading stands over
+			// its values. Its own padding (8 points) is taken back, as Kyse's -ms-3
+			// takes it back, so that the label and not the button lines up.
+			place, inset := layout.W, layout.Inset{Left: -8}
+			switch column.Align {
+			case End:
+				place, inset = layout.E, layout.Inset{Right: -8}
+			case Middle:
+				place, inset = layout.Center, layout.Inset{}
+			}
+			return layout.Inset{Left: 4, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return place.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						button := inner.With(gtx)
+						button.Constraints.Min = image.Point{}
+						return ButtonProps{Label: column.Title, Icon: arrow, Trailing: true, Variant: Ghost, Size: ExtraSmall}.Layout(button, &state.headers[index])
+					})
+				})
+			})
 		}))
 	}
 	if len(p.Actions) > 0 {
@@ -819,56 +890,101 @@ func (p DataTableProps) row(c ayra.Context, state *DataTable, grid TableProps, r
 	})
 }
 
-// footer draws the count, the size and the pager.
+// footer draws the count, the size and the pager. Wide, they stand in one line;
+// where the cards are drawn the line would not hold the count, the size menu and
+// a pager of ten pages in a phone's width, so the count and the size take the
+// first line and the pager the second.
 func (p DataTableProps) footer(c ayra.Context, state *DataTable, result Result, loaded bool) ayra.Dimensions {
 	t := c.Theme
 	style := t.Resolve("datatable", "footer", p.VariantName("default"), theme.Style{}, p.ComponentProps)
 
 	size := max(state.query.PageSize, 1)
 	pages := pageCount(result, state.query)
+	narrow := p.narrow(c)
 
-	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				count := ""
-				if loaded && result.Total >= 0 {
-					count = p.Words.rows(result.Total)
-					if p.Selectable {
-						count = strconv.Itoa(len(state.Selected())) + " / " + count
-					}
-				}
-				return drawText(c.With(gtx), count, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
-			}),
+	count := func(gtx layout.Context) layout.Dimensions {
+		line := ""
+		switch {
+		case loaded && p.Selectable:
+			line = p.Words.selected(len(state.Selected()), result.Total)
+		case loaded && result.Total >= 0:
+			line = p.Words.rows(result.Total)
+		}
+		return drawText(c.With(gtx), line, unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
+	}
+	sizes := func(gtx layout.Context) layout.Dimensions {
+		inner := c.With(gtx)
+		inner.Constraints.Min = image.Point{}
+		if !loaded {
+			return layout.Dimensions{}
+		}
+		labels := make([]string, len(p.sizes()))
+		for i, s := range p.sizes() {
+			labels[i] = strconv.Itoa(s)
+		}
+		per := strings.ReplaceAll(orDefault(p.Words.PerPage, "{n} / page"), "{n}", strconv.Itoa(size))
+		return MenuProps{Entries: labels, Above: true, Width: 80}.Layout(inner, &state.sizes, func(c ayra.Context) ayra.Dimensions {
+			return ButtonProps{Label: per, Icon: innerIcon("data-table", "CaretUpDown"), Trailing: true, Variant: Outline, Size: Small}.Layout(c, &state.sizeBtn)
+		})
+	}
+	pager := func(gtx layout.Context) layout.Dimensions {
+		inner := c.With(gtx)
+		inner.Constraints.Min = image.Point{}
+		if !loaded {
+			return layout.Dimensions{}
+		}
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				inner := c.With(gtx)
-				inner.Constraints.Min = image.Point{}
-				labels := make([]string, len(p.sizes()))
-				for i, s := range p.sizes() {
-					labels[i] = strconv.Itoa(s)
-				}
-				return MenuProps{Entries: labels, Above: true, Width: 80}.Layout(inner, &state.sizes, func(c ayra.Context) ayra.Dimensions {
-					return ButtonProps{Label: strconv.Itoa(size) + " / page", Icon: innerIcon("data-table", "CaretUpDown"), Trailing: true, Variant: Outline, Size: Small}.Layout(c, &state.sizeBtn)
-				})
+				return drawText(inner.With(gtx), p.Words.page(state.pages.Current(), pages), unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
 			}),
-			layout.Rigid(layout.Spacer{Width: 12}.Layout),
+			layout.Rigid(layout.Spacer{Width: 8}.Layout),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				inner := c.With(gtx)
-				inner.Constraints.Min = image.Point{}
-				if !loaded {
-					return layout.Dimensions{}
-				}
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return drawText(inner.With(gtx), p.Words.page(state.pages.Current(), pages), unit.Sp(t.Type.Small), t.Colours.MutedForeground, 1, text.Start, plain())
-					}),
-					layout.Rigid(layout.Spacer{Width: 8}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return PaginationProps{Total: pages, Window: 1}.Layout(inner.With(gtx), &state.pages)
-					}),
-				)
+				return PaginationProps{Total: pages, Window: 1, PreviousLabel: p.Words.Previous, NextLabel: p.Words.Next}.Layout(inner.With(gtx), &state.pages)
 			}),
 		)
+	}
+
+	return Surface(c, style, func(c ayra.Context) ayra.Dimensions {
+		if narrow {
+			return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Flexed(1, count),
+						layout.Rigid(layout.Spacer{Width: 8}.Layout),
+						layout.Rigid(sizes),
+					)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if !loaded {
+						return layout.Dimensions{}
+					}
+					return layout.Inset{Top: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Min.X = gtx.Constraints.Max.X
+						return layout.E.Layout(gtx, pager)
+					})
+				}),
+			)
+		}
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context,
+			layout.Flexed(1, count),
+			layout.Rigid(sizes),
+			layout.Rigid(layout.Spacer{Width: 12}.Layout),
+			layout.Rigid(pager),
+		)
 	})
+}
+
+// allSelected is whether the page has rows and every one of them is ticked.
+func (d *DataTable) allSelected(rows []Row) bool {
+	if len(rows) == 0 {
+		return false
+	}
+	for _, row := range rows {
+		if !d.selected[row.Key] {
+			return false
+		}
+	}
+	return true
 }
 
 // SetSearch types into the search field, for a screen that fills it from
