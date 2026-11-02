@@ -167,7 +167,7 @@ func (p InputProps) styles(c ayra.Context, focused bool) (box, placeholder theme
 	variant := p.VariantName("default")
 
 	root := t.Resolve(name, "root", variant, theme.Style{
-		Background:  theme.Colour(t.Colours.Background),
+		Background:  fieldFill(t),
 		Foreground:  theme.Colour(t.Colours.Foreground),
 		Border:      theme.Colour(t.Colours.Input),
 		BorderWidth: theme.Pt(1),
@@ -187,6 +187,28 @@ func (p InputProps) styles(c ayra.Context, focused bool) (box, placeholder theme
 		Foreground: theme.Colour(t.Colours.MutedForeground),
 	}, p.ComponentProps)
 	return root, placeholder
+}
+
+// fieldFill is what a text box is filled with, which is what Kyse's input is
+// filled with: nothing in the light scheme, so the box shows the surface it sits
+// on -- the white of a card -- and the input colour at 30% in the dark one. Filled
+// with the page's background instead, a field inside a card is a grey box on a
+// white one, and the placeholder and the typed value are two greys on a grey.
+//
+// The dark fill is mixed here, over the card, and drawn opaque. The engine blends
+// a translucent paint in linear light and a browser blends in the colours as
+// written, so the same 30% of a translucent white is several times brighter drawn
+// here than there.
+func fieldFill(t theme.Theme) theme.Paint {
+	if t.Scheme != theme.Dark {
+		return theme.Transparent
+	}
+	top, base := t.Colours.Input, t.Colours.Card
+	alpha := float32(top.A) / 255 * 0.3
+	mix := func(over, under uint8) uint8 {
+		return uint8(float32(over)*alpha + float32(under)*(1-alpha) + 0.5)
+	}
+	return theme.Colour(color.NRGBA{R: mix(top.R, base.R), G: mix(top.G, base.G), B: mix(top.B, base.B), A: 255})
 }
 
 // Layout draws the field and returns the room it took.

@@ -115,3 +115,22 @@ func TestADisabledPickerDoesNotOpenForASingleFrame(t *testing.T) {
 		t.Error("a disabled picker reported a choice")
 	}
 }
+
+// TestADayIsWrittenInTheOrderOfTheLocale fixes a Brazilian application that
+// showed 2026-11-02 in every date field: the field wrote the ISO order whatever
+// the theme said, and the locale had the words of the calendar and not the order
+// of the day.
+func TestADayIsWrittenInTheOrderOfTheLocale(t *testing.T) {
+	c, _ := field(t, theme.Light, 400)
+	if got := dayLayout(c, ""); got != DateFormat {
+		t.Errorf("with no locale the day is written %q, want the ISO order %q", got, DateFormat)
+	}
+
+	c.Theme.Locale = theme.PortugueseBrazil()
+	if got, want := pickerDay.Format(dayLayout(c, "")), "10/09/2026"; got != want {
+		t.Errorf("under pt-BR a day is written %q, want %q", got, want)
+	}
+	if got := dayLayout(c, "2006/01/02"); got != "2006/01/02" {
+		t.Errorf("the layout the caller gave was overridden by the locale: %q", got)
+	}
+}

@@ -175,3 +175,82 @@ func TestTheKindsOfDateTimeEachHoldTheirOwnValue(t *testing.T) {
 	}
 	_ = c
 }
+
+// TestAPeriodWithOneEndIsOpenOnTheOtherSide is "Até 31/12/2026": a period set
+// with only its last day. Set took the missing end for a day before the start
+// and swapped the two, so the period came back as nothing to 31 December, and
+// the field -- which drew a period only when it had a start -- said "choose a
+// period".
+func TestAPeriodWithOneEndIsOpenOnTheOtherSide(t *testing.T) {
+	last := time.Date(2026, time.December, 31, 0, 0, 0, 0, time.UTC)
+
+	var until DateRange
+	until.Set(time.Time{}, last)
+	if from, to := until.Range(); !from.IsZero() || !to.Equal(last) {
+		t.Errorf("a period until %v answered %v to %v", last, from, to)
+	}
+
+	var since DateRange
+	since.Set(last, time.Time{})
+	if from, to := since.Range(); !from.Equal(last) || !to.IsZero() {
+		t.Errorf("a period from %v answered %v to %v", last, from, to)
+	}
+
+	var both DateRange
+	both.Set(last, last.AddDate(0, 0, -10))
+	if from, to := both.Range(); !from.Before(to) {
+		t.Errorf("a period given backwards was not put right: %v to %v", from, to)
+	}
+}
+
+func TestAPeriodWithOneEndIsWrittenWithItsWord(t *testing.T) {
+	c, _ := field(t, theme.Light, 400)
+	c.Theme.Locale = theme.PortugueseBrazil()
+	layout := "02/01/2006"
+	first := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	last := time.Date(2026, time.December, 31, 0, 0, 0, 0, time.UTC)
+
+	for _, tc := range []struct {
+		from, to time.Time
+		want     string
+	}{
+		{time.Time{}, last, "Até 31/12/2026"},
+		{first, time.Time{}, "A partir de 01/01/2026"},
+		{first, last, "01/01/2026 – 31/12/2026"},
+	} {
+		if got := periodText(c, tc.from, tc.to, layout); got != tc.want {
+			t.Errorf("the period %v to %v is written %q, want %q", tc.from, tc.to, got, tc.want)
+		}
+	}
+
+	english, _ := field(t, theme.Light, 400)
+	if got := periodText(english, time.Time{}, last, layout); got != "Until 31/12/2026" {
+		t.Errorf("with no locale the period is written %q", got)
+	}
+}
+
+// TestTheDaysOnTheOpenSideAreInsideThePeriod is what the calendar shows of
+// "until 31 December": every day before it, as a band. While the end of a period
+// is still being chosen, the start stands alone and nothing around it is marked.
+func TestTheDaysOnTheOpenSideAreInsideThePeriod(t *testing.T) {
+	last := time.Date(2026, time.December, 31, 0, 0, 0, 0, time.UTC)
+	early := time.Date(2026, time.December, 3, 0, 0, 0, 0, time.UTC)
+
+	until := CalendarProps{Range: [2]time.Time{{}, last}, open: true}
+	if !until.within(early) {
+		t.Error("a day before the end of an open period is not marked as inside it")
+	}
+	if until.within(last.AddDate(0, 0, 1)) {
+		t.Error("a day after the end of the period is marked as inside it")
+	}
+
+	since := CalendarProps{Range: [2]time.Time{early, {}}, open: true}
+	if !since.within(last) {
+		t.Error("a day after the start of an open period is not marked as inside it")
+	}
+
+	choosing := CalendarProps{Range: [2]time.Time{early, {}}}
+	if choosing.within(last) {
+		t.Error("the days after a start that is still waiting for its end are marked")
+	}
+}

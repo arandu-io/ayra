@@ -65,6 +65,12 @@ type CheckboxProps struct {
 	// nobody can describe, so it is drawn but the caller has said something
 	// about it elsewhere.
 	Label string
+	// Mixed draws the box as partly set -- a dash where the tick goes -- for the
+	// box that stands for a group of which some are set and some are not, the
+	// "select all" of a list. It is what is drawn and not a third value of the
+	// state: a press still flips the [Toggle], and what the group does next is
+	// the caller's to decide, as the box has no way to know the others.
+	Mixed bool
 	// Disabled draws it as unavailable and stops it answering.
 	Disabled bool
 }
@@ -82,7 +88,9 @@ func (p CheckboxProps) Layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 
 // layout is Layout without the root part around it.
 func (p CheckboxProps) layout(c ayra.Context, state *Toggle) ayra.Dimensions {
-	return layoutToggle(c, state, p.Disabled, p.Label, drawBox)
+	return layoutToggle(c, state, p.Disabled, p.Label, func(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
+		return drawBox(c, state, disabled, p.Mixed)
+	})
 }
 
 // RadioProps is what one option of a set is drawn from.
@@ -158,18 +166,41 @@ func (p SwitchProps) layout(c ayra.Context, state *Toggle) ayra.Dimensions {
 // One target and not two, because a label that does not answer the press is the
 // commonest way a small control becomes hard to hit -- and it is hard to hit in
 // exactly the way nobody notices while testing with a mouse.
+//
+// A label that does not fit goes on to a second line, beside the mark and under
+// its own first line, as Kyse's does. It was cut at the edge with an ellipsis,
+// and the sentence a person agrees to is the one they most need to read to the
+// end. The mark stays level with the first line, which is where the eye starts.
+//
+// A control with a label is at least 44 dp tall, which is what a thumb needs:
+// the mark is 18 and the line is not much more, and a form of them was a column
+// of targets half the height of a finger.
 func layoutToggle(c ayra.Context, state *Toggle, disabled bool, label string, mark func(ayra.Context, *Toggle, bool) ayra.Dimensions) ayra.Dimensions {
 	if disabled {
 		c.Context = c.Context.Disabled()
 	}
 
-	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		inner := c.With(gtx)
+	row := func(c ayra.Context) ayra.Dimensions {
+		gtx := c.Context
+		inner := c
 		inner.Constraints.Min = image.Point{}
 
-		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(inner.Context,
+		// The first line of the label is what the mark is centred on. It is
+		// measured on a letter, so a label of one word and a label of three
+		// paragraphs put the mark in the same place.
+		measured := op.Record(inner.Ops)
+		line := drawText(inner, "Ag", unit.Sp(inner.Theme.Type.Body), color.NRGBA{}, 1, 0, plain()).Size.Y
+		glyph := mark(inner, state, disabled).Size.Y
+		measured.Stop()
+		drop := max((line-glyph)/2, 0)
+
+		recorded := op.Record(inner.Ops)
+		dims := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Start}.Layout(inner.Context,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return mark(inner.With(gtx), state, disabled)
+				shifted := op.Offset(image.Pt(0, drop)).Push(gtx.Ops)
+				size := mark(inner.With(gtx), state, disabled).Size
+				shifted.Pop()
+				return layout.Dimensions{Size: image.Pt(size.X, size.Y+drop)}
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				if label == "" {
@@ -180,17 +211,40 @@ func layoutToggle(c ayra.Context, state *Toggle, disabled bool, label string, ma
 					if disabled {
 						ink = fade(ink)
 					}
-					return drawText(inner.With(gtx), label, unit.Sp(inner.Theme.Type.Body), ink, 1, 0, plain())
+					return drawText(inner.With(gtx), label, unit.Sp(inner.Theme.Type.Body), ink, 0, 0, plain())
 				})
 			}),
 		)
-	})
+		row := recorded.Stop()
+
+		height := dims.Size.Y
+		if label != "" {
+			height = max(height, inner.Dp(unit.Dp(touchTarget)))
+		}
+		centred := op.Offset(image.Pt(0, (height-dims.Size.Y)/2)).Push(gtx.Ops)
+		row.Add(gtx.Ops)
+		centred.Pop()
+		return layout.Dimensions{Size: image.Pt(max(dims.Size.X, c.Constraints.Min.X), height), Baseline: dims.Baseline + (height-dims.Size.Y)/2}
+	}
+
+	if label == "" {
+		// A mark on its own is 18 points, or 36 by 20: the area that answers is
+		// grown to a finger and the picture does not move.
+		return TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+			return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+		}, row)
+	}
+	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return row(c.With(gtx)) })
 }
 
-// drawBox draws a checkbox: a square that fills and carries a tick when set.
-func drawBox(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
+// touchTarget is the least height, in dp, of a control a finger has to hit.
+const touchTarget = 44
+
+// drawBox draws a checkbox: a square that fills and carries a tick when set, and
+// a dash when it is partly so.
+func drawBox(c ayra.Context, state *Toggle, disabled, mixed bool) ayra.Dimensions {
 	side := c.Dp(unit.Dp(18))
-	fill, border, ink := toggleColours(c, state.On(), disabled)
+	fill, border, ink := toggleColours(c, state.On() || mixed, disabled)
 
 	box := image.Rectangle{Max: image.Pt(side, side)}
 	shape := clip.UniformRRect(box, c.Dp(unit.Dp(4)))
@@ -203,7 +257,10 @@ func drawBox(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
 		paint.FillShape(c.Ops, border, stroke.Op())
 	}
 
-	if state.On() {
+	switch {
+	case mixed:
+		drawDash(c, side, ink)
+	case state.On():
 		drawTick(c, side, ink)
 	}
 
@@ -221,6 +278,16 @@ func drawTick(c ayra.Context, side int, ink color.NRGBA) {
 	shift := op.Offset(image.Pt((side-mark)/2, (side-mark)/2)).Push(c.Ops)
 	drawInner(c, innerIcon("checkbox", "Check"), mark, ink, 0)
 	shift.Pop()
+}
+
+// drawDash draws the mark of a box that is partly set: a bar across the middle,
+// as wide as the tick is and as thick as the strokes of the tick's icon.
+func drawDash(c ayra.Context, side int, ink color.NRGBA) {
+	width := side * innerSideSmall / innerSide
+	thickness := max(c.Dp(unit.Dp(2)), 2)
+	left, top := (side-width)/2, (side-thickness)/2
+	bar := image.Rect(left, top, left+width, top+thickness)
+	paint.FillShape(c.Ops, ink, clip.UniformRRect(bar, thickness/2).Op(c.Ops))
 }
 
 // drawDot draws a radio option: a circle with a smaller one inside when set.
@@ -257,10 +324,17 @@ func drawTrack(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
 	if !state.On() {
 		// An off switch is a filled track rather than an outline: an outlined
 		// one at this size reads as a disabled control, and disabled is a
-		// different thing that has to stay distinguishable.
-		fill = c.Theme.Colours.Muted
+		// different thing that has to stay distinguishable. The track is the
+		// input colour, as Kyse's is, and the knob is the page's own colour in
+		// the light scheme and the text's in the dark one -- toggleColours gives
+		// an off control no ink, and a knob with none was a track with nothing on
+		// it, which is how an off switch read as a pill and not as a switch.
+		fill, knob = c.Theme.Colours.Input, c.Theme.Colours.Background
+		if luminance(c.Theme.Colours.Background) < 128 {
+			knob = c.Theme.Colours.Foreground
+		}
 		if disabled {
-			fill = fade(fill)
+			fill, knob = fade(fill), fade(knob)
 		}
 	}
 
@@ -279,7 +353,19 @@ func drawTrack(c ayra.Context, state *Toggle, disabled bool) ayra.Dimensions {
 		left = width - margin - size
 	}
 	handle := image.Rect(left, margin, left+size, margin+size)
-	paint.FillShape(c.Ops, knob, clip.UniformRRect(handle, size/2).Op(c.Ops))
+	round := clip.UniformRRect(handle, size/2)
+	paint.FillShape(c.Ops, knob, round.Op(c.Ops))
+	if !state.On() {
+		// A ring, so the knob has an edge against a track close to it in
+		// lightness: white on #e5e5e5 is 1.3 to 1 without one.
+		ring := c.Theme.Colours.MutedForeground
+		ring.A = ring.A * 3 / 5
+		if disabled {
+			ring = fade(ring)
+		}
+		stroke := clip.Stroke{Path: round.Path(c.Ops), Width: float32(hairline(c))}
+		paint.FillShape(c.Ops, ring, stroke.Op())
+	}
 
 	return ayra.Dimensions{Size: track.Max}
 }
@@ -302,4 +388,9 @@ func toggleColours(c ayra.Context, on, disabled bool) (fill, border, ink color.N
 		fill, border, ink = fade(fill), fade(border), fade(ink)
 	}
 	return fill, border, ink
+}
+
+// luminance is how bright a colour is, from 0 to 255.
+func luminance(c color.NRGBA) int {
+	return (int(c.R)*299 + int(c.G)*587 + int(c.B)*114) / 1000
 }

@@ -42,6 +42,15 @@ type Locale struct {
 	PickDate, PickPeriod, PickDateTime, PickTime, PickMonth, PickWeek string
 	PendingEnd                                                        string
 	Time, Done                                                        string
+
+	// DateLayout is the Go reference layout a chosen day is written in on the
+	// field of a date picker, a period and a day with its time: "02/01/2006" for
+	// Brazil. Empty writes the ISO order, which is ambiguous to nobody but is not
+	// how most of the people it is shown to write a date.
+	DateLayout string
+	// Until and Since head a period that has one end only, "Até 31/12/2026" and
+	// "A partir de 01/01/2026". Empty says "Until" and "From".
+	Until, Since string
 }
 
 // IsZero reports whether the locale says nothing, which draws English.
@@ -98,5 +107,9 @@ func PortugueseBrazil() Locale {
 		PendingEnd:   "Escolha a data final",
 		Time:         "Hora",
 		Done:         "Concluir",
+
+		DateLayout: "02/01/2006",
+		Until:      "Até",
+		Since:      "A partir de",
 	}
 }

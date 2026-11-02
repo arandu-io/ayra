@@ -25,6 +25,9 @@ type Select struct {
 	// which on a submit is the wrong answer sent without anybody being asked.
 	selected int
 	chosen   bool
+	// scroll is where the list of options is, when there are more of them than
+	// fit.
+	scroll layout.List
 }
 
 // Selected is the index chosen, and -1 when nothing has been.
@@ -40,6 +43,10 @@ func (s *Select) Selected() int {
 
 // Choose picks one, for the state a screen arrives with.
 func (s *Select) Choose(index int) { s.selected, s.chosen = index, true }
+
+// Open puts the list up, as a press on the control does, for a screen that
+// restores it and for a picture of one open.
+func (s *Select) Open() { s.open.Open() }
 
 // Showing reports whether the list is open.
 func (s *Select) Showing() bool { return s.open.Showing() }
@@ -113,19 +120,34 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 	if picked {
 		ink = c.Theme.Colours.Foreground
 	}
+	caret := c.Theme.Colours.MutedForeground
 	if p.Disabled {
-		ink = fade(ink)
+		ground := c.Theme.Colours.Background
+		ink, caret = fadeOver(ink, ground), fadeOver(caret, ground)
 	}
 
-	border := c.Theme.Colours.Border
+	// The border Kyse's select has is the input colour, as the text field's is, and
+	// the ring colour on the keyboard focus, with the ring around it.
+	border := c.Theme.Colours.Input
 	if p.Invalid {
 		border = c.Theme.Colours.Destructive
 	}
+	focused := !p.Disabled && c.Focused(&state.open.click)
+	if focused {
+		border = c.Theme.Colours.Ring
+	}
+	fill := fieldFill(c.Theme).NRGBA()
+	if p.Disabled {
+		fill = fadeOver(fill, c.Theme.Colours.Background)
+		border = fadeOver(border, c.Theme.Colours.Background)
+	}
 
-	return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		inner := c.With(gtx)
-		return surface(inner, inner.Theme.Colours.Background, border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-			return layout.Inset{Top: 10, Bottom: 10, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+	// The area that answers is grown to a finger; the field is drawn as it was.
+	dims := TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+		return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+	}, func(inner ayra.Context) ayra.Dimensions {
+		return surface(inner, fill, border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
+			return layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 12}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 				row := c.With(gtx)
 				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(row.Context,
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -134,12 +156,16 @@ func (p SelectProps) closed(c ayra.Context, state *Select) ayra.Dimensions {
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						// Kyse's native select draws the chevron from the stylesheet, and
 						// the nearest in its icon set is CaretDown, which does not turn.
-						return drawInner(row.With(gtx), innerIcon("select", "CaretDown"), innerPixels(row, innerSide), c.Theme.Colours.MutedForeground, 0)
+						return drawInner(row.With(gtx), innerIcon("select", "CaretDown"), innerPixels(row, innerSide), caret, 0)
 					}),
 				)
 			})
 		})
 	})
+	if focused {
+		focusRing(c, dims.Size, controlRadius(c), c.Theme.Colours.Ring)
+	}
+	return dims
 }
 
 // label answers the text on the closed control, and whether it is a value
@@ -157,17 +183,14 @@ func (p SelectProps) label(state *Select) (string, bool) {
 	return p.Placeholder, false
 }
 
+// listRoom is the most the list of options is tall, in dp: eight rows. More than
+// that is a list that runs off the bottom of the window, whose last options
+// nobody can reach, so it scrolls inside this height instead.
+const listRoom = 296
+
 // list draws the options under the control.
 func (p SelectProps) list(c ayra.Context, state *Select, closed ayra.Dimensions) {
-	children := make([]layout.FlexChild, 0, len(p.Options))
-	for index, option := range p.Options {
-		index, option := index, option
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			return ItemProps{Title: option, Pressable: true, Selected: state.chosen && index == state.selected}.
-				Layout(inner, &state.options[index], nil)
-		}))
-	}
+	state.scroll.Axis = layout.Vertical
 
 	panel := op.Record(c.Ops)
 	inner := c
@@ -176,14 +199,29 @@ func (p SelectProps) list(c ayra.Context, state *Select, closed ayra.Dimensions)
 
 	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
 		return layout.UniformInset(4).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(c.With(gtx).Context, children...)
+			gtx.Constraints.Min = image.Point{}
+			gtx.Constraints.Max.Y = min(gtx.Constraints.Max.Y, c.Dp(unit.Dp(listRoom)))
+			return state.scroll.Layout(gtx, len(p.Options), func(gtx layout.Context, index int) layout.Dimensions {
+				inner := c.With(gtx)
+				return ItemProps{Title: p.Options[index], Pressable: true, Selected: state.chosen && index == state.selected}.
+					Layout(inner, &state.options[index], nil)
+			})
 		})
 	}).Size
 	drawn := panel.Stop()
 
-	offset := op.Offset(image.Pt(0, closed.Size.Y+c.Dp(unit.Dp(4)))).Push(c.Ops)
-	defer clip.Rect(image.Rectangle{Max: size}).Push(c.Ops).Pop()
+	// The list is put off to the end of the frame. Drawn where the control is, it
+	// went under every control after it -- the next field of the form painted over
+	// the options, and took the presses meant for them -- so a select in the middle
+	// of a form offered a list nobody could choose from.
+	shown := op.Record(c.Ops)
+	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
 	drawn.Add(c.Ops)
+	clipped.Pop()
+	over := shown.Stop()
+
+	offset := op.Offset(image.Pt(0, closed.Size.Y+c.Dp(unit.Dp(4)))).Push(c.Ops)
+	op.Defer(c.Ops, over)
 	offset.Pop()
 }
 
@@ -280,7 +318,7 @@ func (p NumberProps) layout(c ayra.Context, state *Stepper) ayra.Dimensions {
 			return layout.Inset{Left: 12, Right: 12}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				ink := c.Theme.Colours.Foreground
 				if p.Disabled {
-					ink = fade(ink)
+					ink = fadeOver(ink, c.Theme.Colours.Background)
 				}
 				return drawText(inner.With(gtx), strconv.Itoa(state.value), unit.Sp(c.Theme.Type.Body), ink, 1, text.Middle, mono())
 			})

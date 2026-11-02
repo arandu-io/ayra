@@ -203,9 +203,9 @@ func (p PopoverProps) Layout(c ayra.Context, state *Menu, trigger, content ayra.
 func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.Widget) ayra.Dimensions {
 	state.open.Changed(c)
 
-	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return trigger(c.With(gtx))
-	})
+	dims := TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+		return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+	}, trigger)
 	if !state.open.Showing() {
 		return dims
 	}
@@ -232,10 +232,18 @@ func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.
 		top = -size.Y - c.Dp(unit.Dp(6))
 	}
 
-	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
+	// Put off to the end of the frame, so that the panel covers what comes after
+	// the control and takes the presses over it. A panel drawn in place went under
+	// the next field of a form, and the days of a calendar under it could not be
+	// pressed.
+	shown := op.Record(c.Ops)
 	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
 	drawn.Add(c.Ops)
 	clipped.Pop()
+	over := shown.Stop()
+
+	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
+	op.Defer(c.Ops, over)
 	offset.Pop()
 
 	return dims
