@@ -152,6 +152,64 @@ func (p *Clickable) Layout(c ayra.Context, content ayra.Widget) ayra.Dimensions 
 	})
 }
 
+// TouchTarget is the least a finger is given to press, in points: the side of
+// the square the platforms' guidelines ask of anything that is pressed.
+const TouchTarget unit.Dp = 44
+
+// TouchArea lays out a pressable widget so that the area answering the press is
+// at least [TouchTarget] points each way, and reports the room it drew.
+//
+// What a control takes and what it answers to are not the same room. A slider is
+// 20 points tall, a checkbox 18, a small button 24 -- the size Kyse draws them
+// at -- and a finger is not that precise. The area is grown on each side that
+// falls short, evenly and outward, and the room reported to the layout stays what
+// was drawn, so no screen moves and no picture changes. What the drawing does is
+// still clipped to its own shape, so a stroke on the edge looks as it did.
+//
+// interact is what registers the area: the Layout of a [Clickable], or of the
+// engine's own, that takes the drawing as its content. content is the drawing,
+// whose Dimensions are the size the control is.
+//
+//	return widget.TouchArea(c, state.click.Layout, draw)
+//
+// Two controls whose grown areas meet -- two small buttons 8 points apart -- share
+// the band between them, and a press in it goes to the one drawn last.
+func TouchArea(c ayra.Context, interact func(c ayra.Context, content ayra.Widget) ayra.Dimensions, content ayra.Widget) ayra.Dimensions {
+	var drawn ayra.Dimensions
+	var grow image.Point
+
+	area := op.Record(c.Ops)
+	interact(c, func(inner ayra.Context) ayra.Dimensions {
+		measure := op.Record(inner.Ops)
+		drawn = content(inner)
+		body := measure.Stop()
+
+		least := inner.Dp(TouchTarget)
+		grow = image.Pt(max(least-drawn.Size.X, 0)/2, max(least-drawn.Size.Y, 0)/2)
+
+		// The drawing is moved in by what the area adds, and the whole is moved
+		// back out below, so the two coincide on the screen.
+		shift := op.Offset(grow).Push(inner.Ops)
+		clipped := clip.Rect(image.Rectangle{Max: drawn.Size}).Push(inner.Ops)
+		body.Add(inner.Ops)
+		clipped.Pop()
+		shift.Pop()
+		return ayra.Dimensions{Size: drawn.Size.Add(grow.Mul(2))}
+	})
+	whole := area.Stop()
+
+	back := op.Offset(grow.Mul(-1)).Push(c.Ops)
+	whole.Add(c.Ops)
+	back.Pop()
+	return drawn
+}
+
+// Reach is Layout with the area that answers grown to [TouchTarget]; see
+// [TouchArea].
+func (p *Clickable) Reach(c ayra.Context, content ayra.Widget) ayra.Dimensions {
+	return TouchArea(c, p.Layout, content)
+}
+
 // insetOf is a style's padding as the layout engine takes it.
 func insetOf(i theme.Insets) layout.Inset {
 	return layout.Inset{Top: unit.Dp(i.Top), Right: unit.Dp(i.Right), Bottom: unit.Dp(i.Bottom), Left: unit.Dp(i.Left)}

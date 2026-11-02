@@ -64,6 +64,13 @@ type Context struct {
 	// reads it to mark the current choice.
 	Mode theme.Mode
 
+	// ReduceMotion is true while the person has asked the system for less
+	// movement. A control that animates -- the skeleton's pulse, the indeterminate
+	// bar's trip -- draws its resting picture and asks for no more frames while it
+	// is set. It is false outside a window, and in a window whose application did
+	// not say how to tell: see shell.Config.ReduceMotion.
+	ReduceMotion bool
+
 	// SetMode is what [Context.FollowSystem] calls. The window applies it from
 	// the next frame, like SetScheme. It is nil outside a window.
 	SetMode func(theme.Mode)

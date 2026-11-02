@@ -153,3 +153,22 @@ func distance(a, b color.NRGBA) int {
 	}
 	return widest
 }
+
+// TestFadeOverMixesWithTheGroundInTheColoursOwnSpace is what an unavailable
+// control is drawn with. Half the alpha of white over black reaches the screen
+// as a light grey, because the compositor blends in linear light, and the
+// unavailable secondary, outline and ghost buttons in the dark scheme came out
+// four fifths as bright as the available ones. Mixed directly, white over black
+// is the middle grey, as the browser half's opacity-50 gives.
+func TestFadeOverMixesWithTheGroundInTheColoursOwnSpace(t *testing.T) {
+	white, black := color.NRGBA{R: 255, G: 255, B: 255, A: 255}, color.NRGBA{A: 255}
+
+	got := fadeOver(white, black)
+
+	if got.R != 128 || got.G != 128 || got.B != 128 || got.A != 255 {
+		t.Errorf("white over black faded to %+v, want the middle grey, opaque", got)
+	}
+	if clear := fadeOver(color.NRGBA{}, black); clear.A != 0 {
+		t.Errorf("a colour with nothing in it was given %+v: a ghost's fill would be painted", clear)
+	}
+}
