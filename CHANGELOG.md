@@ -2,10 +2,6 @@
 
 ## [v0.9.0](https://github.com/arandu-io/ayra/compare/v0.8.0...v0.9.0) - 2026-11-02
 
-**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.8.0...v0.9.0
-
-## v0.9.0 - 2026-11-02
-
 ### Added
 
 - `shell.SystemReduceMotion` reports whether the person asked the system for less
@@ -210,6 +206,8 @@ control was drawn (`Source.Bounds`).
 - `engine/io/input`: the router looked the focused control's bounds up through an
   index a frame behind the list it pointed into, and panicked when a frame drew one
   handler fewer or more. It looks the tag up.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.8.0...v0.9.0
 
 ## [v0.8.0](https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0) - 2026-11-01
 
