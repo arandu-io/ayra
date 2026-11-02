@@ -56,6 +56,14 @@ type DrawerProps struct {
 	// is set as well: the press outside is read from the barrier the scrim puts
 	// up, and without one there is nothing to read.
 	Dismissible bool
+	// Scroll lays the content out in a column that scrolls when it is taller than
+	// the panel. It is a prop and not the rule because the two contents a drawer
+	// holds want different things: a form of fields is as tall as it is and wants
+	// to scroll, and a sheet that fills the panel -- a footer of buttons at the
+	// bottom, a list of its own that scrolls -- is given the panel's height and
+	// would be given an unbounded one in a column. The content of a scrolling
+	// drawer takes the room it needs and is not stretched to the panel's.
+	Scroll bool
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -123,6 +131,9 @@ func (p DrawerProps) place(c ayra.Context, state *Dialog, content ayra.Widget, w
 			Left: 20 + dp(covered.left), Top: 20 + dp(covered.top),
 			Right: 20 + dp(covered.right), Bottom: 20 + dp(covered.bottom),
 		}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			if p.Scroll {
+				return state.scrolled(c.With(gtx), content)
+			}
 			return content(c.With(gtx))
 		})
 	})
