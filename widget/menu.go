@@ -4,6 +4,9 @@ import (
 	"image"
 
 	"github.com/arandu-io/ayra"
+	"github.com/arandu-io/ayra/engine/gesture"
+	"github.com/arandu-io/ayra/engine/io/event"
+	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
@@ -27,6 +30,13 @@ type Menu struct {
 	// hand with the sentinel already in them.
 	chosen int
 	picked bool
+
+	// barrier is the target behind the panel that reads a press outside it, and
+	// hit is the panel itself. Two separate targets for the reason the dialog's
+	// are: "was this press outside" is a question only the two of them together
+	// can answer.
+	barrier gesture.Click
+	hit     gesture.Click
 }
 
 // Showing reports whether the list is open.
@@ -73,6 +83,15 @@ type MenuProps struct {
 	Width unit.Dp
 	// Above opens it upwards, for a control near the bottom of a window.
 	Above bool
+	// End lines the list's right edge up with the control's, for a control at
+	// the right edge of the window -- the "..." at the end of a row. Without it
+	// the list starts at the control's left edge and runs off the screen.
+	End bool
+
+	// modeless leaves out the barrier: a menubar's titles stay pressable while
+	// one of its menus is open, which is how a desktop menubar moves between
+	// menus.
+	modeless bool
 
 	// ticked marks the entries that are on, by index, with the tick Kyse draws
 	// at the end of a row of a filter menu. A widget that offers several choices
@@ -99,6 +118,7 @@ func (p MenuProps) layout(c ayra.Context, state *Menu, trigger ayra.Widget) ayra
 		state.entries = append(state.entries, Button{})
 	}
 	state.open.Changed(c)
+	state.dismiss(c, !p.modeless)
 	for index := range p.Entries {
 		if p.Entries[index] == "" {
 			continue
@@ -163,12 +183,74 @@ func (p MenuProps) list(c ayra.Context, state *Menu, trigger ayra.Dimensions) {
 	if p.Above {
 		top = -size.Y - c.Dp(unit.Dp(4))
 	}
+	left := 0
+	if p.End {
+		left = trigger.Size.X - size.X
+	}
 
-	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
+	state.float(c, image.Pt(left, top), size, drawn, !p.modeless)
+}
+
+// farAway is how far the barrier reaches in every direction, in pixels: further
+// than any window, because a control does not know where in the window it is.
+const farAway = 1 << 20
+
+// dismiss reads what puts away a list that is open: escape, the back key, and a
+// press that landed outside it. A press outside is taken and not passed on, as
+// Android's own menus do: the press that closes a menu is not also a press on
+// whatever was under the finger.
+func (m *Menu) dismiss(c ayra.Context, barrier bool) {
+	if !m.open.Showing() {
+		return
+	}
+	for {
+		e, ok := c.Event(
+			key.Filter{Name: key.NameEscape},
+			key.Filter{Name: key.NameBack},
+		)
+		if !ok {
+			break
+		}
+		if press, isKey := e.(key.Event); isKey && press.State == key.Press {
+			m.open.Close()
+		}
+	}
+	for barrier {
+		if _, ok := m.barrier.Update(c.Source); !ok {
+			break
+		}
+		m.open.Close()
+	}
+	for {
+		if _, ok := m.hit.Update(c.Source); !ok {
+			break
+		}
+	}
+}
+
+// float puts the panel over the screen at an offset from the control, and the
+// barrier under it.
+//
+// It is deferred to the end of the frame: drawn in layout order, the next row of
+// a list or the next paragraph was drawn over the list and took the presses
+// meant for it. The offset is from where the control is, and the transform in
+// force when it is called is the control's, which is what Defer keeps.
+func (m *Menu) float(c ayra.Context, at, size image.Point, panel op.CallOp, barrier bool) {
+	floating := op.Record(c.Ops)
+	if barrier {
+		area := clip.Rect(image.Rect(-farAway, -farAway, farAway, farAway)).Push(c.Ops)
+		m.barrier.Add(c.Ops)
+		event.Op(c.Ops, &m.barrier)
+		area.Pop()
+	}
+	offset := op.Offset(at).Push(c.Ops)
 	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
-	drawn.Add(c.Ops)
+	m.hit.Add(c.Ops)
+	event.Op(c.Ops, &m.hit)
+	panel.Add(c.Ops)
 	clipped.Pop()
 	offset.Pop()
+	op.Defer(c.Ops, floating.Stop())
 }
 
 // PopoverProps is a panel that appears beside the control that opened it.
@@ -186,6 +268,14 @@ type PopoverProps struct {
 	Width unit.Dp
 	// Above opens it upwards.
 	Above bool
+	// End lines the panel's right edge up with the control's, for a control at
+	// the right edge of the window.
+	End bool
+
+	// light leaves out the barrier, for a panel that is open while the pointer
+	// rests on its control: the barrier would cover the control, and a control
+	// that is covered is no longer hovered.
+	light bool
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -202,6 +292,7 @@ func (p PopoverProps) Layout(c ayra.Context, state *Menu, trigger, content ayra.
 // layout is Layout without the root part around it.
 func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.Widget) ayra.Dimensions {
 	state.open.Changed(c)
+	state.dismiss(c, !p.light)
 
 	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		return trigger(c.With(gtx))
@@ -231,13 +322,12 @@ func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.
 	if p.Above {
 		top = -size.Y - c.Dp(unit.Dp(6))
 	}
+	left := 0
+	if p.End {
+		left = dims.Size.X - size.X
+	}
 
-	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
-	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
-	drawn.Add(c.Ops)
-	clipped.Pop()
-	offset.Pop()
-
+	state.float(c, image.Pt(left, top), size, drawn, !p.light)
 	return dims
 }
 
@@ -326,7 +416,7 @@ func (p MenubarProps) layout(c ayra.Context, state *Menubar) ayra.Dimensions {
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return MenuProps{Entries: entries}.Layout(inner, &state.menus[index], func(c ayra.Context) ayra.Dimensions {
+			return MenuProps{Entries: entries, modeless: true}.Layout(inner, &state.menus[index], func(c ayra.Context) ayra.Dimensions {
 				return layout.Inset{Top: 6, Bottom: 6, Left: 10, Right: 10}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 					return drawText(c.With(gtx), title, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, plain())
 				})

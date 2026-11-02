@@ -670,7 +670,7 @@ func (p HoverCardProps) Layout(c ayra.Context, state *HoverCard, trigger, conten
 	}
 
 	return withRoot(c, "hovercard", "default", p.ComponentProps, func(c ayra.Context) ayra.Dimensions {
-		return PopoverProps{Width: p.Width, Above: p.Above}.Layout(c, &state.panel, trigger, content)
+		return PopoverProps{Width: p.Width, Above: p.Above, light: true}.Layout(c, &state.panel, trigger, content)
 	})
 }
 
