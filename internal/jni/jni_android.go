@@ -68,6 +68,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"unsafe"
 
@@ -112,10 +113,21 @@ var ErrNotRunning = errors.New("jni: the Java virtual machine is not available y
 // Do runs f with the JNIEnv of the calling thread, attaching the thread to the
 // virtual machine for the duration when it is not attached already.
 //
+// f runs on one thread for its whole length: Do holds the goroutine to it.
+//
 // Local references made inside f are released when it returns, by the machine
 // for a thread this attached and by the caller of a native method for one that
 // was already attached.
 func Do(f func(Env) error) error {
+	// A JNIEnv belongs to one operating-system thread, and a goroutine is moved
+	// between threads whenever the scheduler likes. Without the lock the calls
+	// of one Do could be made from three threads with the environment of the
+	// first: the machine answers with StackOverflowError for a call made from a
+	// thread whose stack it never recorded, and then aborts on a local reference
+	// it finds in no table.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	// The machine's address arrives as an integer and is read back as the
 	// pointer it was, without a conversion the vet check cannot tell from a
 	// forged one.
