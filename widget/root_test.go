@@ -66,6 +66,9 @@ func everyWidget() []each {
 		{"avatar", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.AvatarProps{Initials: "PL", ComponentProps: i}.Layout(c)
 		}},
+		{"video", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.VideoProps{Caption: "x", ComponentProps: i}.Layout(c, new(widget.Video))
+		}},
 		{"skeleton", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.SkeletonProps{ComponentProps: i}.Layout(c)
 		}},
@@ -288,7 +291,7 @@ func everyWidget() []each {
 // the root restyles is the fill and the corners -- so the room they take is not
 // what shows the override, and the source test that every published part is
 // resolved is the guard for them.
-var shapes = map[string]bool{"progress": true, "avatar": true, "skeleton": true, "separator": true, "image": true, "responsiveimage": true}
+var shapes = map[string]bool{"progress": true, "avatar": true, "skeleton": true, "separator": true, "image": true, "video": true, "responsiveimage": true}
 
 func TestEveryComponentTakesAnOverride(t *testing.T) {
 	for _, w := range everyWidget() {
@@ -337,7 +340,7 @@ func TestTheThemeRestylesEveryComponentToo(t *testing.T) {
 var notYet = map[string]string{
 	"table":   "the listing is being rebuilt on the datatable-native branch, and takes its parts there",
 	"toolbar": "lives in table.go, with the listing",
-	"player":  "lives with the live video work on the native-push-and-live branch",
+	"player":  "the transport has not taken its parts yet; Video, the picture it sits under, has",
 }
 
 // TestEveryExtensibleComponentIsInThisTable is the third of ADR-0131's tests: it

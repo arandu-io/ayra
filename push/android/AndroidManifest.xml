@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+	<application>
+		<service android:name="io.arandu.ayra.push.AyraMessagingService" android:exported="false">
+			<intent-filter>
+				<action android:name="com.google.firebase.MESSAGING_EVENT"/>
+			</intent-filter>
+		</service>
+		<meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="${pushChannelId}"/>
+		<meta-data android:name="io.arandu.ayra.push.channel_name" android:value="${pushChannelName}"/>
+	</application>
+</manifest>

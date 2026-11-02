@@ -1,5 +1,65 @@
 # Release Notes
 
+## Unreleased
+
+### Added
+
+- `push`: push notifications on the device. `Request` asks for the permission
+  and starts the registration, `Token` and `Tokens` answer the token,
+  `Messages` delivers what arrives while the application is in front and
+  `Opened` the notification a person touched, with its link. The channels hold
+  what arrived before anybody read, so the notification that started the
+  application is not lost. Android is Firebase Cloud Messaging; iOS is the APNs
+  token, and `Kind` says which.
+- `live`: the live video a camera's node serves over a WebSocket. `Stream`
+  reads the node's format, joins a picture sent in pieces, renews the session
+  when the node ends it with code 4001, and tells busy, full and lost apart.
+  `Player` adds a hardware decoder and the frame to draw, and closes the socket
+  when nothing has drawn the picture for five seconds. MediaCodec on Android,
+  VideoToolbox on iOS and macOS; the other targets have no decoder.
+- `widget.VideoProps` and `widget.Video`: a live video drawn uncropped, with a
+  caption over a dimmed picture and an overlay hook that is given the picture's
+  rectangle and the camera's own pixel size. It is a component like the others:
+  `ComponentProps` restyles its parts `root` (the ground and the corners) and
+  `caption`. It is named Video because `widget.Live` is the data table's source of
+  change notices.
+- `live.Supported` says whether the platform has a decoder, so a screen chooses
+  between the moving picture and a still one before it opens a socket.
+- `engine/app/permission/notifications`: the permission package for
+  notifications.
+- The Android activity tells native capabilities about the intents it receives
+  and the permission results, which is how a notification that was touched
+  reaches `push`.
+- `client`: a refusal keeps the start of its body. `StatusError` gains `Body`
+  (at most `ErrorBodyLimit`, 64 KiB), `ContentType` and `Into`, which decodes
+  the server's error envelope, so a screen can act on the code the server gave
+  with a 401 or a 403 and not only on the number.
+- `client.WithBearer` sends `Authorization: Bearer` on every request, for a
+  server that issues tokens. The provider is called under a lock, so concurrent
+  requests wait for one renewal, and a request refused with 401 is repeated
+  once after the provider is told which token was refused. The token is sent
+  only to the server the client was made for.
+- `client.Client.Download` fetches bytes -- an image, a document -- under the
+  same credential and the same refusal to leave the server, with its own limit
+  (`DefaultDownloadLimit`, `WithDownloadLimit`).
+
+### Fixed
+
+- `internal/jni`: `Do` holds the goroutine to its thread. A `JNIEnv` is the
+  environment of one operating-system thread, and the scheduler could move the
+  function to another between two calls: on an emulator the machine answered with
+  `StackOverflowError` from a MediaCodec call and then aborted on a local
+  reference it found in no table, with the process gone. The live video and the
+  push registration both call Java through it.
+- `push` (Android): a package whose manifest lost the messaging component makes
+  `FirebaseMessaging.getInstance` throw a `NullPointerException`, and it threw
+  inside the permission's result callback. Any runtime failure there now answers
+  that the application has nothing to register with.
+- `TestHowMuchOfThisIsStillSomebodyElses` failed in CI from v0.7.0 and passed on
+  every laptop. It skips when `gioui.org@v0.10.2` is not in the module cache, and
+  the workflow fetches that tree, so the count is only real there: 66 files of the
+  engine are still the original, and the ceiling still said 71.
+
 ## [v0.8.0](https://github.com/arandu-io/ayra/compare/v0.7.0...v0.8.0) - 2026-11-01
 
 ### Fixed

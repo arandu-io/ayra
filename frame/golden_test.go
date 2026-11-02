@@ -14,6 +14,8 @@ import (
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/font/gofont"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op/clip"
+	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	"github.com/arandu-io/ayra/frame"
@@ -100,6 +102,7 @@ func screens() []screen {
 		{name: "month", width: 360, height: 470, draw: month},
 		{name: "browsing", width: 360, height: 560, draw: browsing},
 		{name: "media", width: 360, height: 620, draw: media},
+		{name: "video", width: 360, height: 600, draw: liveVideo},
 		{name: "open", width: 360, height: 420, draw: openPanels},
 	}
 }
@@ -256,6 +259,76 @@ func media() ayra.Widget {
 				return widget.ColourPickerProps{}.Layout(c, &colours)
 			},
 		)
+	}
+}
+
+// liveVideo draws a live view three ways: with a picture and a box over it, with
+// a picture that has stopped and says so, and with no picture yet.
+//
+// The picture is computed here, pixel by pixel, rather than read from a file:
+// there is no decoder in a headless run, and the point of the widget being given
+// its picture in the props is that a test can hand it one.
+func liveVideo() ayra.Widget {
+	var running, stopped, waiting widget.Video
+	scene := cameraScene(192, 108)
+
+	return func(c ayra.Context) ayra.Dimensions {
+		return column(c, 320,
+			line("Live", widget.Heading, true),
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.VideoProps{
+					Frame: scene, Seq: 1, Label: "Gate camera",
+					Overlay: func(c ayra.Context, area widget.VideoArea) {
+						box := area.Rect(image.Rect(100, 52, 156, 78))
+						outline(c, box, gocolor.NRGBA{R: 0x22, G: 0xC5, B: 0x5E, A: 0xFF}, 2)
+					},
+				}.Layout(c, &running)
+			},
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.VideoProps{Frame: scene, Seq: 1, Label: "Yard camera", Caption: "No signal from the camera"}.Layout(c, &stopped)
+			},
+			spacer(10),
+			func(c ayra.Context) ayra.Dimensions {
+				return widget.VideoProps{Label: "Dock camera", Caption: "Preparing the video"}.Layout(c, &waiting)
+			},
+		)
+	}
+}
+
+// cameraScene is a synthetic picture: a sky, a road and a vehicle, with
+// gradients so that a scaling or a channel mix-up shows.
+func cameraScene(w, h int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			var px gocolor.NRGBA
+			switch {
+			case y < h/2:
+				px = gocolor.NRGBA{R: uint8(60 + y), G: uint8(110 + y), B: uint8(190 + x/8), A: 255}
+			default:
+				v := uint8(70 + (y-h/2)/2)
+				px = gocolor.NRGBA{R: v, G: v, B: v + 6, A: 255}
+			}
+			if x > 100 && x < 156 && y > 52 && y < 78 {
+				px = gocolor.NRGBA{R: 200, G: 40, B: 40, A: 255}
+			}
+			img.Set(x, y, px)
+		}
+	}
+	return img
+}
+
+// outline strokes a rectangle with four fills.
+func outline(c ayra.Context, r image.Rectangle, colour gocolor.NRGBA, width int) {
+	for _, side := range []image.Rectangle{
+		{Min: r.Min, Max: image.Pt(r.Max.X, r.Min.Y+width)},
+		{Min: image.Pt(r.Min.X, r.Max.Y-width), Max: r.Max},
+		{Min: r.Min, Max: image.Pt(r.Min.X+width, r.Max.Y)},
+		{Min: image.Pt(r.Max.X-width, r.Min.Y), Max: r.Max},
+	} {
+		paint.FillShape(c.Ops, colour, clip.Rect(side).Op())
 	}
 }
 

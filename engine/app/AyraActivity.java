@@ -28,10 +28,14 @@ public final class AyraActivity extends Activity {
 
             layer.addView(view);
             setContentView(layer);
+            Ayra.setActivity(this);
             onNewIntent(this.getIntent());
 	}
 
 	@Override public void onDestroy() {
+		if (Ayra.currentActivity() == this) {
+			Ayra.setActivity(null);
+		}
 		view.destroy();
 		super.onDestroy();
 	}
@@ -73,6 +77,13 @@ public final class AyraActivity extends Activity {
 
 	@Override protected void onNewIntent(Intent intent) {
 		super.onNewIntent(intent);
+		setIntent(intent);
 		view.onIntentEvent(intent);
+		Ayra.dispatchIntent(intent);
+	}
+
+	@Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+		Ayra.dispatchPermissionResult(requestCode, permissions, grantResults);
 	}
 }

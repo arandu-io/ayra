@@ -4,6 +4,49 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- a bearer token and the body of a refusal
+
+Nothing stops compiling. A `client.StatusError` is now built with its `Body` and
+`ContentType`, so a test that compared one with `==` or `reflect.DeepEqual`
+against a value built by hand without them sees the difference; compare
+`Status` instead, or `client.Status(err)`.
+
+A server that issues tokens is reached with `client.WithBearer`, whose provider
+is told which token the server refused so that it can renew:
+
+```go
+c, err := client.New(base, client.WithBearer(func(ctx context.Context, rejected string) (string, error) {
+	return tokens.Current(ctx, rejected) // renews when rejected is the one in hand
+}))
+```
+
+## Unreleased -- building with push notifications or live video
+
+Nothing that compiled stops compiling. An application that imports `push` or
+`live` needs more of `aru native:build` than before, and a project that
+published its native target earlier needs nothing for the packages it does not
+import.
+
+For Android, push needs the libraries of the push service and the project's
+configuration, neither of which is carried by `aru` or by this module:
+
+```sh
+aru native:build -target android/arm64 \
+	-android-lib libs/ -google-services google-services.json
+```
+
+`libs/` holds the `.aar` and `.jar` files of `firebase-messaging` and of
+everything it depends on, as one coherent set -- the AndroidX versions and not
+the old support ones, and the Android variant of a library that ships both. Add
+`google-services.json` to `.gitignore`: it holds the project's keys. The
+application id has to be one of the packages the file lists, and `-appid` sets
+it. The channel notifications are drawn in is named with
+`-placeholder pushChannelId=alerts -placeholder pushChannelName=Alerts`.
+
+For iOS, enable Push Notifications for the application identifier and download
+the provisioning profile again; `aru` refuses to sign a push application with a
+profile that lacks the `aps-environment` entitlement.
+
 ## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard
