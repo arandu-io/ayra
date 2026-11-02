@@ -4,6 +4,15 @@
 
 ### Added
 
+- `shell.SystemReduceMotion` reports whether the person asked the system for less
+  movement: Android's animation scale at zero ("Remove animations"), iOS's Reduce
+  Motion, macOS's accessibilityDisplayShouldReduceMotion, the browser's
+  prefers-reduced-motion; false elsewhere. It is read once a second at most.
+  `shell.Config.ReduceMotion` takes it when the application does not set one, and
+  `ayra.Context.ReduceMotion` carries it to the screen. The skeleton's pulse and the
+  indeterminate progress bar stand still when it is set. Checked on an Android
+  emulator by turning the animation scale to 0 and back while the application ran:
+  the next second's frame saw it.
 - `push`: push notifications on the device. `Request` asks for the permission
   and starts the registration, `Token` and `Tokens` answer the token,
   `Messages` delivers what arrives while the application is in front and
