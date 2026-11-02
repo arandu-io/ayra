@@ -2,6 +2,7 @@ package widget
 
 import (
 	"image"
+	"image/color"
 	"strings"
 
 	"github.com/arandu-io/ayra"
@@ -61,10 +62,26 @@ type Autocomplete struct {
 	input   Input
 	open    Disclosure
 	options []Button
-	at      int
-	chosen  int
+	// at is the row the keyboard is on, and active says there is one: the zero
+	// value of the state is a list with no row under the cursor, so a list that
+	// has only just opened does not answer return with an entry nobody chose.
+	at     int
+	active bool
+	chosen int
 	// Reported is the choice waiting to be read, held for the caller.
 	reported bool
+	// seen is the text the cursor was last placed for. Typing moves the cursor
+	// off whatever row it was on, because the rows are not the same rows.
+	seen string
+	// dismissed is the text escape closed the list for. The list stays closed
+	// until the text is something else, because a list that escape closed and
+	// the next frame opened again is a list that cannot be dismissed.
+	dismissed     bool
+	dismissedText string
+	// fit is how many rows the room under the field took in the last frame, and
+	// zero before there was one. The keyboard moves among the rows that are
+	// drawn and no others.
+	fit int
 	// Settled is the text the field was last filled with by something other
 	// than typing -- a choice from the list, or the screen filling the field
 	// in. While the field still holds exactly that, nothing is suggested.
@@ -174,10 +191,21 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 		state.filled = false
 	}
 
+	shown := found
+	if limit := p.limit(); len(shown) > limit {
+		shown = shown[:limit]
+	}
+	if state.fit > 0 && len(shown) > state.fit {
+		shown = shown[:state.fit]
+	}
+
+	// Typing is a text nobody filled in: what a list with nothing to offer may
+	// answer, and what reopens one escape closed.
+	typing := typed != "" && !(state.filled && typed == state.settled)
 	if p.Disabled {
 		state.open.Close()
 	} else {
-		p.read(c, state, len(found))
+		p.read(c, state, typed, typing, shown)
 	}
 
 	dims := InputProps{
@@ -189,37 +217,54 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 	}.Layout(c, &state.input)
 
 	if !state.open.Showing() {
+		state.fit = 0
 		return dims
 	}
 
-	shown := found
-	if limit := p.limit(); len(shown) > limit {
-		shown = shown[:limit]
-	}
-	if len(shown) == 0 && p.Empty == "" {
+	if len(found) == 0 && p.Empty == "" {
 		return dims
 	}
 
-	p.list(c, state, shown, dims)
+	p.list(c, state, found, dims)
 	return dims
 }
 
 // read takes the keys the list answers to, and opens it when there is
 // something to show.
-func (p AutocompleteProps) read(c ayra.Context, state *Autocomplete, found int) {
-	if found > 0 {
+func (p AutocompleteProps) read(c ayra.Context, state *Autocomplete, typed string, typing bool, shown []int) {
+	if typed != state.seen {
+		state.seen, state.active = typed, false
+		state.dismissed = state.dismissed && typed == state.dismissedText
+	}
+
+	switch {
+	case state.dismissed:
+		state.open.Close()
+	case len(shown) > 0 || (typing && p.Empty != ""):
 		state.open.Open()
-	} else if p.Empty == "" {
+	default:
 		state.open.Close()
 	}
 
-	event.Op(c.Ops, state)
-	for {
-		e, ok := c.Event(
-			key.Filter{Focus: state, Name: key.NameDownArrow},
-			key.Filter{Focus: state, Name: key.NameUpArrow},
-			key.Filter{Focus: state, Name: key.NameEscape},
+	// The keys are asked for on the field's own editor, which is what holds the
+	// keyboard while somebody types. Asked for on the state they would never
+	// arrive: the state is not a control and is never focused.
+	focus := &state.input.editor
+	filters := []event.Filter{
+		key.Filter{Focus: focus, Name: key.NameDownArrow},
+		key.Filter{Focus: focus, Name: key.NameUpArrow},
+		key.Filter{Focus: focus, Name: key.NameEscape},
+	}
+	if state.open.Showing() && state.active {
+		// Return is claimed only while a row is under the cursor. Otherwise it is
+		// the field's own, and submits.
+		filters = append(filters,
+			key.Filter{Focus: focus, Name: key.NameReturn},
+			key.Filter{Focus: focus, Name: key.NameEnter},
 		)
+	}
+	for {
+		e, ok := c.Event(filters...)
 		if !ok {
 			break
 		}
@@ -229,59 +274,140 @@ func (p AutocompleteProps) read(c ayra.Context, state *Autocomplete, found int) 
 		}
 		switch press.Name {
 		case key.NameDownArrow:
-			state.at = step(state.at, 1, found)
+			if !state.open.Showing() || len(shown) == 0 {
+				continue
+			}
+			if !state.active {
+				state.active, state.at = true, 0
+			} else {
+				state.at = step(state.at, 1, len(shown))
+			}
 		case key.NameUpArrow:
-			state.at = step(state.at, -1, found)
+			if !state.open.Showing() || len(shown) == 0 {
+				continue
+			}
+			if !state.active {
+				state.active, state.at = true, len(shown)-1
+			} else {
+				state.at = step(state.at, -1, len(shown))
+			}
 		case key.NameEscape:
+			if state.open.Showing() {
+				state.dismissed, state.dismissedText = true, typed
+			}
 			state.open.Close()
-			state.at = -1
+			state.active = false
+		case key.NameReturn, key.NameEnter:
+			if state.active && state.at >= 0 && state.at < len(shown) {
+				index := shown[state.at]
+				state.choose(index, p.Entries[index])
+			}
 		}
+	}
+	if state.active && state.at >= len(shown) {
+		state.at = max(len(shown)-1, 0)
+		state.active = len(shown) > 0
 	}
 }
 
 // limit is how many suggestions are drawn.
 func (p AutocompleteProps) limit() int {
-	if p.Limit > 0 {
+	if p.limitSet() {
 		return p.Limit
 	}
 	return 6
 }
 
-// list draws the suggestions under the field.
-func (p AutocompleteProps) list(c ayra.Context, state *Autocomplete, shown []int, field ayra.Dimensions) {
+func (p AutocompleteProps) limitSet() bool { return p.Limit > 0 }
+
+// list draws the suggestions under the field, or above it when there is no
+// room under it.
+//
+// The room under the field is what the layout above it left: a screen is laid
+// out in the window, and the window is what the keyboard has not covered. A
+// field low in it is a field whose list would run off the bottom, so the list
+// keeps to the rows that fit; with fewer than a few fitting it goes above the
+// field instead. It is drawn last, over whatever the screen put below the field
+// -- the help line, the next field -- because a list that those drew over is a
+// list nobody can read.
+func (p AutocompleteProps) list(c ayra.Context, state *Autocomplete, found []int, field ayra.Dimensions) {
 	inner := c
 	inner.Constraints.Min.X = field.Size.X
 	inner.Constraints.Max.X = field.Size.X
+	inner.Constraints.Min.Y = 0
+	// The panel is as tall as its rows. The room the field was given is what
+	// decides how many rows there are, below; it is not a ceiling on the panel,
+	// which a flip above the field would otherwise be cut by.
+	inner.Constraints.Max.Y = 1 << 20
+
+	gap := c.Dp(unit.Dp(4))
+	pad := c.Dp(unit.Dp(4))
+
+	shown := found
+	if limit := p.limit(); len(shown) > limit {
+		shown = shown[:limit]
+	}
+
+	above := false
+	state.fit = 0
+	if c.Constraints.Max.Y < boundedHeight {
+		// What a row takes is measured on a press state of its own, which is
+		// thrown away: the real ones must not have a press read by a drawing that
+		// is not shown.
+		probe := op.Record(c.Ops)
+		rowHeight := suggestion(inner, &Button{}, "Ag", false).Size.Y
+		probe.Stop()
+		if rowHeight > 0 {
+			room := c.Constraints.Max.Y - field.Size.Y - gap - 2*pad - 2*hairline(c)
+			fits := max(room/rowHeight, 0)
+			want := max(len(shown), 1)
+			if fits < min(want, 3) {
+				above = true
+			} else if fits < len(shown) {
+				shown = shown[:fits]
+				state.fit = fits
+			}
+		}
+	}
 
 	panel := op.Record(c.Ops)
 	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-		if len(shown) == 0 {
-			return layout.UniformInset(10).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-				return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
-			})
-		}
+		return layout.Inset{Top: 4, Bottom: 4}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+			c := c.With(gtx)
+			if len(shown) == 0 {
+				return layout.UniformInset(10).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+					return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 0, text.Start, plain())
+				})
+			}
 
-		rows := make([]layout.FlexChild, 0, len(shown))
-		for position, index := range shown {
-			position, index := position, index
-			rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				row := c.With(gtx)
-				button := &state.options[index]
-				if button.Clicked(row) {
-					state.choose(index, p.Entries[index])
-				}
-				return suggestion(row, button, p.Entries[index], position == state.at)
-			}))
-		}
-		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
+			rows := make([]layout.FlexChild, 0, len(shown))
+			for position, index := range shown {
+				position, index := position, index
+				rows = append(rows, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					row := c.With(gtx)
+					button := &state.options[index]
+					if button.Clicked(row) {
+						state.choose(index, p.Entries[index])
+					}
+					return suggestion(row, button, p.Entries[index], state.active && position == state.at)
+				}))
+			}
+			return layout.Flex{Axis: layout.Vertical}.Layout(c.Context, rows...)
+		})
 	}).Size
 	drawn := panel.Stop()
 
-	offset := op.Offset(image.Pt(0, field.Size.Y+c.Dp(unit.Dp(4)))).Push(c.Ops)
+	top := field.Size.Y + gap
+	if above {
+		top = -size.Y - gap
+	}
+	placed := op.Record(c.Ops)
+	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
 	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
 	drawn.Add(c.Ops)
 	clipped.Pop()
 	offset.Pop()
+	op.Defer(c.Ops, placed.Stop())
 }
 
 // choose fills the field in with an entry and closes the list.
@@ -294,20 +420,38 @@ func (a *Autocomplete) choose(index int, entry string) {
 // settle closes the list and records the text it must stay closed for.
 func (a *Autocomplete) settle(text string) {
 	a.open.Close()
-	a.at = -1
+	a.at, a.active = 0, false
 	a.settled, a.filled = text, true
 }
 
-// suggestion draws one row of a list of suggestions.
+// suggestion draws one row of a list of suggestions: the text at the left, as
+// Kyse's options are, in a row as tall as a finger.
+//
+// The row the keyboard is on is drawn the way a chosen one is, because there is
+// no pointer over it to say so. Without this, the arrow keys move something
+// invisible and return picks an entry nobody saw chosen.
 func suggestion(c ayra.Context, state *Button, entry string, under bool) ayra.Dimensions {
-	variant := Ghost
-	if under {
-		// The row the keyboard is on is drawn the way a pressed one is, because
-		// there is no pointer over it to say so. Without this, the arrow keys
-		// move something invisible and return picks an entry nobody saw chosen.
-		variant = Secondary
-	}
-	return ButtonProps{Label: entry, Variant: variant, Size: Small}.Layout(c, state)
+	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+		c := c.With(gtx)
+		c.Constraints.Min.X = c.Constraints.Max.X
+		c.Constraints.Min.Y = c.Dp(unit.Dp(44))
+
+		var fill color.NRGBA
+		if under {
+			fill = c.Theme.Colours.Accent
+		}
+		return surfaceWidth(c, fill, fill, controlRadius(c), 0, func(c ayra.Context) ayra.Dimensions {
+			// West sits the text at the left and in the middle of the row's
+			// height, which Min alone does not do: the room is the row's, and
+			// the text is laid out in its own.
+			return layout.W.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Point{}
+				return layout.Inset{Top: 8, Bottom: 8, Left: 12, Right: 12}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return drawText(c.With(gtx), entry, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 0, text.Start, plain())
+				})
+			})
+		})
+	})
 }
 
 // Palette is the state of a list of commands opened over the whole screen.
@@ -318,6 +462,9 @@ type Palette struct {
 	at       int
 	chosen   int
 	reported bool
+	// focus is whether the field still has to be given the keyboard: the dialog
+	// takes it when it opens, and the field takes it from the dialog.
+	focus bool
 }
 
 // Open puts the palette up, with the query it had last time cleared.
@@ -325,6 +472,7 @@ func (p *Palette) Open() {
 	p.dialog.Open()
 	p.input.SetText("")
 	p.at = 0
+	p.focus = true
 }
 
 // Close takes it down.
@@ -393,6 +541,10 @@ func (p PaletteProps) layout(c ayra.Context, state *Palette) ayra.Dimensions {
 	}
 
 	return DialogProps{Width: width, Modal: true, Dismissible: true}.Layout(c, &state.dialog, func(c ayra.Context) ayra.Dimensions {
+		if state.focus {
+			state.focus = false
+			c.Execute(key.FocusCmd{Tag: &state.input.editor})
+		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(c.Context,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				return InputProps{Placeholder: p.placeholder(), lead: innerIcon("command", "MagnifyingGlass")}.Layout(c.With(gtx), &state.input)
@@ -426,13 +578,16 @@ func (p PaletteProps) read(c ayra.Context, state *Palette, found []int) {
 		state.at = 0
 	}
 
-	event.Op(c.Ops, state)
+	// The keys are the field's: it is what holds the keyboard while a command is
+	// typed, and a filter on the palette's own state, which is never focused,
+	// was answered by nothing.
+	focus := &state.input.editor
 	for {
 		e, ok := c.Event(
-			key.Filter{Focus: state, Name: key.NameDownArrow},
-			key.Filter{Focus: state, Name: key.NameUpArrow},
-			key.Filter{Focus: state, Name: key.NameReturn},
-			key.Filter{Focus: state, Name: key.NameEnter},
+			key.Filter{Focus: focus, Name: key.NameDownArrow},
+			key.Filter{Focus: focus, Name: key.NameUpArrow},
+			key.Filter{Focus: focus, Name: key.NameReturn},
+			key.Filter{Focus: focus, Name: key.NameEnter},
 		)
 		if !ok {
 			break
