@@ -47,7 +47,15 @@ type PaginationProps struct {
 	// most: a row that would not fit narrows the window rather than running off
 	// the screen. Zero asks for two.
 	Window int
+	// PreviousLabel and NextLabel are the two ends, as Kyse's PaginationProps
+	// names them. Empty says "Previous" and "Next".
+	PreviousLabel string
+	NextLabel     string
 }
+
+// previous and next are what the two ends read.
+func (p PaginationProps) previous() string { return orDefault(p.PreviousLabel, "Previous") }
+func (p PaginationProps) next() string     { return orDefault(p.NextLabel, "Next") }
 
 // PartNames are the parts this widget publishes, by the names the web
 // component publishes in data-part.
@@ -93,7 +101,7 @@ func (p PaginationProps) layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	c.Constraints.Min = image.Point{}
 	children := []layout.FlexChild{
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return p.step(c.With(gtx), &state.previous, "Previous", state.current > 1)
+			return p.step(c.With(gtx), &state.previous, p.previous(), state.current > 1)
 		}),
 	}
 
@@ -130,7 +138,7 @@ func (p PaginationProps) layout(c ayra.Context, state *Pages) ayra.Dimensions {
 	children = append(children,
 		layout.Rigid(layout.Spacer{Width: 4}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return p.step(c.With(gtx), &state.next, "Next", state.current < p.Total)
+			return p.step(c.With(gtx), &state.next, p.next(), state.current < p.Total)
 		}),
 	)
 
@@ -192,8 +200,8 @@ func (p PaginationProps) wider(c ayra.Context, state *Pages, window int) bool {
 	inner := c
 	inner.Constraints.Min = image.Point{}
 
-	width := ButtonProps{Label: "Previous", Variant: Outline, Size: Small}.Layout(inner, &state.previous).Size.X
-	width += ButtonProps{Label: "Next", Variant: Outline, Size: Small}.Layout(inner, &state.next).Size.X
+	width := ButtonProps{Label: p.previous(), Variant: Outline, Size: Small}.Layout(inner, &state.previous).Size.X
+	width += ButtonProps{Label: p.next(), Variant: Outline, Size: Small}.Layout(inner, &state.next).Size.X
 
 	gap := inner.Dp(unit.Dp(4))
 	for _, page := range p.visible(state.current, window) {
