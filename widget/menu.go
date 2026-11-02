@@ -406,9 +406,9 @@ func (p PopoverProps) layout(c ayra.Context, state *Menu, trigger, content ayra.
 	state.open.Changed(c)
 	state.dismiss(c, !p.light)
 
-	dims := state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-		return trigger(c.With(gtx))
-	})
+	dims := TouchArea(c, func(c ayra.Context, w ayra.Widget) ayra.Dimensions {
+		return state.open.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return w(c.With(gtx)) })
+	}, trigger)
 	state.declareAnchor(c, dims)
 	if !state.open.Showing() {
 		state.scroll.Position = layout.Position{}
