@@ -135,7 +135,11 @@ public final class AyraPush implements Ayra.IntentListener, Ayra.PermissionListe
 					}
 				}
 			});
-		} catch (IllegalStateException e) {
+		} catch (RuntimeException e) {
+			// No default FirebaseApp (an IllegalStateException), or a package
+			// whose manifest lost the messaging component (a NullPointerException):
+			// either way there is nothing to register with, and a crash in the
+			// permission's callback would take the application with it.
 			error = "not_configured";
 		}
 		finish(enabled ? GRANTED : DENIED, error);
