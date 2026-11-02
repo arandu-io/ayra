@@ -1,6 +1,6 @@
 # Release Notes
 
-## Unreleased
+## v0.9.0 - 2026-11-02
 
 ### Added
 
@@ -51,6 +51,14 @@
 - `client.Client.Download` fetches bytes -- an image, a document -- under the
   same credential and the same refusal to leave the server, with its own limit
   (`DefaultDownloadLimit`, `WithDownloadLimit`).
+- `widget`: `ComboboxProps.Invalid` and `AutocompleteProps.Invalid` mark the field
+  rejected, as the other fields' `Invalid` does; a failed search sets it too and is
+  said under the field in the destructive ink (`Failed` is the sentence).
+- `widget`: `DataColumn.Hideable` lists a column in the columns menu of a
+  `DataTable`'s cards, `DataColumn.Hidden` starts it switched off, and
+  `DataTable.HideColumn(key, hidden)` switches one by its key, for a screen that
+  restores what the person chose. `DataTable.ColumnHidden` reports it. A column
+  that is not `Hideable` is always shown, as in Kyse's `TableColumn`.
 
 ### Fixed
 

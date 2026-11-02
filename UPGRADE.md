@@ -4,7 +4,7 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
-## Unreleased -- a bearer token and the body of a refusal
+## v0.9.0 -- a bearer token and the body of a refusal
 
 Nothing stops compiling. A `client.StatusError` is now built with its `Body` and
 `ContentType`, so a test that compared one with `==` or `reflect.DeepEqual`
@@ -20,7 +20,7 @@ c, err := client.New(base, client.WithBearer(func(ctx context.Context, rejected 
 }))
 ```
 
-## Unreleased -- building with push notifications or live video
+## v0.9.0 -- building with push notifications or live video
 
 Nothing that compiled stops compiling. An application that imports `push` or
 `live` needs more of `aru native:build` than before, and a project that
@@ -47,7 +47,7 @@ For iOS, enable Push Notifications for the application identifier and download
 the provisioning profile again; `aru` refuses to sign a push application with a
 profile that lacks the `aps-environment` entitlement.
 
-## Unreleased -- the listing as Kyse v0.48 and v0.49 draw it
+## v0.9.0 -- the listing as Kyse v0.48 and v0.49 draw it
 
 Nothing stops compiling. What is drawn changes in the places below, and a golden
 picture or a test of yours that reads the words of a table may need the new ones.
@@ -109,7 +109,7 @@ Before, it was one line, cut off, set against the edge when it was wide.
 question's, so a failure replaces them with the message and the retry button, as
 it did for a table that had never loaded; asking again clears it.
 
-## Unreleased -- dialogs and drawers cover the window
+## v0.9.0 -- dialogs and drawers cover the window
 
 `DialogProps`, `DrawerProps` and what is built on them (`PaletteProps`,
 `FormDialogProps`, the data table's sheet of filters) cover the whole window, the
@@ -142,7 +142,7 @@ its content then takes the room it needs and is not stretched to the panel's.
 A modal dialog or drawer keeps Tab inside itself (`key.FocusFilter.Trap`), and the
 back key closes it, or the menu open over it first.
 
-## Unreleased -- what the form and display widgets draw differently
+## v0.9.0 -- what the form and display widgets draw differently
 
 Nothing stops compiling. A golden picture of yours that holds one of the widgets
 below changes, and `go test ./frame -update` regenerates it once you have looked.
@@ -171,7 +171,7 @@ below changes, and `go test ./frame -update` regenerates it once you have looked
   Code that styled `buttongroup` parts to restyle a segmented control styles `segmented`
   now.
 
-## Unreleased -- translucent colours blend as the browser blends them
+## v0.9.0 -- translucent colours blend as the browser blends them
 
 Nothing stops compiling, and every picture of the dark scheme changes. The engine
 blended translucent ink in straightened light and a browser blends in sRGB, so
