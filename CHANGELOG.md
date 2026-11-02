@@ -1,8 +1,8 @@
 # Release Notes
 
-## [v0.9.0](https://github.com/arandu-io/ayra/compare/v0.8.0...v0.9.0) - 2026-11-02
+## v0.9.1 - 2026-11-02
 
-### Fixed (since v0.9.0)
+### Fixed
 
 - `widget.BreadcrumbProps`: a step has at least 48 points to be laid out in, however
   narrow the column. A step that does not fit is cut with an ellipsis, the page the
@@ -17,6 +17,8 @@
 - `engine/app` (iOS): `Configure` applies the status colour: the controller's view takes
   it and `preferredStatusBarStyle` is dark content over a light ground and light content
   over a dark one, each time it changes.
+
+## [v0.9.0](https://github.com/arandu-io/ayra/compare/v0.8.0...v0.9.0) - 2026-11-02
 
 ### Added
 
