@@ -63,6 +63,14 @@ type Config struct {
 	// notice that repeats the stage the application is already in is not made.
 	OnLifecycle func(ayra.Lifecycle)
 
+	// ReduceMotion answers whether the person has asked the system for less
+	// movement, and is asked once per frame, so it must be cheap and must not
+	// block. The platforms report it differently -- Android's animation scale at
+	// zero, iOS's Reduce Motion, the browser's prefers-reduced-motion -- and the
+	// engine does not read any of them, so the application says how. Nil is "no":
+	// the animations run.
+	ReduceMotion func() bool
+
 	// Theme builds the theme for a scheme. Zero takes [theme.New], the Basecoat
 	// palette; a product that has its own -- made from its stylesheet by
 	// theme/css, with its look and its variants registered -- hands the function
@@ -237,11 +245,12 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 			gtx := app.NewContext(&ops, e)
 			paintBehindBars(gtx.Ops, e, palette.Colours.Background)
 			c := ayra.Context{
-				Context:    gtx,
-				Theme:      palette,
-				Shaper:     shaper,
-				Invalidate: window.Invalidate,
-				Mode:       state.mode,
+				Context:      gtx,
+				Theme:        palette,
+				Shaper:       shaper,
+				Invalidate:   window.Invalidate,
+				Mode:         state.mode,
+				ReduceMotion: cfg.ReduceMotion != nil && cfg.ReduceMotion(),
 				SetScheme: func(scheme theme.Scheme) {
 					changed(state.choose(scheme))
 				},

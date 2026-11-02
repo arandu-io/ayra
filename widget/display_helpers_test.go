@@ -25,6 +25,11 @@ func (p *panel) at(scheme theme.Scheme, now time.Time, screen func(ayra.Context)
 
 // under is at with a theme of the caller's.
 func (p *panel) under(th theme.Theme, now time.Time, screen func(ayra.Context) ayra.Dimensions) ayra.Dimensions {
+	return p.moving(th, now, false, screen)
+}
+
+// moving is under with the system's ask for less movement chosen.
+func (p *panel) moving(th theme.Theme, now time.Time, reduce bool, screen func(ayra.Context) ayra.Dimensions) ayra.Dimensions {
 	p.ops.Reset()
 	gtx := layout.Context{
 		Ops:         p.ops,
@@ -33,7 +38,7 @@ func (p *panel) under(th theme.Theme, now time.Time, screen func(ayra.Context) a
 		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
 		Constraints: layout.Constraints{Max: p.size},
 	}
-	dims := screen(ayra.Context{Context: gtx, Theme: th, Shaper: p.shaper})
+	dims := screen(ayra.Context{Context: gtx, Theme: th, Shaper: p.shaper, ReduceMotion: reduce})
 	p.router.Frame(p.ops)
 	return dims
 }

@@ -2,6 +2,8 @@ package widget
 
 import (
 	"image"
+	"image/color"
+	"math"
 	"time"
 
 	"github.com/arandu-io/ayra"
@@ -124,6 +126,12 @@ const travel = 1400 * time.Millisecond
 // a picture drawn without a window -- is at the start, where the bar is still
 // off the left edge and the track is empty.
 func (p ProgressProps) slide(c ayra.Context, fill theme.Style, track image.Rectangle, radius int) {
+	if c.ReduceMotion {
+		// What Kyse draws under prefers-reduced-motion: the whole track filled,
+		// still. It claims no position either, and asks for no more frames.
+		paint.FillShape(c.Ops, fill.Background.NRGBA(), clip.UniformRRect(track, radius).Op(c.Ops))
+		return
+	}
 	phase := float32(c.Now.UnixNano()%int64(travel)) / float32(travel)
 	if c.Now.IsZero() {
 		phase = 0
@@ -255,8 +263,35 @@ func (p SkeletonProps) Layout(c ayra.Context) ayra.Dimensions {
 	}
 
 	block := image.Rectangle{Max: image.Pt(width, height)}
-	paint.FillShape(c.Ops, style.Background.NRGBA(), clip.UniformRRect(block, radius).Op(c.Ops))
+	paint.FillShape(c.Ops, pulse(c, style.Background.NRGBA()), clip.UniformRRect(block, radius).Op(c.Ops))
 	return ayra.Dimensions{Size: block.Max}
+}
+
+// pulseEvery is the time a skeleton takes to fade to half and come back.
+const pulseEvery = 2 * time.Second
+
+// pulse is the colour of a skeleton at this frame: its own colour fading to half
+// strength and back, as Kyse's animate-pulse does, from the frame's own clock so
+// that every skeleton on a screen breathes together.
+//
+// It asks for the next frame only while it is being drawn, which is the whole of
+// "only while it is on screen": a list that scrolls a skeleton out of sight stops
+// drawing it and so stops asking, and an application in the background is drawn
+// no frame at all. It stands still, at full strength, when the person asked for
+// less movement, and in a picture drawn with no clock, which is how the pictures
+// kept here stay the same.
+func pulse(c ayra.Context, ink color.NRGBA) color.NRGBA {
+	if c.ReduceMotion || c.Now.IsZero() {
+		return ink
+	}
+	phase := float64(c.Now.UnixNano()%int64(pulseEvery)) / float64(pulseEvery)
+	// 1 at the start, 0.5 half way, 1 again: a cosine, as smooth as the curve the
+	// stylesheet asks for.
+	opacity := 0.75 + 0.25*math.Cos(2*math.Pi*phase)
+	ink.A = uint8(float64(ink.A)*opacity + 0.5)
+
+	c.Execute(op.InvalidateCmd{At: c.Now.Add(33 * time.Millisecond)})
+	return ink
 }
 
 // KbdProps is a key somebody is told to press.
