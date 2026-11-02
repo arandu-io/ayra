@@ -210,8 +210,6 @@ func (b *Backend) NewTexture(format driver.TextureFormat, width, height int, min
 	switch format {
 	case driver.TextureFormatFloat:
 		d3dfmt = b.floatFormat
-	case driver.TextureFormatSRGBA:
-		d3dfmt = d3d11.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
 	case driver.TextureFormatRGBA8:
 		d3dfmt = d3d11.DXGI_FORMAT_R8G8B8A8_UNORM
 	default:

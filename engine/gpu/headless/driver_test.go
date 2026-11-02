@@ -21,7 +21,7 @@ var dumpImages = flag.Bool("saveimages", false, "save test images")
 
 var (
 	clearCol       = color.NRGBA{A: 0xff, R: 0xde, G: 0xad, B: 0xbe}
-	clearColExpect = f32color.NRGBAToRGBA(clearCol)
+	clearColExpect = color.RGBA(clearCol)
 )
 
 func TestFramebufferClear(t *testing.T) {
@@ -29,9 +29,9 @@ func TestFramebufferClear(t *testing.T) {
 	sz := image.Point{X: 800, Y: 600}
 	fbo := newFBO(t, b, sz)
 	d := driver.LoadDesc{
-		// ClearColor accepts linear RGBA colors, while 8-bit colors
-		// are in the sRGB color space.
-		ClearColor: f32color.LinearFromSRGB(clearCol),
+		// The frame is written and blended in the space a picture is written
+		// in, so the clear colour is written as it is.
+		ClearColor: f32color.PremulFromSRGB(clearCol),
 		Action:     driver.LoadActionClear,
 	}
 	b.BeginRenderPass(fbo, d)
@@ -66,7 +66,7 @@ func TestInputShader(t *testing.T) {
 		VertexShader:   vsh,
 		FragmentShader: fsh,
 		VertexLayout:   layout,
-		PixelFormat:    driver.TextureFormatSRGBA,
+		PixelFormat:    driver.TextureFormatRGBA8,
 		Topology:       driver.TopologyTriangles,
 		BlendDesc: driver.BlendDesc{
 			SrcFactor: driver.BlendFactorOne,
@@ -89,7 +89,7 @@ func TestInputShader(t *testing.T) {
 	}
 	defer buf.Release()
 	d := driver.LoadDesc{
-		ClearColor: f32color.LinearFromSRGB(clearCol),
+		ClearColor: f32color.PremulFromSRGB(clearCol),
 		Action:     driver.LoadActionClear,
 	}
 	b.BeginRenderPass(fbo, d)
@@ -103,9 +103,9 @@ func TestInputShader(t *testing.T) {
 		t.Errorf("got color %v, expected %v", got, clearColExpect)
 	}
 	cx, cy := 300, 400
-	shaderCol := f32color.RGBA{R: .25, G: .55, B: .75, A: 1.0}
-	if got, exp := img.RGBAAt(cx, cy), shaderCol.SRGB(); got != f32color.NRGBAToRGBA(exp) {
-		t.Errorf("got color %v, expected %v", got, f32color.NRGBAToRGBA(exp))
+	// What the shader writes is what the target holds, byte for byte.
+	if got, exp := img.RGBAAt(cx, cy), (color.RGBA{R: 64, G: 140, B: 191, A: 255}); got != exp {
+		t.Errorf("got color %v, expected %v", got, exp)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestFramebuffers(t *testing.T) {
 	)
 	fbo1 := newFBO(t, b, sz)
 	fbo2 := newFBO(t, b, sz)
-	fcol1, fcol2 := f32color.LinearFromSRGB(col1), f32color.LinearFromSRGB(col2)
+	fcol1, fcol2 := f32color.PremulFromSRGB(col1), f32color.PremulFromSRGB(col2)
 	d := driver.LoadDesc{Action: driver.LoadActionClear,
 		ClearColor: fcol1}
 	b.BeginRenderPass(fbo1, d)
@@ -139,18 +139,25 @@ func TestFramebuffers(t *testing.T) {
 	b.BeginRenderPass(fbo2, d)
 	b.EndRenderPass()
 	img := screenshot(t, b, fbo1, sz)
-	if got := img.RGBAAt(0, 0); got != f32color.NRGBAToRGBA(col1) {
-		t.Errorf("got color %v, expected %v", got, f32color.NRGBAToRGBA(col1))
+	if got, want := img.RGBAAt(0, 0), premultiplied(col1); got != want {
+		t.Errorf("got color %v, expected %v", got, want)
 	}
 	img = screenshot(t, b, fbo2, sz)
-	if got := img.RGBAAt(0, 0); got != f32color.NRGBAToRGBA(col2) {
-		t.Errorf("got color %v, expected %v", got, f32color.NRGBAToRGBA(col2))
+	if got, want := img.RGBAAt(0, 0), premultiplied(col2); got != want {
+		t.Errorf("got color %v, expected %v", got, want)
 	}
+}
+
+// premultiplied is the colour as the target holds it: each channel multiplied by
+// the alpha, in the space the bytes are in.
+func premultiplied(c color.NRGBA) color.RGBA {
+	p := f32color.PremulFromSRGB(c)
+	return color.RGBA{R: uint8(p.R*255 + 0.5), G: uint8(p.G*255 + 0.5), B: uint8(p.B*255 + 0.5), A: c.A}
 }
 
 func newFBO(t *testing.T, b driver.Device, size image.Point) driver.Texture {
 	fboTex, err := b.NewTexture(
-		driver.TextureFormatSRGBA,
+		driver.TextureFormatRGBA8,
 		size.X, size.Y,
 		driver.FilterNearest, driver.FilterNearest,
 		driver.BufferBindingFramebuffer,

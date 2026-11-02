@@ -4,16 +4,17 @@
 // exists. A byte in a picture is sRGB: a number bent by a curve so that the
 // 256 steps land where an eye can still tell them apart, most of them crowded
 // near black. Light does not work that way -- two lamps are twice one lamp --
-// and everything that blends, fades, covers or antialiases is adding light. A
-// blend computed on the bent numbers is wrong in a way that looks like a
-// haloed edge or a grey that reads too dark, and it is wrong quietly: it
-// compiles, it draws, and the picture is merely a little off.
+// and arithmetic about light, such as the luminance a label's colour is chosen
+// by, is done on straightened numbers: [LinearFromSRGB] and [RGBA.Luminance].
 //
-// So colours arrive as bytes, are straightened on the way in, do their
-// arithmetic as float32, and are bent again on the way out. [RGBA] is the
-// straightened form. Everything that takes or returns an [image/color] value
-// is a boundary, and the conversion happens there rather than wherever
-// somebody remembered.
+// The rasteriser does not blend light, it blends what a browser blends. White
+// at 15% over black is 38 of 255 in a stylesheet, and 108 when the same
+// composite is computed in straightened light, so a frame blended that way draws
+// every border, wash, scrim and badge of the dark scheme about twice as bright as
+// the site that shares its palette. The frame is therefore blended in the space a
+// picture is written in: the colours it is handed are [PremulFromSRGB], the
+// targets are 8-bit formats the hardware does not bend, and what a shader writes
+// is the byte the display shows.
 //
 // It is premultiplied throughout: each channel already carries its alpha. That
 // makes compositing a multiply and an add instead of a special case per
@@ -27,8 +28,9 @@ import (
 
 //go:generate go run ./f32colorgen -out tables.go
 
-// RGBA is a colour the rasteriser can do arithmetic on: linear, premultiplied,
-// one float32 per channel.
+// RGBA is a colour the rasteriser can do arithmetic on: premultiplied, one
+// float32 per channel, in the space it was built in -- the one a picture is
+// written in for [PremulFromSRGB], straightened light for [LinearFromSRGB].
 //
 // It is a struct of four floats rather than a packed word because it is read
 // far more often than it is built -- a shader uniform, a clear colour, a
@@ -110,6 +112,27 @@ func LinearFromSRGB(col color.NRGBA) RGBA {
 		R: srgb8ToLinear[col.R] * a,
 		G: srgb8ToLinear[col.G] * a,
 		B: srgb8ToLinear[col.B] * a,
+		A: a,
+	}
+}
+
+// PremulFromSRGB premultiplies a colour and leaves it in the space a picture is
+// written in. It is what the rasteriser is handed.
+//
+// The engine blends in that space, as a browser does, and not in straightened
+// light: white at 15% over black is 38 and not 108, a border at 10% over the
+// dark ground is the grey the stylesheet draws and not one twice as bright. The
+// bytes a colour arrives as are therefore the numbers that are multiplied,
+// added and written, and the targets the frame is drawn into are 8-bit formats
+// the hardware does not bend on the way in or out. [LinearFromSRGB] stays for
+// arithmetic that really is about light, such as the luminance a label's colour
+// is chosen by.
+func PremulFromSRGB(col color.NRGBA) RGBA {
+	a := float32(col.A) / 0xFF
+	return RGBA{
+		R: float32(col.R) / 0xFF * a,
+		G: float32(col.G) / 0xFF * a,
+		B: float32(col.B) / 0xFF * a,
 		A: a,
 	}
 }

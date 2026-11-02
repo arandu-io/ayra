@@ -34,11 +34,9 @@ type Backend struct {
 	floatTriple textureTriple
 	// Single channel alpha textures.
 	alphaTriple textureTriple
-	srgbaTriple textureTriple
 	storage     [storageBindings]*buffer
 
 	outputFBO gl.Framebuffer
-	sRGBFBO   *SRGBFBO
 
 	// vertArray is bound during a frame. We don't need it, but
 	// core desktop OpenGL profile 3.3 requires some array bound.
@@ -189,7 +187,6 @@ func newOpenGLDevice(api driver.OpenGL) (driver.Device, error) {
 		return nil, err
 	}
 	floatTriple, ffboErr := floatTripleFor(f, ver, exts)
-	srgbaTriple, srgbErr := srgbaTripleFor(ver, exts)
 	gles31 := gles && (ver[0] > 3 || (ver[0] == 3 && ver[1] >= 1))
 	b := &Backend{
 		glver:       ver,
@@ -197,13 +194,9 @@ func newOpenGLDevice(api driver.OpenGL) (driver.Device, error) {
 		funcs:       f,
 		floatTriple: floatTriple,
 		alphaTriple: alphaTripleFor(ver),
-		srgbaTriple: srgbaTriple,
 		sharedCtx:   api.Shared,
 	}
 	b.feats.BottomLeftOrigin = true
-	if srgbErr == nil {
-		b.feats.Features |= driver.FeatureSRGB
-	}
 	if ffboErr == nil {
 		b.feats.Features |= driver.FeatureFloatRenderTargets
 	}
@@ -242,59 +235,20 @@ func (b *Backend) BeginFrame(target driver.RenderTarget, clear bool, viewport im
 	}
 	b.outputFBO = renderFBO
 	b.glstate.bindFramebuffer(b.funcs, gl.FRAMEBUFFER, renderFBO)
-	if b.gles {
-		// If the output framebuffer is not in the sRGB colorspace already, emulate it.
-		fbSRGB := false
-		if !b.gles || b.glver[0] > 2 {
-			var fbEncoding int
-			if !renderFBO.Valid() {
-				fbEncoding = b.funcs.GetFramebufferAttachmentParameteri(gl.FRAMEBUFFER, gl.BACK, gl.FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING)
-			} else {
-				fbEncoding = b.funcs.GetFramebufferAttachmentParameteri(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING)
-			}
-			fbSRGB = fbEncoding != gl.LINEAR
-		}
-		if !fbSRGB && viewport != (image.Point{}) {
-			if b.sRGBFBO == nil {
-				sfbo, err := NewSRGBFBO(b.funcs, &b.glstate)
-				if err != nil {
-					panic(err)
-				}
-				b.sRGBFBO = sfbo
-			}
-			if err := b.sRGBFBO.Refresh(viewport); err != nil {
-				panic(err)
-			}
-			renderFBO = b.sRGBFBO.Framebuffer()
-		} else if b.sRGBFBO != nil {
-			b.sRGBFBO.Release()
-			b.sRGBFBO = nil
-		}
-	} else {
-		b.glstate.set(b.funcs, gl.FRAMEBUFFER_SRGB, true)
+	if !b.gles {
+		// The frame is written as it is blended, in the space a picture is written
+		// in: the framebuffer is not asked to bend it on the way out, and an
+		// output that is not sRGB needs no intermediate target to emulate one.
+		b.glstate.set(b.funcs, gl.FRAMEBUFFER_SRGB, false)
 		if !b.vertArray.Valid() {
 			b.vertArray = b.funcs.CreateVertexArray()
 		}
 		b.glstate.bindVertexArray(b.funcs, b.vertArray)
 	}
-	b.glstate.bindFramebuffer(b.funcs, gl.FRAMEBUFFER, renderFBO)
-	if b.sRGBFBO != nil && !clear {
-		b.clearOutput(0, 0, 0, 0)
-	}
 	return &texture{backend: b, fbo: renderFBO, hasFBO: true, foreign: true}
 }
 
 func (b *Backend) EndFrame() {
-	if b.sRGBFBO != nil {
-		b.glstate.bindFramebuffer(b.funcs, gl.FRAMEBUFFER, b.outputFBO)
-		if b.clear {
-			b.SetBlend(false)
-		} else {
-			b.BlendFunc(driver.BlendFactorOne, driver.BlendFactorOneMinusSrcAlpha)
-			b.SetBlend(true)
-		}
-		b.sRGBFBO.Blit()
-	}
 	if b.sharedCtx {
 		b.restoreState(b.savedState)
 	} else if runtime.GOOS == "android" {
@@ -694,8 +648,6 @@ func (b *Backend) NewTexture(format driver.TextureFormat, width, height int, min
 	switch format {
 	case driver.TextureFormatFloat:
 		tex.triple = b.floatTriple
-	case driver.TextureFormatSRGBA:
-		tex.triple = b.srgbaTriple
 	case driver.TextureFormatRGBA8:
 		tex.triple = textureTriple{gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE}
 	default:
@@ -778,9 +730,6 @@ func glErr(f *gl.Functions) error {
 }
 
 func (b *Backend) Release() {
-	if b.sRGBFBO != nil {
-		b.sRGBFBO.Release()
-	}
 	if b.vertArray.Valid() {
 		b.glstate.deleteVertexArray(b.funcs, b.vertArray)
 	}
@@ -1330,17 +1279,6 @@ func floatTripleFor(f *gl.Functions, ver [2]int, exts []string) (textureTriple, 
 		attempts = append(attempts, fmt.Sprintf("(0x%x, 0x%x, 0x%x): 0x%x", tt.internalFormat, tt.format, tt.typ, st))
 	}
 	return textureTriple{}, fmt.Errorf("floating point fbos not supported (attempted %s)", attempts)
-}
-
-func srgbaTripleFor(ver [2]int, exts []string) (textureTriple, error) {
-	switch {
-	case ver[0] >= 3:
-		return textureTriple{gl.SRGB8_ALPHA8, gl.Enum(gl.RGBA), gl.Enum(gl.UNSIGNED_BYTE)}, nil
-	case hasExtension(exts, "GL_EXT_sRGB"):
-		return textureTriple{gl.SRGB_ALPHA_EXT, gl.Enum(gl.SRGB_ALPHA_EXT), gl.Enum(gl.UNSIGNED_BYTE)}, nil
-	default:
-		return textureTriple{}, errors.New("no sRGB texture formats found")
-	}
 }
 
 func alphaTripleFor(ver [2]int) textureTriple {

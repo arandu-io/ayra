@@ -2074,14 +2074,15 @@ func chooseFormat(pd C.VkPhysicalDevice, surf Surface) (C.VkSurfaceFormatKHR, bo
 	if err != nil {
 		return C.VkSurfaceFormatKHR{}, false, fmt.Errorf("vulkan: vkGetPhysicalDeviceSurfaceFormatsKHR: %w", err)
 	}
-	// Query for format with sRGB support.
-	// TODO: Support devices without sRGB.
+	// The engine blends in the space a picture is written in, so the format
+	// is the 8-bit one the hardware does not bend. The colour space says what the
+	// display takes the numbers to mean, which is sRGB.
 	for _, f := range formats {
 		if f.colorSpace != C.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR {
 			continue
 		}
 		switch f.format {
-		case C.VK_FORMAT_B8G8R8A8_SRGB, C.VK_FORMAT_R8G8B8A8_SRGB:
+		case C.VK_FORMAT_B8G8R8A8_UNORM, C.VK_FORMAT_R8G8B8A8_UNORM:
 			return f, true, nil
 		}
 	}

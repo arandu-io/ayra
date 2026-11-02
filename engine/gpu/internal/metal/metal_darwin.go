@@ -737,8 +737,6 @@ func pixelFormatFor(f driver.TextureFormat) C.MTLPixelFormat {
 		return C.MTLPixelFormatR16Float
 	case driver.TextureFormatRGBA8:
 		return C.MTLPixelFormatRGBA8Unorm
-	case driver.TextureFormatSRGBA:
-		return C.MTLPixelFormatRGBA8Unorm_sRGB
 	default:
 		panic("unsupported pixel format")
 	}

@@ -29,8 +29,9 @@ static void setupLayer(CFTypeRef layerRef, CFTypeRef devRef) {
 		CAMetalLayer *layer = (__bridge CAMetalLayer *)layerRef;
 		id<MTLDevice> dev = (__bridge id<MTLDevice>)devRef;
 		layer.device = dev;
-		// Package gpu assumes an sRGB-encoded framebuffer.
-		layer.pixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
+		// Package gpu blends in the space a picture is written in, so the
+		// layer is not one the hardware bends on the way out.
+		layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 		if (@available(iOS 11.0, *)) {
 			// Never let nextDrawable time out and return nil.
 			layer.allowsNextDrawableTimeout = NO;
@@ -129,7 +130,7 @@ func (c *mtlContext) API() gpu.API {
 	return gpu.Metal{
 		Device:      uintptr(c.dev),
 		Queue:       uintptr(c.queue),
-		PixelFormat: int(C.MTLPixelFormatBGRA8Unorm_sRGB),
+		PixelFormat: int(C.MTLPixelFormatBGRA8Unorm),
 	}
 }
 

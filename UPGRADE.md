@@ -4,6 +4,29 @@ What changed in a way that stops your code compiling, and what to write instead.
 
 Additions are not listed. A new symbol breaks nothing.
 
+## Unreleased -- translucent colours blend as the browser blends them
+
+Nothing stops compiling, and every picture of the dark scheme changes. The engine
+blended translucent ink in straightened light and a browser blends in sRGB, so
+white at 15% over black came out at 108 of 255 in the app and 38 on the site. It
+now comes out at 38, over any ground, for every alpha: a border, an input, a
+hover wash, a scrim, a disabled label, a badge and the antialiased edge of a
+shape. A widget changes nothing to get it.
+
+What moves in the engine: the frame, the layers and the images are 8-bit
+formats the hardware does not bend (`TextureFormatRGBA8`; `TextureFormatSRGBA` is
+gone), a colour reaches the rasteriser as `f32color.PremulFromSRGB`, and the
+surface of a window is not asked to be sRGB (`BGRA8Unorm` on Metal, an `*_UNORM`
+swapchain on Vulkan and Direct3D 11, no `EGL_GL_COLORSPACE_SRGB`, no
+`FRAMEBUFFER_SRGB`, and the intermediate framebuffer that emulated one on OpenGL
+ES is deleted).
+
+An application that drew its own Metal layer or its own swapchain for the engine
+gives it the non-sRGB format: `layer.pixelFormat = MTLPixelFormatBGRA8Unorm`.
+A golden picture of yours that carries translucent ink or antialiased edges is
+regenerated; a workaround that pre-mixed a translucent colour over its ground to
+get the browser's look (a field's fill, a faded label) is no longer needed.
+
 ## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard

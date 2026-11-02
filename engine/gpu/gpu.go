@@ -343,7 +343,7 @@ func NewWithDevice(d driver.Device) (GPU, error) {
 	defer d.EndFrame()
 	feats := d.Caps().Features
 	switch {
-	case feats.Has(driver.FeatureFloatRenderTargets) && feats.Has(driver.FeatureSRGB):
+	case feats.Has(driver.FeatureFloatRenderTargets):
 		return newGPU(d), nil
 	}
 	return nil, errors.New("no available GPU driver")
@@ -361,7 +361,7 @@ func newGPU(ctx driver.Device) *gpu {
 
 func (g *gpu) Clear(col color.NRGBA) {
 	g.drawOps.clear = true
-	g.drawOps.clearColor = f32color.LinearFromSRGB(col)
+	g.drawOps.clearColor = f32color.PremulFromSRGB(col)
 }
 
 func (g *gpu) Release() {
@@ -472,7 +472,7 @@ func (r *renderer) texHandle(cache *textureCache, data imageOpData) driver.Textu
 		minFilter, magFilter = driver.FilterNearest, driver.FilterNearest
 	}
 
-	handle, err := r.ctx.NewTexture(driver.TextureFormatSRGBA,
+	handle, err := r.ctx.NewTexture(driver.TextureFormatRGBA8,
 		data.src.Bounds().Dx(), data.src.Bounds().Dy(),
 		minFilter, magFilter,
 		driver.BufferBindingTexture,
@@ -588,7 +588,7 @@ func createColorPrograms(b driver.Device, vsSrc shader.Sources, fsSrc [3]shader.
 		return pipelines, err
 	}
 	defer vsh.Release()
-	for i, format := range []driver.TextureFormat{driver.TextureFormatOutput, driver.TextureFormatSRGBA} {
+	for i, format := range []driver.TextureFormat{driver.TextureFormatOutput, driver.TextureFormatRGBA8} {
 		{
 			fsh, err := b.NewFragmentShader(fsSrc[materialTexture])
 			if err != nil {
@@ -844,7 +844,7 @@ func (r *renderer) drawLayers(layers []opacityLayer, ops []imageOp) {
 		return
 	}
 	fbo := -1
-	r.layerFBOs.resize(r.ctx, driver.TextureFormatSRGBA, r.layers.sizes)
+	r.layerFBOs.resize(r.ctx, driver.TextureFormatRGBA8, r.layers.sizes)
 	for _, l := range slices.Backward(layers) {
 
 		if fbo != l.place.Idx {
@@ -1164,13 +1164,13 @@ func (d *drawState) materialFor(rect f32.Rectangle, off f32.Point, partTrans f32
 	switch d.matType {
 	case materialColor:
 		m.material = materialColor
-		m.color = f32color.LinearFromSRGB(d.color)
+		m.color = f32color.PremulFromSRGB(d.color)
 		m.opaque = m.color.A == 1.0
 	case materialLinearGradient:
 		m.material = materialLinearGradient
 
-		m.color1 = f32color.LinearFromSRGB(d.color1)
-		m.color2 = f32color.LinearFromSRGB(d.color2)
+		m.color1 = f32color.PremulFromSRGB(d.color1)
+		m.color2 = f32color.PremulFromSRGB(d.color2)
 		m.opaque = m.color1.A == 1.0 && m.color2.A == 1.0
 
 		m.uvTrans = partTrans.Mul(gradientSpaceTransform(clip, off, d.stop1, d.stop2))
