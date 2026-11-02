@@ -113,10 +113,15 @@ type ComboboxProps struct {
 	Debounce time.Duration
 	// Limit is how many options are drawn at once. Zero draws six.
 	Limit int
-	// Empty is said when the server found nothing, and Searching while it looks.
-	Empty, Searching string
+	// Empty is said when the server found nothing, Searching while it looks, and
+	// Failed when the search itself failed. Failed empty says the error the
+	// source returned.
+	Empty, Searching, Failed string
 	// Disabled draws it as unavailable and refuses to open.
 	Disabled bool
+	// Invalid draws the field as rejected. What was wrong is said beside it, by
+	// whoever knows; a failed search marks it too, and says why under it.
+	Invalid bool
 }
 
 // PartNames are the parts this widget publishes, by the names the web
@@ -153,7 +158,7 @@ func (p ComboboxProps) Layout(c ayra.Context, state *Combobox) ayra.Dimensions {
 	}
 
 	state.mu.Lock()
-	options, loading := state.options, state.loading
+	options, loading, failure := state.options, state.loading, state.err
 	state.mu.Unlock()
 
 	entries := make([]string, len(options))
@@ -161,8 +166,12 @@ func (p ComboboxProps) Layout(c ayra.Context, state *Combobox) ayra.Dimensions {
 		entries[i] = option.Label
 	}
 	empty := p.Empty
-	if loading {
+	problem := false
+	switch {
+	case loading:
 		entries, empty = nil, orDefault(p.Searching, "Searching...")
+	case failure != nil:
+		entries, empty, problem = nil, orDefault(p.Failed, failure.Error()), true
 	}
 	if len([]rune(typed)) < min {
 		entries, empty = nil, ""
@@ -172,6 +181,7 @@ func (p ComboboxProps) Layout(c ayra.Context, state *Combobox) ayra.Dimensions {
 		ComponentProps: p.ComponentProps, widget: "combobox",
 		Entries: entries, Placeholder: p.Placeholder, Limit: p.Limit,
 		Empty: empty, Disabled: p.Disabled, Unfiltered: true,
+		Invalid: p.Invalid || problem, problem: problem,
 		tail: innerIcon("combobox", "CaretDown"),
 	}.Layout(c, &state.field)
 

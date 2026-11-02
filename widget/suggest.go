@@ -145,7 +145,12 @@ type AutocompleteProps struct {
 	// the order given, instead of being filtered again by the text: a second
 	// filter would drop the very entries the first one found.
 	Unfiltered bool
+	// Invalid draws the field as rejected.
+	Invalid bool
 
+	// problem says Empty is a failure and not a plain "nothing": it is drawn in
+	// the destructive ink.
+	problem bool
 	// widget is the name the field is restyled under when another widget draws
 	// it: the combobox, which is this with a server behind it.
 	widget string
@@ -213,6 +218,7 @@ func (p AutocompleteProps) Layout(c ayra.Context, state *Autocomplete) ayra.Dime
 		widget:         orDefault(p.widget, "autocomplete"),
 		Placeholder:    p.Placeholder,
 		Disabled:       p.Disabled,
+		Invalid:        p.Invalid,
 		tail:           p.tail,
 	}.Layout(c, &state.input)
 
@@ -376,7 +382,11 @@ func (p AutocompleteProps) list(c ayra.Context, state *Autocomplete, found []int
 			c := c.With(gtx)
 			if len(shown) == 0 {
 				return layout.UniformInset(10).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-					return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 0, text.Start, plain())
+					ink := c.Theme.Colours.MutedForeground
+					if p.problem {
+						ink = c.Theme.Colours.Destructive
+					}
+					return drawText(c.With(gtx), p.Empty, unit.Sp(c.Theme.Type.Small), ink, 0, text.Start, plain())
 				})
 			}
 
