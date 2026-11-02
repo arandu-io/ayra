@@ -63,3 +63,19 @@ func TestWithKeepsWhatTravels(t *testing.T) {
 		t.Error("a narrower context was given a different shaper")
 	}
 }
+
+// TestKeyboardOpenAnswersFromTheWindow: a bar across the foot of the screen
+// asks, and a context with no window says the keyboard is down.
+func TestKeyboardOpenAnswersFromTheWindow(t *testing.T) {
+	if (ayra.Context{}).KeyboardOpen() {
+		t.Error("a context with no window has a keyboard up")
+	}
+	down := ayra.Context{Overlay: &ayra.Overlay{}}
+	if down.KeyboardOpen() {
+		t.Error("a window with no keyboard height has it up")
+	}
+	up := ayra.Context{Overlay: &ayra.Overlay{Keyboard: 600}}
+	if !up.KeyboardOpen() {
+		t.Error("a window with a keyboard of 600 pixels has it down")
+	}
+}

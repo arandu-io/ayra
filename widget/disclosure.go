@@ -93,9 +93,12 @@ func summaryRow(c ayra.Context, state *Disclosure, summary string) ayra.Dimensio
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 		inner := c.With(gtx)
 		return layout.Inset{Top: 8, Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			// At least 44 points with the padding, and as many lines as the
+			// words need: a long summary was cut at the edge with "...".
+			gtx.Constraints.Min.Y = c.Dp(touchTarget) - c.Dp(unit.Dp(16))
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, semibold())
+					return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 0, text.Start, semibold())
 				}),
 				layout.Rigid(layout.Spacer{Width: 8}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -177,9 +180,10 @@ func (p AccordionProps) layout(c ayra.Context, state *Accordion, content func(in
 			inner := c.With(gtx)
 			return state.clicks[index].Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Top: 10, Bottom: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.Y = c.Dp(touchTarget) - c.Dp(unit.Dp(20))
 					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 1, text.Start, semibold())
+							return drawText(inner.With(gtx), summary, unit.Sp(c.Theme.Type.Body), c.Theme.Colours.Foreground, 0, text.Start, semibold())
 						}),
 						layout.Rigid(layout.Spacer{Width: 8}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {

@@ -81,21 +81,42 @@ func (p TooltipProps) layout(c ayra.Context, state *Hover, control ayra.Widget) 
 		return dims
 	}
 
-	// Recorded and replayed at the end of the frame would be better, and this
-	// package has no such pass: drawn here, the tooltip is over everything
-	// already drawn and under everything after it, which is right for a control
-	// in a row and wrong for one behind a later panel.
+	// Deferred to the end of the frame, so the bubble is over what comes after the
+	// control -- the next button of a row drew over it -- and placed with the
+	// window in view: kept inside its sides, and under the control when there is
+	// no room over it.
 	bubble := op.Record(c.Ops)
 	size := p.draw(c)
 	drawn := bubble.Stop()
 
-	top := -size.Y - c.Dp(unit.Dp(6))
-	if p.Below {
-		top = dims.Size.Y + c.Dp(unit.Dp(6))
+	gap := c.Dp(unit.Dp(6))
+	left := 0
+	below := p.Below
+	if c.Overlay != nil {
+		if bounds, ok := c.Source.Bounds(state); ok {
+			bounds = bounds.Add(c.Overlay.Window.Min)
+			safe := c.Overlay.Safe
+			edge := c.Dp(unit.Dp(8))
+			if !below && bounds.Min.Y-gap-size.Y < safe.Min.Y {
+				below = true
+			}
+			if bounds.Min.X+left+size.X > safe.Max.X-edge {
+				left = safe.Max.X - edge - size.X - bounds.Min.X
+			}
+			if bounds.Min.X+left < safe.Min.X+edge {
+				left = safe.Min.X + edge - bounds.Min.X
+			}
+		}
 	}
-	offset := op.Offset(image.Pt(0, top)).Push(c.Ops)
+	top := -size.Y - gap
+	if below {
+		top = dims.Size.Y + gap
+	}
+	shown := op.Record(c.Ops)
+	offset := op.Offset(image.Pt(left, top)).Push(c.Ops)
 	drawn.Add(c.Ops)
 	offset.Pop()
+	op.Defer(c.Ops, shown.Stop())
 
 	return dims
 }

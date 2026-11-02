@@ -165,6 +165,9 @@ func TestEveryControlSmallerThanAFingerIsPressedByOne(t *testing.T) {
 				"below": centre.Add(image.Pt(0, 20)),
 			} {
 				tc.reset()
+				// A frame in the reset state, so that what the router holds is the
+				// closed control and not the panel the last press opened.
+				p.draw(screen)
 				p.tap(at, screen)
 				if !tc.changed() {
 					t.Errorf("a tap %s the control (room %v), 20 points from its middle, did not press it", name, room)
@@ -172,6 +175,7 @@ func TestEveryControlSmallerThanAFingerIsPressedByOne(t *testing.T) {
 			}
 
 			tc.reset()
+			p.draw(screen)
 			p.tap(centre.Add(image.Pt(0, 30)), screen)
 			if tc.changed() {
 				t.Errorf("a tap 30 points from the middle (room %v) pressed it: the area is more than 44 tall", room)

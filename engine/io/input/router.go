@@ -245,6 +245,8 @@ type handler struct {
 type filter struct {
 	pointer   pointerFilter
 	focusable bool
+	// trap is whether the tag asked to keep Tab inside what it declares.
+	trap bool
 }
 
 // taggedFilter is a filter together with the tag that asked for it.
@@ -313,6 +315,30 @@ func (s Source) Disabled() Source {
 // not.
 func (s Source) Enabled() bool {
 	return s.r != nil && !s.disabled
+}
+
+// Bounds answers where tag's area was drawn in the last frame, in the
+// coordinates the frame's operations were written in, and false when the tag was
+// not drawn in it or the source has no router.
+//
+// It is the one question a control cannot answer for itself. A control is laid
+// out in the room its parent gave it and knows its size, not where in the window
+// that room is; a list that opens under a control has to know whether there is
+// room under it. The answer is a frame old, which is the price of asking the
+// frame that has been drawn rather than the one being written.
+func (s Source) Bounds(tag event.Tag) (image.Rectangle, bool) {
+	if s.r == nil {
+		return image.Rectangle{}, false
+	}
+	h, ok := s.r.handlers[tag]
+	if !ok || h.pointer.areaPlusOne == 0 {
+		return image.Rectangle{}, false
+	}
+	areas := s.r.pointer.queue.areas
+	if h.pointer.areaPlusOne > len(areas) {
+		return image.Rectangle{}, false
+	}
+	return areas[h.pointer.areaPlusOne-1].bounds(), true
 }
 
 // Focused reports whether tag has the keyboard, as of the most recent
@@ -660,6 +686,7 @@ func (f *filter) Add(flt event.Filter) {
 	switch flt := flt.(type) {
 	case key.FocusFilter:
 		f.focusable = true
+		f.trap = f.trap || flt.Trap
 	case pointer.Filter:
 		f.pointer.Add(flt)
 	case transfer.SourceFilter, transfer.TargetFilter:
@@ -670,6 +697,7 @@ func (f *filter) Add(flt event.Filter) {
 // Merge folds f2 into f.
 func (f *filter) Merge(f2 filter) {
 	f.focusable = f.focusable || f2.focusable
+	f.trap = f.trap || f2.trap
 	f.pointer.Merge(f2.pointer)
 }
 
@@ -1304,6 +1332,9 @@ func (q *Router) collect() {
 			// scroll area, a drop target -- would otherwise be a stop on the
 			// way through the interface with nothing to do when it is reached.
 			if s.filter.focusable {
+				if s.filter.trap && s.key.orderPlusOne == 0 {
+					kq.trap = len(kq.order)
+				}
 				kq.inputOp(tag, &s.key, t, a, b)
 			}
 

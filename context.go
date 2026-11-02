@@ -8,9 +8,11 @@
 package ayra
 
 import (
+	"image"
 	"image/color"
 
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/text"
@@ -74,6 +76,57 @@ type Context struct {
 	// SetMode is what [Context.FollowSystem] calls. The window applies it from
 	// the next frame, like SetScheme. It is nil outside a window.
 	SetMode func(theme.Mode)
+
+	// Overlay is the layer drawn over the whole window, after the screen. A
+	// dialog or a drawer put in it covers the window whatever box it was called
+	// from: the bars of the application and the strips under the system bars
+	// included. It is nil outside a window, which is what a test or a tool that
+	// renders one panel leaves it, and what draws over the window then draws
+	// over the room it was given.
+	Overlay *Overlay
+}
+
+// KeyboardOpen reports whether the software keyboard is up. A bar across the foot
+// of the screen -- the tabs of an application -- is not drawn while it is: it
+// stays over the keyboard and takes the room the field being typed into needs,
+// as no Android application's does. It is false outside a window.
+func (c Context) KeyboardOpen() bool { return c.Overlay != nil && c.Overlay.Keyboard > 0 }
+
+// Overlay is what is drawn over the window once the screen is done.
+//
+// A control cannot cover the window from inside a box: it is laid out in the
+// room its parent gave it, and a dialog opened from a card was a dialog the
+// size of the card, with the application bar and the tab bar outside its scrim.
+// So it records what it draws and hands it here, and the window plays the
+// recordings back at the end of the frame in its own coordinates, in the order
+// they were handed over -- the later is on top.
+type Overlay struct {
+	// Window is the whole window, the strips under the system bars included, in
+	// the coordinates the screen is drawn in: its origin is the corner of the
+	// room the screen was given, so the part under the status bar is negative.
+	Window image.Rectangle
+	// Safe is the room the screen was given: the window less the system bars
+	// and the keyboard. What has to be reached and read is laid out in it.
+	Safe image.Rectangle
+	// Keyboard is the height of the software keyboard in pixels, zero while it
+	// is down. It is part of what Safe leaves out at the bottom.
+	Keyboard int
+
+	calls []op.CallOp
+}
+
+// Add hands over a recording to draw over the window. It is replayed with no
+// offset: what was recorded is in the window's coordinates, which is what
+// Window and Safe are written in.
+func (o *Overlay) Add(call op.CallOp) { o.calls = append(o.calls, call) }
+
+// Flush plays the recordings back, in order, and forgets them. The window calls
+// it once, after the screen, at the origin the screen was drawn from.
+func (o *Overlay) Flush(ops *op.Ops) {
+	for _, call := range o.calls {
+		call.Add(ops)
+	}
+	o.calls = o.calls[:0]
 }
 
 // ChangeScheme asks the window to draw in another palette, and keeps it there:

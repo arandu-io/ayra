@@ -89,6 +89,33 @@ line. A row is as tall as its longest cell.
 question's, so a failure replaces them with the message and the retry button, as
 it did for a table that had never loaded; asking again clears it.
 
+## Unreleased -- dialogs and drawers cover the window
+
+`DialogProps`, `DrawerProps` and what is built on them (`PaletteProps`,
+`FormDialogProps`, the data table's sheet of filters) cover the whole window, the
+application's own bars and the strips under the system bars included, from
+whatever box they are called in. They record what they draw in `Context.Overlay`
+and the window plays it back after the screen. `shell.Run` does that, and a screen
+changes nothing: the call stays where it was, and it takes no room in its parent
+now, where a drawer used to answer the whole area.
+
+An application with its own window loop, which builds an `ayra.Context` by hand,
+sets `Overlay` and flushes it once the screen is drawn, or the dialog is drawn in
+the room it was called with, as before:
+
+```go
+overlay := &ayra.Overlay{Window: window, Safe: image.Rectangle{Max: gtx.Constraints.Max}}
+c := ayra.Context{Context: gtx, Theme: palette, Shaper: shaper, Overlay: overlay}
+screen(c)
+overlay.Flush(gtx.Ops)
+```
+
+`Window` is the whole window in the coordinates the screen is drawn in, whose origin
+is the corner of the room the screen was given.
+
+A modal dialog or drawer keeps Tab inside itself (`key.FocusFilter.Trap`), and the
+back key closes it, or the menu open over it first.
+
 ## v0.8.0 -- the keyboard is the window's, not the application's
 
 An application that opened its own window loop to keep a field above the keyboard

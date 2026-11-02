@@ -35,6 +35,12 @@ func (FocusEvent) ImplementsEvent() {}
 type FocusFilter struct {
 	// Target is the tag a previous event.Op registered.
 	Target event.Tag
+
+	// Trap makes Tab and Shift-Tab walk only the controls declared from Target
+	// onward, wrapping inside them, for as long as Target is drawn. It is what a
+	// modal panel asks for: the keyboard cannot leave it for the page the scrim
+	// covers. When several are drawn, the last one declared is the trap.
+	Trap bool
 }
 
 func (FocusFilter) ImplementsFilter() {}

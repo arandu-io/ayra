@@ -216,6 +216,7 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 		}
 	}
 
+	var keyboard keyboardWatch
 	var ops op.Ops
 	for {
 		switch e := window.Event().(type) {
@@ -244,7 +245,17 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 			}
 			gtx := app.NewContext(&ops, e)
 			paintBehindBars(gtx.Ops, e, palette.Colours.Background)
+			overlay := &ayra.Overlay{
+				Window: image.Rect(
+					-e.Metric.Dp(e.Insets.Left), -e.Metric.Dp(e.Insets.Top),
+					e.Size.X-e.Metric.Dp(e.Insets.Left), e.Size.Y-e.Metric.Dp(e.Insets.Top),
+				),
+				Safe: image.Rectangle{Max: gtx.Constraints.Max},
+				// How much of the bottom of the window is the keyboard's.
+				Keyboard: e.Metric.Dp(keyboard.observe(e.Insets.Bottom)),
+			}
 			c := ayra.Context{
+				Overlay:      overlay,
 				Context:      gtx,
 				Theme:        palette,
 				Shaper:       shaper,
@@ -268,6 +279,7 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 			c.Fill(palette.Colours.Background)
 
 			screen(c)
+			overlay.Flush(gtx.Ops)
 			e.Frame(gtx.Ops)
 		}
 	}

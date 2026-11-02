@@ -12,15 +12,17 @@ import (
 	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/op/paint"
 	"github.com/arandu-io/ayra/engine/unit"
+	"github.com/arandu-io/ayra/icons"
 	"github.com/arandu-io/ayra/theme"
 )
 
-// The words on the two steps. They are the words the pager already uses, so
-// that the two controls a screen puts under a row of things say the same thing
-// -- and so that a translation has one string to find rather than two.
+// The names of the two steps when the caller gives none, which are Kyse's. They
+// are what a screen reader says: the steps are drawn as arrows, because a word on
+// each of them in a language the application is not in -- "Previous" on a
+// Portuguese screen -- is text nobody wrote and nobody can translate.
 const (
-	previousStep = "Previous"
-	nextStep     = "Next"
+	previousStep = "Previous slide"
+	nextStep     = "Next slide"
 )
 
 // Carousel is the state half: which slide is at the front, the presses that
@@ -139,6 +141,10 @@ type CarouselProps struct {
 	Dots bool
 	// Arrows draws the two steps either side of the window.
 	Arrows bool
+	// PreviousLabel and NextLabel name the two steps for a screen reader, which
+	// is all that names them: they are drawn as arrows. Empty says "Previous
+	// slide" and "Next slide", as Kyse does.
+	PreviousLabel, NextLabel string
 	// Gap is the room between one slide and the next, and between the window
 	// and the steps. Zero takes eight points: slides with nothing between them
 	// read as one wide picture rather than as three.
@@ -221,8 +227,8 @@ func (p CarouselProps) layout(c ayra.Context, state *Carousel, slide func(c ayra
 		measure := op.Record(c.Ops)
 		inner := c
 		inner.Constraints.Min = image.Point{}
-		room = p.arrow(previousStep, back).Layout(inner, &state.previous).Size.X
-		room += p.arrow(nextStep, forward).Layout(inner, &state.next).Size.X
+		room = p.arrow(orDefault(p.PreviousLabel, previousStep), back).withIcon(innerIcon("carousel", "CaretLeft")).Layout(inner, &state.previous).Size.X
+		room += p.arrow(orDefault(p.NextLabel, nextStep), forward).withIcon(innerIcon("carousel", "CaretRight")).Layout(inner, &state.next).Size.X
 		measure.Stop()
 	}
 	steps := p.Arrows && arrowsFit(c.Constraints.Max.X, room+2*gap)
@@ -234,7 +240,7 @@ func (p CarouselProps) layout(c ayra.Context, state *Carousel, slide func(c ayra
 		row = append(row, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return p.arrow(previousStep, back).Layout(inner, &state.previous)
+			return p.arrow(orDefault(p.PreviousLabel, previousStep), back).withIcon(innerIcon("carousel", "CaretLeft")).Layout(inner, &state.previous)
 		}))
 	}
 	row = append(row, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -244,7 +250,7 @@ func (p CarouselProps) layout(c ayra.Context, state *Carousel, slide func(c ayra
 		row = append(row, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			inner := c.With(gtx)
 			inner.Constraints.Min = image.Point{}
-			return p.arrow(nextStep, forward).Layout(inner, &state.next)
+			return p.arrow(orDefault(p.NextLabel, nextStep), forward).withIcon(innerIcon("carousel", "CaretRight")).Layout(inner, &state.next)
 		}))
 	}
 
@@ -480,6 +486,12 @@ func (p CarouselProps) dotInk(t theme.Theme, page, first int) color.NRGBA {
 // disabled step says there is no more, in the place the step was.
 func (p CarouselProps) arrow(label string, available bool) ButtonProps {
 	return ButtonProps{Label: label, Variant: Outline, Size: Small, Disabled: p.Disabled || !available}
+}
+
+// withIcon draws the step as an arrow, with the label kept as its name.
+func (b ButtonProps) withIcon(icon icons.Icon) ButtonProps {
+	b.Icon, b.IconOnly, b.Size = icon, true, Icon
+	return b
 }
 
 // view is how many slides are on screen at once.

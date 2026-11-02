@@ -237,9 +237,6 @@ func layoutToggle(c ayra.Context, state *Toggle, disabled bool, label string, ma
 	return state.click.Layout(c.Context, func(gtx layout.Context) layout.Dimensions { return row(c.With(gtx)) })
 }
 
-// touchTarget is the least height, in dp, of a control a finger has to hit.
-const touchTarget = 44
-
 // drawBox draws a checkbox: a square that fills and carries a tick when set, and
 // a dash when it is partly so.
 func drawBox(c ayra.Context, state *Toggle, disabled, mixed bool) ayra.Dimensions {

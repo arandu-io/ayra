@@ -5,6 +5,7 @@ import (
 
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
+	"github.com/arandu-io/ayra/engine/op"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 	engine "github.com/arandu-io/ayra/engine/widget"
@@ -60,34 +61,84 @@ func (p BreadcrumbProps) layout(c ayra.Context, state *Crumbs) ayra.Dimensions {
 		state.clicks = append(state.clicks, engine.Clickable{})
 	}
 
-	children := make([]layout.FlexChild, 0, len(p.Steps)*2)
+	// Each step is recorded with the caret before it, and the row is broken
+	// where the next does not fit: a trail longer than a phone was cut at its
+	// edge, and the page the person is on was the part cut off. Kyse's wraps.
+	type piece struct {
+		draw op.CallOp
+		size image.Point
+	}
+	pieces := make([]piece, 0, len(p.Steps))
+	least := c.Dp(touchTarget)
 	for index, step := range p.Steps {
 		index, step := index, step
-		if index > 0 {
-			children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				inner := c.With(gtx)
-				inner.Constraints.Min = image.Point{}
+		recording := op.Record(c.Ops)
+		inner := c
+		inner.Constraints.Min = image.Point{}
+		dims := layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(inner.Context,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if index == 0 {
+					return layout.Dimensions{}
+				}
 				return layout.Inset{Left: 6, Right: 6}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return drawInner(c.With(gtx), innerIcon("breadcrumb", "CaretRight"), innerPixels(c, innerSideSmall), c.Theme.Colours.MutedForeground, 0)
 				})
-			}))
-		}
-
-		last := index == len(p.Steps)-1
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			inner := c.With(gtx)
-			inner.Constraints.Min = image.Point{}
-
-			if last {
-				return drawText(inner, step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.Foreground, 1, text.Start, semibold())
-			}
-			return state.clicks[index].Layout(inner.Context, func(gtx layout.Context) layout.Dimensions {
-				return drawText(c.With(gtx), step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 1, text.Start, plain())
-			})
-		}))
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Point{}
+				in := c.With(gtx)
+				if index == len(p.Steps)-1 {
+					return drawText(in, step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.Foreground, 0, text.Start, semibold())
+				}
+				// The press area is as high as a finger, and the words are in
+				// the middle of it.
+				return state.clicks[index].Layout(in.Context, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.Y = least
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min = image.Point{}
+							return drawText(c.With(gtx), step, unit.Sp(c.Theme.Type.Small), c.Theme.Colours.MutedForeground, 0, text.Start, plain())
+						}),
+					)
+				})
+			}),
+		)
+		pieces = append(pieces, piece{draw: recording.Stop(), size: dims.Size})
 	}
 
-	return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(c.Context, children...)
+	// The pieces are set into lines first, so that each can be centred in the
+	// height of its line: a step as high as a finger beside one that is not.
+	type placed struct {
+		piece
+		x int
+	}
+	var lines [][]placed
+	var heights []int
+	var x, lineHeight, widest int
+	room := c.Constraints.Max.X
+	line := []placed(nil)
+	for _, piece := range pieces {
+		if x > 0 && x+piece.size.X > room {
+			lines, heights = append(lines, line), append(heights, lineHeight)
+			line, x, lineHeight = nil, 0, 0
+		}
+		line = append(line, placed{piece: piece, x: x})
+		x += piece.size.X
+		widest = max(widest, x)
+		lineHeight = max(lineHeight, piece.size.Y)
+	}
+	lines, heights = append(lines, line), append(heights, lineHeight)
+
+	y := 0
+	for index, line := range lines {
+		for _, item := range line {
+			at := op.Offset(image.Pt(item.x, y+(heights[index]-item.size.Y)/2)).Push(c.Ops)
+			item.draw.Add(c.Ops)
+			at.Pop()
+		}
+		y += heights[index]
+	}
+	return ayra.Dimensions{Size: image.Pt(widest, y)}
 }
 
 // LinkProps is text that goes somewhere.

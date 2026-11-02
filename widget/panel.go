@@ -75,21 +75,54 @@ func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 		return ayra.Dimensions{}
 	}
 
+	// Over the window, as the dialog is: the drawer comes in from the edge of the
+	// window and not from the edge of the box that opened it.
+	dims := inWindow(c, func(c ayra.Context, window image.Rectangle) ayra.Dimensions {
+		return p.place(c, state, content, window)
+	})
+	return dims
+}
+
+// place draws the scrim over the window and the panel against its edge.
+//
+// The panel runs to the edge of the window, under the system bars, and its
+// content is held inside them: what has to be read is not drawn behind the
+// status bar or the keyboard.
+func (p DrawerProps) place(c ayra.Context, state *Dialog, content ayra.Widget, window image.Rectangle) ayra.Dimensions {
 	area := c.Constraints.Max
-	state.overlay(c, area, p.Modal, p.Dismissible)
+	state.overlay(c, window, p.Modal, p.Modal || p.Dismissible)
 
 	size := p.Size
 	if size == 0 {
 		size = 380
 	}
 
-	panel := p.bounds(c, area, size)
+	panel := p.bounds(c, area, window, size)
 	inner := c
 	inner.Constraints = layout.Exact(panel.Size())
 
+	// What the system covers, on each edge the panel touches.
+	var covered struct{ left, top, right, bottom int }
+	if panel.Min.X <= window.Min.X {
+		covered.left = max(0, -window.Min.X)
+	}
+	if panel.Min.Y <= window.Min.Y {
+		covered.top = max(0, -window.Min.Y)
+	}
+	if panel.Max.X >= window.Max.X {
+		covered.right = max(0, window.Max.X-area.X)
+	}
+	if panel.Max.Y >= window.Max.Y {
+		covered.bottom = max(0, window.Max.Y-area.Y)
+	}
+	dp := func(pixels int) unit.Dp { return unit.Dp(float32(pixels) / c.Metric.PxPerDp) }
+
 	measure := op.Record(c.Ops)
-	dims := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, 0, func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(20).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+	surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, 0, func(c ayra.Context) ayra.Dimensions {
+		return layout.Inset{
+			Left: 20 + dp(covered.left), Top: 20 + dp(covered.top),
+			Right: 20 + dp(covered.right), Bottom: 20 + dp(covered.bottom),
+		}.Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
 			return content(c.With(gtx))
 		})
 	})
@@ -103,23 +136,27 @@ func (p DrawerProps) layout(c ayra.Context, state *Dialog, content ayra.Widget) 
 	clipped.Pop()
 	offset.Pop()
 
-	_ = dims
+	// Read after the content, as the dialog does, so what is open over the
+	// drawer answers the back key first.
+	state.dismiss(c, p.Modal, p.Dismissible)
 	return ayra.Dimensions{Size: area}
 }
 
-// bounds answers where the panel sits against its edge.
-func (p DrawerProps) bounds(c ayra.Context, area image.Point, size unit.Dp) image.Rectangle {
+// bounds answers where the panel sits against its edge of the window, in the
+// coordinates of the room the screen was given. The bottom of a sheet is the
+// bottom of that room, which is above the keyboard when it is up, and the panel
+// is drawn on down to the bottom of the window.
+func (p DrawerProps) bounds(c ayra.Context, area image.Point, window image.Rectangle, size unit.Dp) image.Rectangle {
 	extent := c.Dp(size)
 
 	switch p.Side {
 	case Left:
-		return image.Rect(0, 0, min(extent, area.X), area.Y)
+		return image.Rect(window.Min.X, window.Min.Y, window.Min.X+min(extent, window.Dx()), window.Max.Y)
 	case Bottom:
-		top := max(area.Y-extent, 0)
-		return image.Rect(0, top, area.X, area.Y)
+		top := max(area.Y-extent, window.Min.Y)
+		return image.Rect(window.Min.X, top, window.Max.X, window.Max.Y)
 	}
-	left := max(area.X-extent, 0)
-	return image.Rect(left, 0, area.X, area.Y)
+	return image.Rect(window.Max.X-min(extent, window.Dx()), window.Min.Y, window.Max.X, window.Max.Y)
 }
 
 // SplitProps is a button with a second control beside it for the other things
