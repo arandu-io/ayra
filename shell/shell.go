@@ -208,6 +208,7 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 		}
 	}
 
+	var keyboard keyboardWatch
 	var ops op.Ops
 	for {
 		switch e := window.Event().(type) {
@@ -242,6 +243,8 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 					e.Size.X-e.Metric.Dp(e.Insets.Left), e.Size.Y-e.Metric.Dp(e.Insets.Top),
 				),
 				Safe: image.Rectangle{Max: gtx.Constraints.Max},
+				// How much of the bottom of the window is the keyboard's.
+				Keyboard: e.Metric.Dp(keyboard.observe(e.Insets.Bottom)),
 			}
 			c := ayra.Context{
 				Overlay:    overlay,

@@ -79,6 +79,12 @@ type Context struct {
 	Overlay *Overlay
 }
 
+// KeyboardOpen reports whether the software keyboard is up. A bar across the foot
+// of the screen -- the tabs of an application -- is not drawn while it is: it
+// stays over the keyboard and takes the room the field being typed into needs,
+// as no Android application's does. It is false outside a window.
+func (c Context) KeyboardOpen() bool { return c.Overlay != nil && c.Overlay.Keyboard > 0 }
+
 // Overlay is what is drawn over the window once the screen is done.
 //
 // A control cannot cover the window from inside a box: it is laid out in the
@@ -95,6 +101,9 @@ type Overlay struct {
 	// Safe is the room the screen was given: the window less the system bars
 	// and the keyboard. What has to be reached and read is laid out in it.
 	Safe image.Rectangle
+	// Keyboard is the height of the software keyboard in pixels, zero while it
+	// is down. It is part of what Safe leaves out at the bottom.
+	Keyboard int
 
 	calls []op.CallOp
 }
