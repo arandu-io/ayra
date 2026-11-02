@@ -116,3 +116,32 @@ func TestFocusOrderFollowsDeclarationOrder(t *testing.T) {
 		assertFocus(t, r, want)
 	}
 }
+
+// TestAFocusedControlThatIsLastSurvivesAFrameWithFewerControls is the list of
+// suggestions closing under the field that opened it. The focused control was the
+// fourth of four; the next frame drew one, and asking where the focused control is
+// read the index it had the frame before, past the end of the list.
+func TestAFocusedControlThatIsLastSurvivesAFrameWithFewerControls(t *testing.T) {
+	r := new(Router)
+	tags := make([]*int, 4)
+	for i := range tags {
+		tags[i] = new(int)
+		events(r, -1, key.FocusFilter{Target: tags[i]})
+	}
+	draw := func(n int) {
+		ops := new(op.Ops)
+		for _, tag := range tags[len(tags)-n:] {
+			area := clip.Rect(image.Rect(0, 0, 10, 10)).Push(ops)
+			event.Op(ops, tag)
+			area.Pop()
+			for _, other := range tags {
+				events(r, -1, key.FocusFilter{Target: other})
+			}
+		}
+		r.Frame(ops)
+	}
+	draw(4)
+	r.Source().Execute(key.FocusCmd{Tag: tags[3]})
+	draw(4)
+	draw(1)
+}

@@ -93,6 +93,13 @@ type keyHandler struct {
 	orderPlusOne int
 	dirOrder     int
 	trans        f32.Affine2D
+	// bounds and area are where the handler was registered this frame, kept with
+	// it rather than found through dirOrder: dirOrder is assigned when the frame
+	// closes, and a question asked while it is being read -- where the focused
+	// control is -- was answered with an index from the frame before, which is out
+	// of range when the list of controls got shorter.
+	bounds image.Rectangle
+	area   int
 }
 
 // keyFilter is the union of what every handler in the frame listens for.
@@ -347,13 +354,13 @@ func (q *keyQueue) MoveFocus(handlers map[event.Tag]*handler, state keyState, di
 
 // BoundsFor answers where the handler was drawn this frame.
 func (q *keyQueue) BoundsFor(k *keyHandler) image.Rectangle {
-	return q.dirOrder[k.dirOrder].bounds
+	return k.bounds
 }
 
 // AreaFor answers the clip area the handler was registered under, which is what
 // a scroll or a synthetic press has to be delivered through.
 func (q *keyQueue) AreaFor(k *keyHandler) int {
-	return q.dirOrder[k.dirOrder].area
+	return k.area
 }
 
 // Matches reports whether any filter in the set wants this key event.
@@ -460,6 +467,7 @@ func (q *keyQueue) inputOp(tag event.Tag, state *keyHandler, t f32.Affine2D, are
 		state.orderPlusOne = len(q.order) + 1
 		q.order = append(q.order, tag)
 		q.dirOrder = append(q.dirOrder, dirFocusEntry{tag: tag, area: area, bounds: bounds})
+		state.bounds, state.area = bounds, area
 	}
 	state.trans = t
 }

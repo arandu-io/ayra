@@ -7,7 +7,6 @@ import (
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
-	"github.com/arandu-io/ayra/engine/op/clip"
 	"github.com/arandu-io/ayra/engine/text"
 	"github.com/arandu-io/ayra/engine/unit"
 )
@@ -28,6 +27,9 @@ type Select struct {
 	// scroll is where the list of options is, when there are more of them than
 	// fit.
 	scroll layout.List
+	// floating places the list beside the control: over it when there is no room
+	// under it, and inside the window.
+	floating
 }
 
 // Selected is the index chosen, and -1 when nothing has been.
@@ -98,6 +100,7 @@ func (p SelectProps) layout(c ayra.Context, state *Select) ayra.Dimensions {
 
 	if !p.Disabled {
 		state.open.Changed(c)
+		state.dismiss(c, &state.open, true, true)
 	}
 	for index := range p.Options {
 		if state.options[index].Clicked(c) {
@@ -107,6 +110,7 @@ func (p SelectProps) layout(c ayra.Context, state *Select) ayra.Dimensions {
 	}
 
 	dims := p.closed(c, state)
+	state.declareAnchor(c, dims)
 	if state.open.Showing() && !p.Disabled {
 		p.list(c, state, dims)
 	}
@@ -188,41 +192,44 @@ func (p SelectProps) label(state *Select) (string, bool) {
 // nobody can reach, so it scrolls inside this height instead.
 const listRoom = 296
 
-// list draws the options under the control.
+// list draws the options beside the control.
 func (p SelectProps) list(c ayra.Context, state *Select, closed ayra.Dimensions) {
 	state.scroll.Axis = layout.Vertical
 
-	panel := op.Record(c.Ops)
 	inner := c
 	inner.Constraints.Min.X = closed.Size.X
 	inner.Constraints.Max.X = closed.Size.X
+	if c.Overlay != nil {
+		// The room the parent left under the control is not the list's: it floats
+		// over what follows.
+		inner.Constraints.Max.Y = c.Overlay.Safe.Dy()
+	}
 
-	size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
-		return layout.UniformInset(4).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min = image.Point{}
-			gtx.Constraints.Max.Y = min(gtx.Constraints.Max.Y, c.Dp(unit.Dp(listRoom)))
-			return state.scroll.Layout(gtx, len(p.Options), func(gtx layout.Context, index int) layout.Dimensions {
-				inner := c.With(gtx)
-				return ItemProps{Title: p.Options[index], Pressable: true, Selected: state.chosen && index == state.selected}.
-					Layout(inner, &state.options[index], nil)
+	build := func(maxHeight int) (op.CallOp, image.Point) {
+		// At most eight rows, and less when the window has less room.
+		most := c.Dp(unit.Dp(listRoom))
+		if maxHeight > 0 {
+			most = min(most, maxHeight)
+		}
+		recording := op.Record(c.Ops)
+		size := surface(inner, inner.Theme.Colours.Popover, inner.Theme.Colours.Border, controlRadius(inner), func(c ayra.Context) ayra.Dimensions {
+			return layout.UniformInset(4).Layout(c.Context, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min = image.Point{}
+				gtx.Constraints.Max.Y = min(gtx.Constraints.Max.Y, most)
+				return state.scroll.Layout(gtx, len(p.Options), func(gtx layout.Context, index int) layout.Dimensions {
+					inner := c.With(gtx)
+					return ItemProps{Title: p.Options[index], Pressable: true, Selected: state.chosen && index == state.selected}.
+						Layout(inner, &state.options[index], nil)
+				})
 			})
-		})
-	}).Size
-	drawn := panel.Stop()
+		}).Size
+		return recording.Stop(), size
+	}
 
-	// The list is put off to the end of the frame. Drawn where the control is, it
-	// went under every control after it -- the next field of the form painted over
-	// the options, and took the presses meant for them -- so a select in the middle
-	// of a form offered a list nobody could choose from.
-	shown := op.Record(c.Ops)
-	clipped := clip.Rect(image.Rectangle{Max: size}).Push(c.Ops)
-	drawn.Add(c.Ops)
-	clipped.Pop()
-	over := shown.Stop()
-
-	offset := op.Offset(image.Pt(0, closed.Size.Y+c.Dp(unit.Dp(4)))).Push(c.Ops)
-	op.Defer(c.Ops, over)
-	offset.Pop()
+	// Put off to the end of the frame by float: drawn where the control is, the
+	// list went under every control after it, and a select in the middle of a
+	// form offered a list nobody could choose from.
+	state.float(c, closed.Size, placement{gap: c.Dp(unit.Dp(4)), barrier: true}, build)
 }
 
 // Stepper is the state half of a number field: the value, and the two steps.
