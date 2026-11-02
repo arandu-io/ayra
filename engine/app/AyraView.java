@@ -197,7 +197,20 @@ public final class AyraView extends SurfaceView implements Choreographer.FrameCa
 			return;
 		}
 
-		Window window = ((Activity) this.getContext()).getWindow();
+		final Activity activity = (Activity) this.getContext();
+		Window window = activity.getWindow();
+
+		// From Android 15 the bars are transparent and setStatusBarColor and
+		// setNavigationBarColor say nothing: what shows through is the window's own
+		// background, which stayed the theme's white whatever scheme the application
+		// was drawn in, so the strips were white around a dark screen. The window is
+		// given the colour too, on the thread that owns it.
+		final int ground = color;
+		activity.runOnUiThread(new Runnable() {
+			@Override public void run() {
+				activity.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(ground));
+			}
+		});
 
 		int insetsMask;
 		int viewMask;

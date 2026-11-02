@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixed (since v0.9.0)
+
+- `widget.BreadcrumbProps`: a step has at least 48 points to be laid out in, however
+  narrow the column. A step that does not fit is cut with an ellipsis, the page the
+  person is on included, and no step is broken a letter to a line.
+- `engine/app` (Android): the window's own background takes the colour of the bars each
+  time it is set. From Android 15 the bars are transparent and `setStatusBarColor` says
+  nothing, so the strips under them showed the window's white around a dark screen; with
+  the colour set on the window they follow the scheme, and the bars' icons were already
+  chosen from it. The catalogue tells the window its scheme with `Context.ChangeScheme`
+  when the segmented control changes it, which is what drives the bars: an application
+  that only replaces `Context.Theme` keeps the bars as the scheme it opened in.
+- `engine/app` (iOS): `Configure` applies the status colour: the controller's view takes
+  it and `preferredStatusBarStyle` is dark content over a light ground and light content
+  over a dark one, each time it changes.
+
 ### Added
 
 - `shell.SystemReduceMotion` reports whether the person asked the system for less

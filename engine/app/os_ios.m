@@ -52,6 +52,15 @@ CGFloat _keyboardHeight;
 											   object: nil];
 }
 
+- (UIStatusBarStyle)preferredStatusBarStyle {
+#if !TARGET_OS_TV
+	if (@available(iOS 13.0, *)) {
+		return self.barsLight ? UIStatusBarStyleDarkContent : UIStatusBarStyleLightContent;
+	}
+#endif
+	return UIStatusBarStyleDefault;
+}
+
 - (void)applicationWillEnterForeground:(UIApplication *)application {
 	AyraView *view = (AyraView *)self.view.subviews[0];
 	if (view != nil) {

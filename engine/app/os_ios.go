@@ -6,6 +6,7 @@ package app
 #include <CoreGraphics/CoreGraphics.h>
 #include <UIKit/UIKit.h>
 #include <stdint.h>
+#include "framework_ios.h"
 
 __attribute__ ((visibility ("hidden"))) int gio_applicationMain(int argc, char *argv[]);
 __attribute__ ((visibility ("hidden"))) void gio_viewSetHandle(CFTypeRef viewRef, uintptr_t handle);
@@ -37,6 +38,20 @@ static CFTypeRef readClipboard(void) {
 	}
 #else
 	return nil;
+#endif
+}
+
+// setBars gives the screen's ground its colour and says whether the status bar
+// is drawn over a light one, which is what picks dark or light content for it.
+// The controller's view is what shows in the strips of the safe area.
+static void setBars(CFTypeRef controllerRef, CGFloat r, CGFloat g, CGFloat b, CGFloat a, int light) {
+#if !TARGET_OS_TV
+	AyraViewController *vc = (__bridge AyraViewController *)controllerRef;
+	dispatch_async(dispatch_get_main_queue(), ^{
+		vc.barsLight = light != 0;
+		vc.view.backgroundColor = [UIColor colorWithRed:r green:g blue:b alpha:a];
+		[vc setNeedsStatusBarAppearanceUpdate];
+	});
 #endif
 }
 
@@ -122,6 +137,7 @@ type UIKitViewEvent struct {
 
 type window struct {
 	view        C.CFTypeRef
+	controller  C.CFTypeRef
 	w           *callbacks
 	displayLink *displayLink
 	loop        *eventLoop
@@ -144,8 +160,9 @@ func init() {
 func onCreate(view, controller C.CFTypeRef) {
 	wopts := <-mainWindow.out
 	w := &window{
-		view: view,
-		w:    wopts.window,
+		view:       view,
+		controller: controller,
+		w:          wopts.window,
 	}
 	w.loop = newEventLoop(w.w, w.wakeup)
 	w.w.SetDriver(w)
@@ -325,7 +342,21 @@ func (w *window) WriteClipboard(mime string, s []byte) {
 	C.writeClipboard(chars, C.NSUInteger(len(u16)))
 }
 
-func (w *window) Configure([]Option) {
+func (w *window) Configure(options []Option) {
+	cnf := w.config
+	cnf.apply(unit.Metric{}, options)
+	// The status bar follows the colour the application asked for: dark content
+	// over a light ground and light content over a dark one, each time it changes.
+	if cnf.StatusColor != w.config.StatusColor && w.controller != 0 {
+		c := cnf.StatusColor
+		light := 0.299*float32(c.R)+0.587*float32(c.G)+0.114*float32(c.B) > 127.5
+		lit := C.int(0)
+		if light {
+			lit = 1
+		}
+		C.setBars(w.controller, C.CGFloat(c.R)/255, C.CGFloat(c.G)/255, C.CGFloat(c.B)/255, C.CGFloat(c.A)/255, lit)
+	}
+	w.config = cnf
 	// Decorations are never disabled.
 	w.config.Decorated = true
 	w.ProcessEvent(ConfigEvent{Config: w.config})

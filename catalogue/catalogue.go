@@ -72,6 +72,12 @@ func (cat *Catalogue) Layout(c ayra.Context) ayra.Dimensions {
 	// only changed the controls would leave a dark page of light text on the
 	// ground the window started with.
 	scheme := cat.chosen()
+	if c.Theme.Scheme != scheme {
+		// Told to the window, which keeps the system bars and the ground behind them
+		// in the scheme being drawn: a catalogue that only replaced the theme left
+		// the strips under the bars as the scheme it opened in.
+		c.ChangeScheme(scheme)
+	}
 	c.Theme = theme.New(scheme)
 	c.Fill(c.Theme.Colours.Background)
 
