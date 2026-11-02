@@ -77,8 +77,16 @@ func (p AlertProps) Layout(c ayra.Context) ayra.Dimensions {
 		Padding:    theme.Uniform(12),
 	}, p.ComponentProps)
 	root.Padding.Right += p.endRoom
+	// A note's title is in the card's own foreground, as Kyse's is
+	// (text-card-foreground), and its message in the quieter one: the two were
+	// one grey, and the title held against the message by its weight alone. A
+	// failure is the destructive colour throughout.
+	titleInk := ink
+	if p.Severity != Failure {
+		titleInk = c.Theme.Colours.CardForeground
+	}
 	title := c.Theme.Resolve("alert", "title", variant, theme.Style{
-		Foreground: theme.Colour(ink),
+		Foreground: theme.Colour(titleInk),
 		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Body)},
 	}, p.ComponentProps)
 	message := c.Theme.Resolve("alert", "message", variant, theme.Style{

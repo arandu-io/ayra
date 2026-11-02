@@ -44,3 +44,41 @@ func TestAFailureAlertIsReadable(t *testing.T) {
 		})
 	}
 }
+
+// TestANoteTitleIsInTheCardForeground compares the colour of a note's title with
+// its message. Both were the muted foreground; Kyse's title is the card's.
+func TestANoteTitleIsInTheCardForeground(t *testing.T) {
+	for _, scheme := range []theme.Scheme{theme.Light, theme.Dark} {
+		t.Run(scheme.String(), func(t *testing.T) {
+			th := theme.New(scheme)
+			p := newPanel()
+			p.size = image.Pt(300, 90)
+			p.under(th, time.Time{}, func(c ayra.Context) ayra.Dimensions {
+				c.Fill(th.Colours.Background)
+				return widget.AlertProps{Title: "MMMMMMMM", Body: "MMMMMMMM"}.Layout(c)
+			})
+			picture := p.raster(t)
+
+			// The strongest ink in each line, which is the darkest pixel on a light
+			// band and the brightest on a dark one. The title is the first line,
+			// the message the second.
+			strongest := func(y0, y1 int) int {
+				best := -1
+				for y := y0; y < y1; y++ {
+					for x := 0; x < 120; x++ {
+						v := int(picture.RGBAAt(x, y).G)
+						if scheme == theme.Light {
+							v = 255 - v
+						}
+						best = max(best, v)
+					}
+				}
+				return best
+			}
+			title, message := strongest(12, 30), strongest(32, 52)
+			if title <= message {
+				t.Errorf("the title's ink (%d) is not stronger than the message's (%d)", title, message)
+			}
+		})
+	}
+}
