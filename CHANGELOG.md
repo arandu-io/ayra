@@ -2,6 +2,10 @@
 
 ## [v0.9.2](https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2) - 2026-11-02
 
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2
+
+## [v0.9.2](https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2) - 2026-11-02
+
 ### Fixed
 
 - `widget.DataTableProps`: with `Mode` at `ModeAuto` the cards are chosen by the width
