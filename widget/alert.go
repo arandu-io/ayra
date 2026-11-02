@@ -77,8 +77,16 @@ func (p AlertProps) Layout(c ayra.Context) ayra.Dimensions {
 		Padding:    theme.Uniform(12),
 	}, p.ComponentProps)
 	root.Padding.Right += p.endRoom
+	// A note's title is in the card's own foreground, as Kyse's is
+	// (text-card-foreground), and its message in the quieter one: the two were
+	// one grey, and the title held against the message by its weight alone. A
+	// failure is the destructive colour throughout.
+	titleInk := ink
+	if p.Severity != Failure {
+		titleInk = c.Theme.Colours.CardForeground
+	}
 	title := c.Theme.Resolve("alert", "title", variant, theme.Style{
-		Foreground: theme.Colour(ink),
+		Foreground: theme.Colour(titleInk),
 		Font:       theme.Font{Size: theme.Pt(c.Theme.Type.Body)},
 	}, p.ComponentProps)
 	message := c.Theme.Resolve("alert", "message", variant, theme.Style{
@@ -107,13 +115,16 @@ func (p AlertProps) Layout(c ayra.Context) ayra.Dimensions {
 
 // colours answers the fill, the ink and the border for this severity.
 //
-// The fill is the severity's own colour at low opacity and the border is the
-// same colour at full, which is one decision rather than eight: a palette that
-// named a background for every severity would need one per scheme, and the
-// pairs drift.
+// The border and the ink are the severity's own colour, which is one decision
+// rather than eight: a palette that named a colour for every severity would
+// need one per scheme, and the pairs drift.
 func (p AlertProps) colours(t theme.Theme) (fill, ink, border color.NRGBA) {
 	if p.Severity == Failure {
-		return wash(t.Colours.Destructive), t.Colours.Destructive, t.Colours.Destructive
+		// On the card, as Kyse draws it (bg-card, text-destructive). A tint of
+		// the red under red text left the small message at 4.0:1 in the light
+		// scheme and 4.4:1 in the dark, short of the 4.5:1 a line that size
+		// needs; the card gives 4.8:1 and 6.5:1.
+		return t.Colours.Card, t.Colours.Destructive, t.Colours.Destructive
 	}
 	return t.Colours.Muted, t.Colours.MutedForeground, t.Colours.Border
 }
