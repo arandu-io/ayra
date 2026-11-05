@@ -65,9 +65,12 @@ func newSoftKeyboard(getenv func(string) string, run func(string), delay time.Du
 	return k
 }
 
-// set says whether a field wants the keyboard. A request that repeats the state
-// the keyboard is in costs nothing; one that changes it waits for the delay, and
-// a request that undoes it within the delay cancels both.
+// set says whether a field wants the keyboard. Every request waits for the
+// delay, and the last one made within it is the one that counts, so a hide
+// followed by a show runs only the show. A show is always run, also when the
+// keyboard is already up as far as the window knows: a tap on a field asks again,
+// and the keyboard may have been closed by its own key since; showing a keyboard
+// that is up changes nothing. A hide is run only when a show ran before it.
 func (k *softKeyboard) set(show bool) {
 	if k.nothing {
 		return
@@ -79,7 +82,7 @@ func (k *softKeyboard) set(show bool) {
 		k.timer.Stop()
 		k.timer = nil
 	}
-	if show == k.shown {
+	if !show && !k.shown {
 		return
 	}
 	k.timer = time.AfterFunc(k.delay, k.fire)
@@ -90,7 +93,7 @@ func (k *softKeyboard) fire() {
 	k.mu.Lock()
 	k.timer = nil
 	show := k.wanted
-	if show == k.shown {
+	if !show && !k.shown {
 		k.mu.Unlock()
 		return
 	}

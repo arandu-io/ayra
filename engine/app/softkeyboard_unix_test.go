@@ -88,19 +88,26 @@ func TestOneCommandAloneIsEnough(t *testing.T) {
 	}
 }
 
-func TestARepeatedStateRunsOnce(t *testing.T) {
+func TestRequestsWithinTheDelayRunOnce(t *testing.T) {
 	r := newRecorder()
-	k := newSoftKeyboard(env("kb show", "kb hide"), r.run, testDelay)
+	k := newSoftKeyboard(env("kb show", "kb hide"), r.run, 40*time.Millisecond)
 	for i := 0; i < 5; i++ {
 		k.set(true)
 	}
 	expect(t, r, "kb show")
-	k.set(true)
-	k.set(true)
-	time.Sleep(10 * testDelay)
+	time.Sleep(200 * time.Millisecond)
 	if got := r.commands(); len(got) != 1 {
-		t.Fatalf("ran %v, a keyboard that is already up is not shown again", got)
+		t.Fatalf("ran %v", got)
 	}
+}
+
+func TestATapOnAFieldShowsAgainAfterTheKeyboardWasClosedByItsOwnKey(t *testing.T) {
+	r := newRecorder()
+	k := newSoftKeyboard(env("kb show", "kb hide"), r.run, testDelay)
+	k.set(true)
+	expect(t, r, "kb show")
+	k.set(true) // the field is tapped again: the window cannot know the keyboard was closed
+	expect(t, r, "kb show")
 }
 
 func TestHidingWhileHiddenRunsNothing(t *testing.T) {
@@ -122,8 +129,10 @@ func TestAHideFollowedByAShowInTheDelayLeavesTheKeyboardAlone(t *testing.T) {
 	k.set(false)
 	k.set(true)
 	time.Sleep(400 * time.Millisecond)
-	if got := r.commands(); len(got) != 1 {
-		t.Fatalf("ran %v: the keyboard flickered", got)
+	for _, c := range r.commands() {
+		if c == "kb hide" {
+			t.Fatalf("ran %v: the keyboard flickered", r.commands())
+		}
 	}
 }
 
