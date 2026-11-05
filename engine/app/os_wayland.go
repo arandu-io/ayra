@@ -1800,7 +1800,7 @@ func (w *window) surface() (*C.struct_wl_surface, int, int) {
 	return w.surf, sz.X, sz.Y
 }
 
-func (w *window) ShowTextInput(show bool) {}
+func (w *window) ShowTextInput(show bool) { systemSoftKeyboard.set(show) }
 
 func (w *window) SetInputHint(_ key.InputHint) {}
 
