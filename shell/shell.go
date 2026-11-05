@@ -35,6 +35,17 @@ type Config struct {
 	// size that fits a form on a laptop.
 	Width, Height int
 
+	// Fullscreen opens the window in fullscreen mode: no title bar, covering the
+	// whole screen. It is for an application that is the only thing on a
+	// screen -- a kiosk, a car kit, a point of sale -- and it is a request, as it
+	// always is: on Wayland the compositor decides (xdg_toplevel fullscreen), on
+	// X11 the window manager does, and with no window manager at all the window
+	// is moved and sized to the screen by the window itself. Width and Height
+	// still say the size it takes when the person leaves fullscreen, where the
+	// platform allows it. It does nothing on Android, iOS and in the browser,
+	// where the application already fills what it is given.
+	Fullscreen bool
+
 	// Scheme is the palette to open with. With Mode [theme.System] it is the one
 	// the window keeps until the system says which it is in, and the one it
 	// stays in on a platform that cannot say.
@@ -177,11 +188,22 @@ func (c Config) withDefaults() Config {
 // and the platform's failure when it could never be shown.
 func draw(cfg Config, shaper *text.Shaper, screen Screen) error {
 	var window app.Window
-	window.Option(
-		app.Title(cfg.Title),
-		app.Size(unit.Dp(cfg.Width), unit.Dp(cfg.Height)),
-	)
+	window.Option(cfg.windowOptions()...)
 	return loop(&window, cfg, shaper, screen)
+}
+
+// windowOptions are what the window opens with. The size comes first because
+// [app.Size] puts the window in the windowed mode, and the mode asked for
+// afterwards is the one that stays.
+func (c Config) windowOptions() []app.Option {
+	opts := []app.Option{
+		app.Title(c.Title),
+		app.Size(unit.Dp(c.Width), unit.Dp(c.Height)),
+	}
+	if c.Fullscreen {
+		opts = append(opts, app.Fullscreen.Option())
+	}
+	return opts
 }
 
 // host is the window as the frame loop sees it. It is [app.Window], and it is an

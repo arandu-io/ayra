@@ -176,6 +176,13 @@ func (w *x11Window) Configure(options []Option) {
 		default:
 			w.config.Mode = Fullscreen
 			w.sendWMStateEvent(_NET_WM_STATE_ADD, w.atoms.wmStateFullscreen, 0)
+			if !w.hasWindowManager() {
+				// Nobody is there to read the request above, as on a kiosk
+				// that runs a bare X server with this window as its only
+				// client: the window covers the screen by itself.
+				screen := C.XDefaultScreen(w.x)
+				C.XMoveResizeWindow(w.x, w.xw, 0, 0, C.uint(C.XDisplayWidth(w.x, screen)), C.uint(C.XDisplayHeight(w.x, screen)))
+			}
 		}
 	case Minimized:
 		switch prev.Mode {
@@ -234,6 +241,35 @@ func (w *x11Window) Configure(options []Option) {
 		w.config.Decorated = cnf.Decorated
 	}
 	w.ProcessEvent(ConfigEvent{Config: w.config})
+}
+
+// hasWindowManager reports whether a window manager is running, which is what
+// the EWMH says by setting _NET_SUPPORTING_WM_CHECK on the root window. An
+// unanswerable question is a yes: the window manager is then trusted with the
+// request, as before.
+func (w *x11Window) hasWindowManager() bool {
+	name := C.CString("_NET_SUPPORTING_WM_CHECK")
+	defer C.free(unsafe.Pointer(name))
+	atom := C.XInternAtom(w.x, name, C.True)
+	if atom == 0 {
+		// No client ever interned the name: no window manager on this server.
+		return false
+	}
+	var (
+		kind      C.Atom
+		format    C.int
+		items, up C.ulong
+		data      *C.uchar
+	)
+	status := C.XGetWindowProperty(w.x, C.XDefaultRootWindow(w.x), atom, 0, 1, C.False,
+		C.AnyPropertyType, &kind, &format, &items, &up, &data)
+	if data != nil {
+		C.XFree(unsafe.Pointer(data))
+	}
+	if status != C.Success {
+		return true
+	}
+	return items > 0
 }
 
 func (w *x11Window) setTitle(prev, cnf Config) {
