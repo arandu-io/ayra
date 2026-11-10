@@ -2,6 +2,10 @@
 
 ## [v0.9.3](https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3) - 2026-11-10
 
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3
+
+## [v0.9.3](https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3) - 2026-11-10
+
 ### Added
 
 - `engine/app` (Linux, X11 and Wayland): a kiosk shows and hides its own on-screen
