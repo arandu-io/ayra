@@ -265,31 +265,55 @@ const (
 // Layout draws the keyboard and returns the room it took: the width it was
 // given, and as tall as the keys need.
 func (p KeyboardProps) Layout(c ayra.Context, state *Keyboard) ayra.Dimensions {
-	t := c.Theme
-	variant := p.VariantName("default")
-
-	root := t.Resolve("keyboard", "root", variant, theme.Style{
-		Background:  theme.Colour(t.Colours.Muted),
-		Border:      theme.Colour(t.Colours.Border),
-		BorderWidth: theme.Pt(1),
-		Radius:      theme.Pt(0),
-		Padding:     theme.Uniform(8),
-	}, p.ComponentProps)
-
+	root := p.root(c)
 	c.Constraints.Min.X = c.Constraints.Max.X
 	return Surface(c, root, func(c ayra.Context) ayra.Dimensions {
 		return p.keys(c, state)
 	})
 }
 
-// keys lays out the rows inside the panel.
-func (p KeyboardProps) keys(c ayra.Context, state *Keyboard) ayra.Dimensions {
-	gap := max(c.Dp(unit.Dp(6)), 2)
-	width := c.Constraints.Max.X
-	pitch := (float32(width) + float32(gap)) / slots
+// root is the panel behind the keys.
+func (p KeyboardProps) root(c ayra.Context) theme.Style {
+	t := c.Theme
+	return t.Resolve("keyboard", "root", p.VariantName("default"), theme.Style{
+		Background:  theme.Colour(t.Colours.Muted),
+		Border:      theme.Colour(t.Colours.Border),
+		BorderWidth: theme.Pt(1),
+		Radius:      theme.Pt(0),
+		Padding:     theme.Uniform(8),
+	}, p.ComponentProps)
+}
+
+// keyRows is how many rows of keys a page has: the digits, three of letters or
+// symbols, and the bottom one.
+const keyRows = 5
+
+// geometry is the gap between keys, the pitch of a slot and the height of a key
+// for a row of this width.
+func geometry(c ayra.Context, width int) (gap int, pitch float32, height int) {
+	gap = max(c.Dp(unit.Dp(6)), 2)
+	pitch = (float32(width) + float32(gap)) / slots
 	// Tall enough for a thumb on a wide screen and no taller than it needs to
 	// be on a narrow one.
-	height := min(max(int(pitch*0.62), c.Dp(unit.Dp(44))), c.Dp(unit.Dp(64)))
+	height = min(max(int(pitch*0.62), c.Dp(unit.Dp(44))), c.Dp(unit.Dp(64)))
+	return gap, pitch, height
+}
+
+// Height is the height in pixels that [KeyboardProps.Layout] takes in the room
+// the context gives it. A screen that lays out around the keyboard asks it
+// before drawing the keyboard.
+func (p KeyboardProps) Height(c ayra.Context) int {
+	pad := p.root(c).Padding
+	top, bottom := c.Dp(unit.Dp(pad.Top)), c.Dp(unit.Dp(pad.Bottom))
+	inner := c.Constraints.Max.X - c.Dp(unit.Dp(pad.Left)) - c.Dp(unit.Dp(pad.Right))
+	gap, _, height := geometry(c, inner)
+	return top + keyRows*height + (keyRows-1)*gap + bottom
+}
+
+// keys lays out the rows inside the panel.
+func (p KeyboardProps) keys(c ayra.Context, state *Keyboard) ayra.Dimensions {
+	width := c.Constraints.Max.X
+	gap, pitch, height := geometry(c, width)
 
 	editor, typing := typingTarget(c)
 	rows := state.rows()
@@ -316,6 +340,11 @@ func (p KeyboardProps) keys(c ayra.Context, state *Keyboard) ayra.Dimensions {
 	}
 	for i, kind := range actions {
 		state.press(c, editor, typing, kind, typed[i])
+	}
+	if len(actions) > 0 {
+		// What a key changed is drawn in the next frame, and nothing else may ask
+		// for one: the keyboard can be drawn after the field it types into.
+		c.Execute(op.InvalidateCmd{})
 	}
 	state.repeatErase(c, editor, typing, rows)
 

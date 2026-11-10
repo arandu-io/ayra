@@ -13,6 +13,9 @@
   `Keyboard.Open` says when a field is waiting, so a screen draws it below its content.
   It publishes the parts `root`, `key`, `action`, `confirm` and `pressed`. Kyse has no
   counterpart, which `parity_test.go` now declares (`nativeOnly`) and checks.
+- `widget`: `KeyboardProps.Height` says how tall the keyboard is in the room it is given, for a
+  screen that draws it in the window's overlay (over a dialog's scrim) and lays its content
+  out above.
 - `widget`: `Keyboard.Reveal` brings the field that has the keyboard into the room the
   screen left above it, and holds the focus while a list scrolls to it, as a window does
   for the system's keyboard.

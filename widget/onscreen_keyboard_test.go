@@ -402,3 +402,14 @@ func TestTheKeyboardKeepsAFieldThatTheRoomItLeavesDoesNotShow(t *testing.T) {
 		}
 	}
 }
+
+func TestTheHeightIsWhatTheLayoutTakes(t *testing.T) {
+	for _, width := range []int{360, 400, 1280} {
+		ctx, _ := frame(t, theme.Light, width)
+		props := widget.KeyboardProps{}
+		got := props.Layout(ctx, new(widget.Keyboard)).Size.Y
+		if want := props.Height(ctx); got != want {
+			t.Errorf("at %d wide the keyboard took %d and Height said %d", width, got, want)
+		}
+	}
+}
