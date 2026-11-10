@@ -368,6 +368,18 @@ func (s Source) Focus() event.Tag {
 	return s.r.state().keyState.focus
 }
 
+// Reveal brings the control that has the keyboard into viewport, in the
+// coordinates the frame is written in, and keeps the focus through the frames it
+// takes: what a window does when the on-screen keyboard shrinks it, for a screen
+// that makes the room itself because the keyboard is its own and the window did
+// not shrink.
+func (s Source) Reveal(viewport image.Rectangle) {
+	if !s.Enabled() {
+		return
+	}
+	s.r.BeginReveal(viewport, true)
+}
+
 // Event returns the next event matching any of the filters, and whether there
 // was one.
 //

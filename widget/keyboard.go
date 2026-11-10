@@ -8,6 +8,7 @@ import (
 	"github.com/arandu-io/ayra"
 	"github.com/arandu-io/ayra/engine/font"
 	"github.com/arandu-io/ayra/engine/gesture"
+	"github.com/arandu-io/ayra/engine/io/event"
 	"github.com/arandu-io/ayra/engine/io/key"
 	"github.com/arandu-io/ayra/engine/layout"
 	"github.com/arandu-io/ayra/engine/op"
@@ -34,6 +35,9 @@ type Keyboard struct {
 	// down and when it last erased.
 	held        bool
 	since, last time.Time
+
+	// revealed is the field [Keyboard.Reveal] last brought into view.
+	revealed event.Tag
 }
 
 // keyboardKeys is the most keys a page draws, with room to spare.
@@ -85,6 +89,31 @@ func (k *Keyboard) Reset() {
 func (k *Keyboard) Open(c ayra.Context) bool {
 	_, ok := typingTarget(c)
 	return ok
+}
+
+// Reveal brings the field that has the keyboard into view when the room above the
+// keyboard is the part of the window a screen lays its content in, and holds the
+// focus while a list in that room scrolls to it. The screen calls it each frame it
+// draws the keyboard, with the rectangle of its content in window coordinates; it
+// acts once for each field that takes the focus.
+//
+// A window does this itself when the system's keyboard shrinks it. This keyboard
+// is the application's own, the window keeps its size, and the screen is the one
+// that makes the room: without this a list that draws only the rows that fit
+// drops the field from the frame, and a focus whose control is not in the frame
+// is given up, with the keyboard.
+func (k *Keyboard) Reveal(c ayra.Context, viewport image.Rectangle) {
+	tag := c.Source.Focus()
+	if tag == nil {
+		k.revealed = nil
+		return
+	}
+	if tag == k.revealed {
+		return
+	}
+	k.revealed = tag
+	c.Source.Reveal(viewport)
+	c.Redraw()
 }
 
 // typingTarget is the editor that has the keyboard, when it takes typing.

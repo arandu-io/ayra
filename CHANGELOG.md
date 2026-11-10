@@ -13,7 +13,11 @@
   `Keyboard.Open` says when a field is waiting, so a screen draws it below its content.
   It publishes the parts `root`, `key`, `action`, `confirm` and `pressed`. Kyse has no
   counterpart, which `parity_test.go` now declares (`nativeOnly`) and checks.
-- `engine/io/input`: `Source.Focus` answers the tag that has the keyboard.
+- `widget`: `Keyboard.Reveal` brings the field that has the keyboard into the room the
+  screen left above it, and holds the focus while a list scrolls to it, as a window does
+  for the system's keyboard.
+- `engine/io/input`: `Source.Focus` answers the tag that has the keyboard, and
+  `Source.Reveal` brings it into a rectangle.
 - `engine/widget`: `Editor.RequestSubmit` reports a return the next time the editor is
   updated, which is what the confirm key calls.
 

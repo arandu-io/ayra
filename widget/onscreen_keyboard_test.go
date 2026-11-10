@@ -1,6 +1,7 @@
 package widget_test
 
 import (
+	"image"
 	"strings"
 	"testing"
 	"time"
@@ -342,5 +343,62 @@ func TestAHeldEraseKeyKeepsErasing(t *testing.T) {
 	b.drawAt(now.Add(900 * time.Millisecond))
 	if got := b.text(); got != held {
 		t.Errorf("the key kept erasing after it was let go: %q from %q", got, held)
+	}
+}
+
+// The keyboard is the application's own, so the window does not shrink: the
+// screen gives its content the room that is left, and a list in it draws only the
+// rows that fit. The field that was tapped can be one it leaves out for a few
+// frames, until the list has scrolled to it. A focus whose control is not in the
+// frame is given up, with the keyboard; Keyboard.Reveal is what holds it.
+func TestTheKeyboardKeepsAFieldThatTheRoomItLeavesDoesNotShow(t *testing.T) {
+	for _, reveal := range []bool{false, true} {
+		p := newPanel()
+		var (
+			field  widget.Input
+			keys   widget.Keyboard
+			opened bool
+			since  int
+		)
+		screen := func(c ayra.Context) ayra.Dimensions {
+			open := keys.Open(c)
+			opened = open
+			if open {
+				since++
+			} else {
+				since = 0
+			}
+			children := []layout.FlexChild{layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				// The field is left out of the first frames of the smaller room.
+				if open && since <= 3 {
+					return layout.Dimensions{Size: gtx.Constraints.Max}
+				}
+				return widget.InputProps{}.Layout(c.With(gtx), &field)
+			})}
+			if open {
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return widget.KeyboardProps{}.Layout(c.With(gtx), &keys)
+				}))
+			}
+			dims := layout.Flex{Axis: layout.Vertical}.Layout(c.Context, children...)
+			if open && reveal {
+				keys.Reveal(c, image.Rect(0, 0, 400, 100))
+			}
+			return dims
+		}
+
+		for range 3 {
+			p.draw(screen)
+		}
+		tap(p, screen, 100, 15)
+		for range 12 {
+			p.draw(screen)
+		}
+		if reveal && !opened {
+			t.Error("the keyboard closed although the screen asked Keyboard.Reveal to hold the field")
+		}
+		if !reveal && opened {
+			t.Error("the focus survived a field that was not drawn with nothing holding it: this test no longer shows what Reveal is for")
+		}
 	}
 }
