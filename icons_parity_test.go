@@ -175,7 +175,7 @@ func TestEachNativeComponentDrawsTheIconsItsKyseComponentDraws(t *testing.T) {
 	}
 
 	for name := range drawn {
-		if !slices.Contains(components, name) {
+		if _, only := nativeOnly[name]; !only && !slices.Contains(components, name) {
 			t.Errorf("widget.InnerIcons names %q, which is not a component of Kyse", name)
 		}
 	}

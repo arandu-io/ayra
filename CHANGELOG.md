@@ -1,5 +1,22 @@
 # Release Notes
 
+## Unreleased
+
+### Added
+
+- `widget`: `Keyboard` and `KeyboardProps`, an on-screen keyboard the application draws
+  itself, for a native window with no system keyboard to raise (a kiosk's touch
+  screen). Letters in lower and upper case (shift once, twice to lock), the row of
+  digits, a page of the symbols an address and a password ask for, space, erase with
+  repeat, a close key and a confirm key. It types into the field that has the focus, an
+  `Input`, a `Masked` or a password alike, and leaves the focus where it was;
+  `Keyboard.Open` says when a field is waiting, so a screen draws it below its content.
+  It publishes the parts `root`, `key`, `action`, `confirm` and `pressed`. Kyse has no
+  counterpart, which `parity_test.go` now declares (`nativeOnly`) and checks.
+- `engine/io/input`: `Source.Focus` answers the tag that has the keyboard.
+- `engine/widget`: `Editor.RequestSubmit` reports a return the next time the editor is
+  updated, which is what the confirm key calls.
+
 ## [v0.9.3](https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3) - 2026-11-10
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3

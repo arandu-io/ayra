@@ -477,6 +477,18 @@ func (e *Editor) submitFromKey(incoming key.Event) (EditorEvent, bool) {
 	return e.submitEvent(), true
 }
 
+// RequestSubmit reports a return the next time the editor is updated, as if the
+// key had been pressed: a [SubmitEvent] when the editor submits, and nothing
+// when it is read-only or a return inserts a line instead. It is what an
+// on-screen keyboard's confirm key calls.
+func (e *Editor) RequestSubmit() bool {
+	if e.ReadOnly || !e.Submit {
+		return false
+	}
+	e.pending = append(e.pending, e.submitEvent())
+	return true
+}
+
 func (e *Editor) submitEvent() SubmitEvent {
 	e.scratch = e.text.Text(e.scratch)
 	return SubmitEvent{Text: string(e.scratch)}

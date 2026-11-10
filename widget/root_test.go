@@ -283,6 +283,9 @@ func everyWidget() []each {
 			open.Open()
 			return widget.FormDialogProps{Title: "x", ComponentProps: i}.Layout(c, open)
 		}},
+		{"keyboard", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
+			return widget.KeyboardProps{ComponentProps: i}.Layout(c, new(widget.Keyboard))
+		}},
 		{"tree", func(c ayra.Context, i widget.ComponentProps) ayra.Dimensions {
 			return widget.TreeProps{ComponentProps: i}.Layout(c, new(widget.Tree))
 		}},

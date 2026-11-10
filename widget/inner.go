@@ -48,6 +48,7 @@ var innerIcons = map[string]map[string]func() icons.Icon{
 	"date-range-picker": {"CalendarBlank": icons.CalendarBlank, "CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"date-time-picker":  {"CalendarBlank": icons.CalendarBlank, "CaretLeft": icons.CaretLeft, "CaretRight": icons.CaretRight},
 	"form-dialog":       {"X": icons.X},
+	"keyboard":          {"ArrowFatLineUp": icons.ArrowFatLineUp, "ArrowFatUp": icons.ArrowFatUp, "Backspace": icons.Backspace, "CaretDown": icons.CaretDown},
 	"number-input":      {"Minus": icons.Minus, "Plus": icons.Plus},
 	"password":          {"Eye": icons.Eye, "EyeSlash": icons.EyeSlash},
 	"rating":            {"Star": icons.Star},

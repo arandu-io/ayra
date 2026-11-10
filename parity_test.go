@@ -61,6 +61,16 @@ var incomplete = map[string]string{
 	"data-table": "the listing over a server route, with the state and parameter names of the browser half; not the columns menu, the bulk bar or paging by cursor",
 }
 
+// nativeOnly are the native controls Kyse has no component for, each with the
+// reason. They are the other direction of the gap: the browser half is not behind
+// here, this half has something it has not got. Kyse has no keyboard because a
+// browser always has the system's; a kiosk with a touch screen and no system
+// keyboard worth the name draws its own, and was asked for one by name.
+// Adding a pair to Kyse makes the entry fail until it is taken out.
+var nativeOnly = map[string]string{
+	"keyboard": "the on-screen keyboard of a native window that has no system keyboard to raise (a kiosk's touch screen). A browser always has the system's, so Kyse has no component for it; it is a native control by decision of the product owner, and the pair is open until Kyse says whether it wants one.",
+}
+
 func kyseComponents(t *testing.T) (dir string, names []string) {
 	t.Helper()
 
@@ -248,4 +258,25 @@ func TestThePartsOfEachPairAreAccountedFor(t *testing.T) {
 		}
 	}
 	t.Logf("parts the browser half publishes: %d; not yet published natively: %d", total, missing)
+}
+
+// TestNothingNativeOnlyHasAPairInKyse keeps nativeOnly honest: the control is
+// there, Kyse has no component of that name, and a reason is written.
+func TestNothingNativeOnlyHasAPairInKyse(t *testing.T) {
+	_, web := kyseComponents(t)
+	native := nativeControls(t)
+
+	for name, reason := range nativeOnly {
+		if reason == "" {
+			t.Errorf("%s is declared native only with no reason", name)
+		}
+		if !native[pascal(name)] {
+			t.Errorf("%s is declared native only and %sProps does not exist", name, pascal(name))
+		}
+		for _, other := range web {
+			if pair(other) == pascal(name) {
+				t.Errorf("%s is declared native only and Kyse has %s: it has a pair now, take the entry out", name, other)
+			}
+		}
+	}
 }

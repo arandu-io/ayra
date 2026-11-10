@@ -355,6 +355,19 @@ func (s Source) Focused(tag event.Tag) bool {
 	return s.r.state().keyState.focus == tag
 }
 
+// Focus answers the tag that has the keyboard, as of the most recent
+// [github.com/arandu-io/ayra/engine/io/key.FocusEvent] delivered, and nil when
+// nothing has it or the source is switched off.
+//
+// It is for a control that acts on whatever has the keyboard -- an on-screen
+// keyboard types into the field the person is on -- and cannot be handed it.
+func (s Source) Focus() event.Tag {
+	if !s.Enabled() {
+		return nil
+	}
+	return s.r.state().keyState.focus
+}
+
 // Event returns the next event matching any of the filters, and whether there
 // was one.
 //
