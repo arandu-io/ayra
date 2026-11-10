@@ -1,5 +1,9 @@
 # Release Notes
 
+## [v0.9.4](https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4) - 2026-11-10
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4
+
 ## Unreleased
 
 ### Added
