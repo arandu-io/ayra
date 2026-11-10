@@ -24,6 +24,22 @@
 - `engine/widget`: `Editor.RequestSubmit` reports a return the next time the editor is
   updated, which is what the confirm key calls.
 
+## [v0.9.4](https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4) - 2026-11-10
+
+### Added
+
+- `widget.Keyboard` and `KeyboardProps`: an on-screen keyboard drawn by the app, for a window
+  with no system keyboard (a kiosk, a touch panel). Letters with shift (once, or held by a
+  second press), the row 1–0 above them and a `?123` page of the symbols of e-mail addresses and
+  passwords, space, delete (repeats while held), close and OK. It types into whichever field has
+  the focus without taking it; OK submits as Enter and releases the field. `Keyboard.Reveal`
+  keeps the field it would cover in view, and `KeyboardProps.Height` says how tall it is.
+- `engine`: `Source.Focus` and `Editor.RequestSubmit`, which the keyboard needs.
+- Kyse has no pair for the keyboard (a browser always has the system's): recorded in the parity
+  test as native only.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4
+
 ## [v0.9.3](https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3) - 2026-11-10
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3
