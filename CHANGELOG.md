@@ -1,5 +1,19 @@
 # Release Notes
 
+## [v0.9.3](https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3) - 2026-11-10
+
+### Added
+
+- `engine/app` (Linux, X11 and Wayland): a kiosk shows and hides its own on-screen
+  keyboard. `AYRA_SOFT_KEYBOARD_SHOW` is run by `/bin/sh -c` when a text field takes the
+  focus or is tapped again, and `AYRA_SOFT_KEYBOARD_HIDE` when no field has it; both
+  unset, nothing changes. Before this the request to show the keyboard did nothing on
+  Linux, and a touch screen with no physical keyboard could not type.
+- `shell`: an application can ask for a fullscreen window that covers the screen with no
+  window manager.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.2...v0.9.3
+
 ## [v0.9.2](https://github.com/arandu-io/ayra/compare/v0.9.1...v0.9.2) - 2026-11-02
 
 ### Fixed
