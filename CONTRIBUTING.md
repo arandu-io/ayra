@@ -30,7 +30,7 @@ CI runs these three, and then a number of checks this file does not list --
 only be a second list to keep in step. One of those checks is worth knowing
 before you write the patch: this module's direct dependencies are fixed by a
 test, and every one of them belongs to the engine it vendors. The test fails on
-a ninth, and it fails as well on a name in the list that nothing requires any
+an eighth, and it fails as well on a name in the list that nothing requires any
 more. A pull request that adds a dependency needs to argue for it first, in an
 issue -- what is imported here is downloaded by every project that opens a
 window.

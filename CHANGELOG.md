@@ -2,34 +2,6 @@
 
 ## [v0.9.4](https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4) - 2026-11-10
 
-**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4
-
-## Unreleased
-
-### Added
-
-- `widget`: `Keyboard` and `KeyboardProps`, an on-screen keyboard the application draws
-  itself, for a native window with no system keyboard to raise (a kiosk's touch
-  screen). Letters in lower and upper case (shift once, twice to lock), the row of
-  digits, a page of the symbols an address and a password ask for, space, erase with
-  repeat, a close key and a confirm key. It types into the field that has the focus, an
-  `Input`, a `Masked` or a password alike, and leaves the focus where it was;
-  `Keyboard.Open` says when a field is waiting, so a screen draws it below its content.
-  It publishes the parts `root`, `key`, `action`, `confirm` and `pressed`. Kyse has no
-  counterpart, which `parity_test.go` now declares (`nativeOnly`) and checks.
-- `widget`: `KeyboardProps.Height` says how tall the keyboard is in the room it is given, for a
-  screen that draws it in the window's overlay (over a dialog's scrim) and lays its content
-  out above.
-- `widget`: `Keyboard.Reveal` brings the field that has the keyboard into the room the
-  screen left above it, and holds the focus while a list scrolls to it, as a window does
-  for the system's keyboard.
-- `engine/io/input`: `Source.Focus` answers the tag that has the keyboard, and
-  `Source.Reveal` brings it into a rectangle.
-- `engine/widget`: `Editor.RequestSubmit` reports a return the next time the editor is
-  updated, which is what the confirm key calls.
-
-## [v0.9.4](https://github.com/arandu-io/ayra/compare/v0.9.3...v0.9.4) - 2026-11-10
-
 ### Added
 
 - `widget.Keyboard` and `KeyboardProps`: an on-screen keyboard drawn by the app, for a window

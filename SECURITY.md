@@ -75,8 +75,8 @@ mitigation, and credit to the reporter.
 
 ## Supply chain
 
-- This module carries eight direct dependencies and every one of them belongs to
-  the engine it vendors. A test names them and fails on a ninth, and fails as
+- This module carries seven direct dependencies and every one of them belongs to
+  the engine it vendors. A test names them and fails on an eighth, and fails as
   well on a name in the list that nothing requires any more
 - `govulncheck` runs in CI over both modules and blocks the merge
 - Nothing is pinned to a pseudo-version, which a test enforces: a dependency
