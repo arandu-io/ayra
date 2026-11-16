@@ -1,5 +1,9 @@
 # Release Notes
 
+## [v0.10.1](https://github.com/arandu-io/ayra/compare/module/v0.4.0...v0.10.1) - 2026-11-16
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/module/v0.4.0...v0.10.1
+
 ## [v0.10.0](https://github.com/arandu-io/ayra/compare/v0.9.4...v0.10.0) - 2026-11-15
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.9.4...v0.10.0
