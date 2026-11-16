@@ -35,6 +35,7 @@ func forms() []Entry {
 		inputGroupEntry(),
 		inputAddonEntry(),
 		themeToggleEntry(),
+		keyboardEntry(),
 	}
 }
 

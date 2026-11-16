@@ -411,6 +411,18 @@ func themeToggleEntry() Entry {
 	}
 }
 
+// keyboardEntry draws the on-screen keyboard.
+func keyboardEntry() Entry {
+	return Entry{
+		Control: "KeyboardProps",
+		Summary: "The keys a window with no system keyboard types with: letters, then numbers and symbols, shift, erase and close.",
+		Build: func() ayra.Widget {
+			var state widget.Keyboard
+			return sized(520, func(c ayra.Context) ayra.Dimensions { return widget.KeyboardProps{}.Layout(c, &state) })
+		},
+	}
+}
+
 func outputEntry() Entry {
 	return Entry{
 		Control: "OutputProps",
