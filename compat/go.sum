@@ -1,9 +1,9 @@
 eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d h1:ARo7NCVvN2NdhLlJE9xAbKweuI9L6UgfTbYb0YwPacY=
 eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d/go.mod h1:OYVuxibdk9OSLX8vAqydtRPP87PyTFcT9uH3MlEGBQA=
-github.com/arandu-io/hesape v0.107.0 h1:WgIRNtH+9BgAPtxtg+mNCra80YMoD5XST6fNj+YG6vM=
-github.com/arandu-io/hesape v0.107.0/go.mod h1:wwVHND0vi2S1Fynb/47PPzKqzTmfAHNXZUMlbxNI2T4=
-github.com/arandu-io/kyse v0.53.0 h1:YhbH7MqmXI1j+QApvR/qmOsC446MbJqYKs2ZyH/FgYU=
-github.com/arandu-io/kyse v0.53.0/go.mod h1:newiy3ytRxm3/Qngtzqc7O1sXWhYvX8kfp5o16k0RDU=
+github.com/arandu-io/hesape v0.109.0 h1:C48cBFs5SR7Iha7ushxVMmGGIAhcYQ/zdykReMVgjpg=
+github.com/arandu-io/hesape v0.109.0/go.mod h1:wwVHND0vi2S1Fynb/47PPzKqzTmfAHNXZUMlbxNI2T4=
+github.com/arandu-io/kyse v0.53.1 h1:E5W7anxYjf/dA6xKnOlwf7dhn9YmHBu1OQ+6sdO/uLw=
+github.com/arandu-io/kyse v0.53.1/go.mod h1:jWPYDdE+QJbPxg1/GDuHz/VK1QWstP+j/nQmepGVuAA=
 github.com/go-text/typesetting v0.3.5 h1:XZPUooClHY0Vf/rFyUyuPRNEkawARaFzLMQcXLSEyPk=
 github.com/go-text/typesetting v0.3.5/go.mod h1:XZO1hD+nQVyvVa5IicQk7FsCa4PFQaJ2soWAP1f//68=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=
