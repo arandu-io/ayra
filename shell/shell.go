@@ -74,6 +74,20 @@ type Config struct {
 	// notice that repeats the stage the application is already in is not made.
 	OnLifecycle func(ayra.Lifecycle)
 
+	// MouseDragScrolls makes a drag with the primary button of a mouse scroll a
+	// list the way a finger does, and the click under the pointer is cancelled
+	// when it does: letting go after a drag opens nothing, and a press held still
+	// is still a click. It is off by default, and it is not for a desktop, where
+	// a drag with a mouse selects text and a wheel scrolls.
+	//
+	// It is for a kiosk, a car kit or a point of sale whose touch screen the
+	// operating system reports as a mouse. A USB touch panel on Linux and X11 is
+	// that: a left button and an absolute position, with nothing to say it is a
+	// finger, so without this a list does not move under the hand and the item
+	// under the finger opens when it lifts. It applies to every list drawn in
+	// the window, and not to the text fields, whose drag still selects.
+	MouseDragScrolls bool
+
 	// ReduceMotion answers whether the person has asked for less movement, and
 	// is asked once per frame, so it must be cheap and must not block. Nil takes
 	// the operating system's own setting, [SystemReduceMotion]: an application
@@ -264,6 +278,7 @@ func loop(window host, cfg Config, shaper *text.Shaper, screen Screen) error {
 				)
 			}
 			gtx := app.NewContext(&ops, e)
+			gtx.MouseDragScrolls = cfg.MouseDragScrolls
 			paintBehindBars(gtx.Ops, e, palette.Colours.Background)
 			overlay := &ayra.Overlay{
 				Window: image.Rect(

@@ -174,12 +174,16 @@ type scroller struct {
 	axis   Axis
 	now    time.Time
 	total  int
+	// mouseDrag is the option under test, handed to the gesture each frame the
+	// way a list hands it the window's setting.
+	mouseDrag bool
 }
 
 func (s *scroller) player() participant {
 	return participant{
 		add: s.scroll.Add,
 		drain: func(src input.Source) {
+			s.scroll.MouseDrag = s.mouseDrag
 			s.total += s.scroll.Update(metric, src, s.now, s.axis, scrollRange, scrollRange)
 		},
 	}
@@ -217,6 +221,17 @@ func bystander(tag event.Tag) participant {
 func mouse(kind pointer.Kind, p f32.Point) pointer.Event {
 	e := pointer.Event{Kind: kind, Source: pointer.Mouse, Position: p}
 	if kind == pointer.Press {
+		e.Buttons = pointer.ButtonPrimary
+	}
+	return e
+}
+
+// mouseAt builds a mouse event at a moment, the way a window that stamps its
+// pointer events delivers one. A press holds the primary button, and so does
+// everything until the release, which is what a held button reports.
+func mouseAt(kind pointer.Kind, p f32.Point, when time.Duration) pointer.Event {
+	e := pointer.Event{Kind: kind, Source: pointer.Mouse, Position: p, Time: when}
+	if kind != pointer.Release {
 		e.Buttons = pointer.ButtonPrimary
 	}
 	return e
@@ -777,6 +792,180 @@ func TestScrollIgnoresAMouseDrag(t *testing.T) {
 	}
 	if sc.scroll.State() != StateIdle {
 		t.Errorf("got %v for a mouse drag, want %v", sc.scroll.State(), StateIdle)
+	}
+}
+
+// A touch screen that reaches the system as a mouse -- a USB panel on X11 -- is
+// a hand on a screen all the same. With the option on, the primary button drags
+// like a finger: nothing within the slop, then the whole travel at once, and the
+// pointer is claimed, which cancels the click under it.
+func TestScrollMouseDragScrollsAndCancelsTheClickWhenAsked(t *testing.T) {
+	sc := &scroller{axis: Vertical, now: epoch, mouseDrag: true}
+	var cl clicker
+	s := newStage(t, sc.player(), cl.player(), bystander(new(int)))
+
+	s.queue(mouse(pointer.Press, f32.Pt(50, 50)))
+	if got := sc.took(); got != 0 {
+		t.Fatalf("got %d at the press, want 0", got)
+	}
+	if sc.scroll.State() != StateDragging {
+		t.Fatalf("got %v after a mouse press with the option on, want %v", sc.scroll.State(), StateDragging)
+	}
+	wantKinds(t, cl.took(), KindPress)
+
+	// Two pixels, inside the slop: not a scroll yet.
+	s.queue(mouse(pointer.Move, f32.Pt(50, 48)))
+	if got := sc.took(); got != 0 {
+		t.Fatalf("got %d moving within the slop, want 0", got)
+	}
+
+	// Past the slop: the pointer is claimed at the end of this frame, and the
+	// click under it is cancelled with it.
+	s.queue(mouse(pointer.Move, f32.Pt(50, 40)))
+	sc.took()
+	wantKinds(t, cl.took(), KindCancel)
+
+	s.queue(mouse(pointer.Move, f32.Pt(50, 30)))
+	if got := sc.took(); got != 20 {
+		t.Errorf("got %d once the pointer was claimed, want the whole 20 travelled", got)
+	}
+
+	// Letting go after a drag opens nothing.
+	s.queue(mouse(pointer.Release, f32.Pt(50, 30)))
+	sc.took()
+	if got := cl.took(); len(got) != 0 {
+		t.Errorf("got %v at the release after a drag, want no click", kinds(got))
+	}
+}
+
+// A mouse held still is a click and not a drag, with the option on: the slop is
+// what tells them apart, as it does for a finger.
+func TestScrollMouseHeldStillStillClicksWhenAsked(t *testing.T) {
+	sc := &scroller{axis: Vertical, now: epoch, mouseDrag: true}
+	var cl clicker
+	s := newStage(t, sc.player(), cl.player(), bystander(new(int)))
+
+	s.queue(
+		mouse(pointer.Press, f32.Pt(50, 50)),
+		mouse(pointer.Move, f32.Pt(50, 49)),
+		mouse(pointer.Release, f32.Pt(50, 49)),
+	)
+	wantKinds(t, cl.took(), KindPress, KindClick)
+	if got := sc.took(); got != 0 {
+		t.Errorf("got %d for a press that did not move, want 0", got)
+	}
+	if sc.scroll.State() != StateIdle {
+		t.Errorf("got %v after a press that did not move, want %v", sc.scroll.State(), StateIdle)
+	}
+}
+
+// With the option off a mouse drag moves nothing and the click under it stands,
+// which is what a desktop has always had: the drag there is a selection.
+func TestScrollMouseDragLeavesTheClickAloneByDefault(t *testing.T) {
+	sc := &scroller{axis: Vertical, now: epoch}
+	var cl clicker
+	s := newStage(t, sc.player(), cl.player(), bystander(new(int)))
+
+	s.queue(mouse(pointer.Press, f32.Pt(50, 50)))
+	s.queue(mouse(pointer.Move, f32.Pt(50, 40)))
+	s.queue(mouse(pointer.Move, f32.Pt(50, 30)))
+	s.queue(mouse(pointer.Release, f32.Pt(50, 30)))
+
+	if got := sc.took(); got != 0 {
+		t.Errorf("got %d for a mouse drag with the option off, want 0", got)
+	}
+	if sc.scroll.State() != StateIdle {
+		t.Errorf("got %v, want %v", sc.scroll.State(), StateIdle)
+	}
+	wantKinds(t, cl.took(), KindPress, KindClick)
+}
+
+// Only the primary button drags. The others are the context menu and the middle
+// click, and a press of either is not the start of a scroll.
+func TestScrollMouseDragReadsOnlyThePrimaryButton(t *testing.T) {
+	for _, button := range []pointer.Buttons{pointer.ButtonSecondary, pointer.ButtonTertiary} {
+		sc := &scroller{axis: Vertical, now: epoch, mouseDrag: true}
+		s := newStage(t, sc.player(), bystander(new(int)))
+
+		press := mouse(pointer.Press, f32.Pt(50, 50))
+		press.Buttons = button
+		s.queue(press)
+		move := mouse(pointer.Move, f32.Pt(50, 30))
+		move.Buttons = button
+		s.queue(move)
+		if got := sc.took(); got != 0 {
+			t.Errorf("button %v: got %d, want 0", button, got)
+		}
+		if sc.scroll.State() != StateIdle {
+			t.Errorf("button %v: got %v, want %v", button, sc.scroll.State(), StateIdle)
+		}
+	}
+}
+
+// The movement after the release is the finger's: a mouse let go while still
+// moving leaves the content moving, and one that stopped before letting go does
+// not.
+func TestScrollMouseDragFlingsLikeATouchWhenAsked(t *testing.T) {
+	sc := &scroller{axis: Vertical, now: epoch, mouseDrag: true}
+	s := newStage(t, sc.player(), bystander(new(int)))
+
+	s.queue(mouseAt(pointer.Press, f32.Pt(50, 90), 0))
+	for i := 1; i <= 5; i++ {
+		when := time.Duration(i) * 10 * time.Millisecond
+		sc.now = epoch.Add(when)
+		s.queue(mouseAt(pointer.Move, f32.Pt(50, float32(90-15*i)), when))
+	}
+	release := 60 * time.Millisecond
+	sc.now = epoch.Add(release)
+	s.queue(mouseAt(pointer.Release, f32.Pt(50, 15), release))
+	sc.took()
+	if sc.scroll.State() != StateFlinging {
+		t.Fatalf("got %v after a release in motion, want %v", sc.scroll.State(), StateFlinging)
+	}
+	sc.now = epoch.Add(release + 16*time.Millisecond)
+	s.frame()
+	if got := sc.took(); got == 0 {
+		t.Error("the fling reported no movement")
+	}
+
+	// Stopped before the release: no fling.
+	still := &scroller{axis: Vertical, now: epoch, mouseDrag: true}
+	s = newStage(t, still.player(), bystander(new(int)))
+	s.queue(mouseAt(pointer.Press, f32.Pt(50, 90), 0))
+	for i := 1; i <= 3; i++ {
+		when := time.Duration(i) * 10 * time.Millisecond
+		still.now = epoch.Add(when)
+		s.queue(mouseAt(pointer.Move, f32.Pt(50, float32(90-20*i)), when))
+	}
+	for i := 4; i <= 12; i++ {
+		when := time.Duration(i) * 50 * time.Millisecond
+		still.now = epoch.Add(when)
+		s.queue(mouseAt(pointer.Move, f32.Pt(50, 30), when))
+	}
+	when := 700 * time.Millisecond
+	still.now = epoch.Add(when)
+	s.queue(mouseAt(pointer.Release, f32.Pt(50, 30), when))
+	if still.scroll.State() == StateFlinging {
+		t.Errorf("got %v for a mouse that stopped before it let go, want no fling", still.scroll.State())
+	}
+}
+
+// A finger is the same with the option on and off: the option is about what a
+// mouse is, and never about what a touch is.
+func TestScrollTouchIsTheSameWithTheMouseOptionOn(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		sc := &scroller{axis: Vertical, now: epoch, mouseDrag: on}
+		var cl clicker
+		s := newStage(t, sc.player(), cl.player(), bystander(new(int)))
+
+		s.queue(touch(pointer.Press, f32.Pt(50, 50), 0))
+		s.queue(touch(pointer.Move, f32.Pt(50, 40), 10*time.Millisecond))
+		sc.took()
+		s.queue(touch(pointer.Move, f32.Pt(50, 30), 20*time.Millisecond))
+		if got := sc.took(); got != 20 {
+			t.Errorf("option %v: got %d for a touch drag, want 20", on, got)
+		}
+		wantKinds(t, cl.took(), KindPress, KindCancel)
 	}
 }
 

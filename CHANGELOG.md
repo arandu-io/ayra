@@ -1,5 +1,23 @@
 # Release Notes
 
+## [v0.10.2](https://github.com/arandu-io/ayra/compare/v0.10.1...v0.10.2) - 2026-11-17
+
+### Added
+
+- `shell.Config.MouseDragScrolls`, off by default: a drag with the primary button of a mouse
+  scrolls a list the way a finger does. A USB touch screen on Linux reaches X11 as a mouse (a
+  left button and an absolute position, never a touch), so on a kiosk a list did not move under
+  the hand and the item under the finger opened when it lifted. With the option on, the drag
+  scrolls after the same slop as a touch, claims the pointer so the click under it is
+  cancelled (letting go after a drag opens nothing), keeps a press held still as a click, and
+  flings after the release as a touch does. Only the primary button drags, and a text field's
+  drag still selects. It reaches every `layout.List` through the new
+  `layout.Context.MouseDragScrolls` and `gesture.Scroll.MouseDrag`. With the option off
+  nothing changes, and a touch is the same either way. Android is unchanged: a mouse already
+  dragged there.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.10.1...v0.10.2
+
 ## [v0.10.1](https://github.com/arandu-io/ayra/compare/module/v0.4.0...v0.10.1) - 2026-11-16
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/module/v0.4.0...v0.10.1

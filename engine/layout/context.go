@@ -32,6 +32,14 @@ type Context struct {
 	// own state.
 	Values map[string]any
 
+	// MouseDragScrolls makes a mouse dragging with its primary button scroll a
+	// [List] the way a finger does, and cancel the click under it. It is false by
+	// default: a mouse scrolls with its wheel, and a drag with one is selecting.
+	// It is for a window whose touch screen reaches the system as a mouse -- a
+	// USB panel on Linux -- and the window sets it from its configuration, for
+	// every list drawn in it. A context built by hand leaves it false.
+	MouseDragScrolls bool
+
 	input.Source
 	*op.Ops
 }

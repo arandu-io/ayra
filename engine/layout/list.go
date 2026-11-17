@@ -152,6 +152,7 @@ func (l *List) readScroll(gtx Context) {
 	} else if l.Axis == Vertical {
 		horizontal, vertical = vertical, horizontal
 	}
+	l.scroll.MouseDrag = gtx.MouseDragScrolls
 	l.scrollPixels = l.scroll.Update(gtx.Metric, gtx.Source, gtx.Now, axis, horizontal, vertical)
 	l.Position.Offset += l.scrollPixels
 }

@@ -76,6 +76,22 @@ type Scroll struct {
 	last int
 	// scroll is the fraction of a pixel left over from what has been reported.
 	scroll float32
+
+	// MouseDrag makes the primary button of a mouse drag the content the way a
+	// finger does. It is off by default, and the caller sets it each frame
+	// before [Scroll.Update], so it can follow a setting.
+	//
+	// A mouse scrolls with its wheel, and a mouse dragging inside a list is
+	// selecting in it, so by default a drag with a mouse moves nothing. That is
+	// wrong for a screen that is touched but whose driver reports a mouse: a
+	// USB touch panel on Linux reaches X11 as a pointer with a left button and
+	// an absolute position, never as a touch, and nothing in the event says
+	// otherwise. For such a window the application turns this on, and the drag
+	// is then a touch drag in everything but the name of its source: the same
+	// slop before it claims the pointer, the claim that cancels the click under
+	// it, the same fling after the release. A mouse held still is still a
+	// click.
+	MouseDrag bool
 }
 
 // Add claims the current area, so that pointers over it reach this gesture.
@@ -155,10 +171,7 @@ func (s *Scroll) Update(cfg unit.Metric, q input.Source, t time.Time, axis Axis,
 			if s.dragging {
 				break
 			}
-			if e.Source != pointer.Touch && runtime.GOOS != "android" {
-				// A mouse scrolls with its wheel. A mouse dragging inside a
-				// list is selecting in it, not moving it -- except on Android,
-				// where a mouse is expected to drag the content by convention.
+			if !s.follows(e) {
 				break
 			}
 			// The press catches whatever the last one left moving.
@@ -215,6 +228,22 @@ func (s *Scroll) Update(cfg unit.Metric, q input.Source, t time.Time, axis Axis,
 		q.Execute(op.InvalidateCmd{})
 	}
 	return total
+}
+
+// follows reports whether a press begins a drag.
+//
+// A finger always does. A mouse scrolls with its wheel, and a mouse dragging
+// inside a list is selecting in it, not moving it -- except on Android, where a
+// mouse is expected to drag the content by convention, and where
+// [Scroll.MouseDrag] is set, because the application said that what reports
+// itself as a mouse is a hand on a screen. Only the primary button drags: the
+// others are the context menu and the middle click, and a press of either is
+// not the start of a scroll.
+func (s *Scroll) follows(e pointer.Event) bool {
+	if e.Source == pointer.Touch || runtime.GOOS == "android" {
+		return true
+	}
+	return s.MouseDrag && e.Source == pointer.Mouse && e.Buttons == pointer.ButtonPrimary
 }
 
 // val reduces a position to the single number the axis reads it as.
