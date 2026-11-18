@@ -53,6 +53,9 @@ func (d *Dialog) Open() {
 	if !d.open {
 		d.focused = false
 		d.scroll.Position = layout.Position{}
+		// A press on the barrier from the last time it was open must not close
+		// it again now.
+		d.outside = gesture.Click{}
 	}
 	d.open = true
 }
@@ -308,12 +311,16 @@ func (d *Dialog) dismiss(c ayra.Context, modal, dismissible bool) {
 	}
 
 	// A press that reached the barrier is a press outside the panel, because
-	// the panel is drawn over it and takes its own.
+	// the panel is drawn over it and takes its own. Only a whole tap closes it --
+	// down and up outside. Closing on the press left its release queued for the
+	// barrier, and the next time the dialog opened it read that release as a
+	// second press outside and closed at once.
 	for modal {
-		if _, ok := d.outside.Update(c.Source); !ok {
+		e, ok := d.outside.Update(c.Source)
+		if !ok {
 			break
 		}
-		if dismissible {
+		if dismissible && e.Kind == gesture.KindClick {
 			d.close()
 		}
 	}

@@ -1,5 +1,18 @@
 # Release Notes
 
+## [v0.10.3](https://github.com/arandu-io/ayra/compare/v0.10.2...v0.10.3) - 2026-11-17
+
+### Fixed
+
+- A dialog closed by a tap outside it opened again at the first press. It closed on the press,
+  and the release of that same tap stayed queued for the scrim's barrier, so the next time the
+  dialog opened it read the release as a second press outside and closed at once: the person
+  had to press the opening button twice. The dialog now closes only on a whole tap outside --
+  down and up on the scrim -- and drops whatever the barrier held when it opens again. A press
+  that starts on the scrim and is still held does not close it.
+
+**Full Changelog**: https://github.com/arandu-io/ayra/compare/v0.10.2...v0.10.3
+
 ## [v0.10.2](https://github.com/arandu-io/ayra/compare/module/v0.4.1...v0.10.2) - 2026-11-17
 
 **Full Changelog**: https://github.com/arandu-io/ayra/compare/module/v0.4.1...v0.10.2
