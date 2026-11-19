@@ -31,6 +31,14 @@ func (o *OneTimeCode) Set(code string) {
 	o.completed = false
 }
 
+// Focused reports whether the row holds the keyboard.
+func (o *OneTimeCode) Focused(c ayra.Context) bool { return o.input.Focused(c) }
+
+// Focus gives the row the focus and raises the keyboard: Kyse's autofocus, for
+// the screen whose only question is the code. The row has to be drawn on the
+// frame it is called on.
+func (o *OneTimeCode) Focus(c ayra.Context) { o.input.Focus(c) }
+
 // Clear empties the code, for a code the server refused.
 func (o *OneTimeCode) Clear() {
 	o.input.SetText("")

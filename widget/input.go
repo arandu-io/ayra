@@ -45,6 +45,20 @@ func (i *Input) Focused(c ayra.Context) bool { return c.Focused(&i.editor) }
 // SetText replaces what the field holds, and puts the caret at the start of it.
 func (i *Input) SetText(s string) { i.editor.SetText(s) }
 
+// Focus gives the field the focus and raises the keyboard, as a tap on it does.
+// It is Kyse's autofocus: a screen that asks for one thing and nothing else
+// (the code that was just sent, the address to reset) calls it on the frame the
+// screen first draws, so the person types without having to find the field. The
+// field has to be drawn on the frame it is called on, and a field that is read
+// only does not take the focus.
+func (i *Input) Focus(c ayra.Context) {
+	if i.editor.ReadOnly {
+		return
+	}
+	c.Execute(key.FocusCmd{Tag: &i.editor})
+	c.Execute(key.SoftKeyboardCmd{Show: true})
+}
+
 // Submitted reports that the person pressed return on a field that accepts it,
 // once, and consumes the event.
 //
