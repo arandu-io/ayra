@@ -17,6 +17,9 @@ type Masked struct {
 // Focused reports whether the field holds the keyboard.
 func (m *Masked) Focused(c ayra.Context) bool { return m.input.Focused(c) }
 
+// Focus gives the field the focus and raises the keyboard. See [Input.Focus].
+func (m *Masked) Focus(c ayra.Context) { m.input.Focus(c) }
+
 // Text is what the field shows: the formatted value.
 func (m *Masked) Text() string { return m.input.Text() }
 
